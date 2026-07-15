@@ -46,14 +46,17 @@
   // =========================================================
   // AUTH: Google Sign-in + API call
   // =========================================================
-  function loadDeals(token) {
+function loadDeals(token) {
     fetch(CFG.API_URL + '?token=' + encodeURIComponent(token))
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (data) {
         if (!data.ok) { 
-          alert('Không đăng nhập được: ' + (data.error || 'Unknown error'));
+          localStorage.removeItem('cs_tool_token');
+          localStorage.removeItem(SESSION_KEY);
+          alert('Phiên đăng nhập đã hết hạn, mời đăng nhập lại.');
           resetGoogleButton();
+          setUiMode('login');
           return; 
         }
         allDeals = (data.deals || []).map(normalizeDeal);
