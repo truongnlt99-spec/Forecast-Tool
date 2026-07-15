@@ -6,10 +6,7 @@
 
   // ---------- DOM ----------
   var $ = function (id) { return document.getElementById(id); };
-  var loginScreen = $('loginScreen');
-  var loginError = $('loginError');
   var tabNav = $('tabNav');
-  var userBox = $('userBox');
   var userEmail = $('userEmail');
   var logoutBtn = $('logoutBtn');
 
@@ -23,74 +20,55 @@
   var allDeals = [];   // normalized deals
   var openDealId = null;
   var sortDesc = true;
-  var CHART_COLORS = ['#2E4057', '#147D6F', '#C97A0E', '#7A5CB8', '#B8506E', '#4C8C2B', '#5A87B0', '#8A8F9C'];
+  var CHART_COLORS = ['#4C6FFF', '#7C5CFC', '#22A06B', '#E39230', '#D93B3B', '#147D6F', '#4C8C2B', '#C97A0E'];
 
   // =========================================================
-  // AUTH (giữ nguyên flow cũ: GSI -> Apps Script API)
+  // UI MODE (login vs app)
   // =========================================================
-  function showLogin(errorMsg) {
-    loginScreen.style.display = 'flex';
-    tabNav.style.display = 'none';
-    userBox.style.display = 'none';
-    Object.keys(panels).forEach(function (k) { panels[k].style.display = 'none'; });
-    if (errorMsg) {
-      loginError.textContent = errorMsg;
-      loginError.style.display = 'block';
-    } else {
-      loginError.style.display = 'none';
-    }
+  function setUiMode(mode) {
+    // mode: 'login' or 'app'
+    document.body.className = mode + '-mode';
   }
 
   function showApp(email) {
-    loginScreen.style.display = 'none';
-    tabNav.style.display = 'flex';
-    userBox.style.display = 'flex';
     userEmail.textContent = email;
     switchTab('overview');
-  }
-
-  function initGoogle() {
-    google.accounts.id.initialize({
-      client_id: CFG.CLIENT_ID,
-      hd: CFG.ALLOWED_DOMAIN,
-      auto_select: true,
-      callback: handleCredential,
-    });
-    google.accounts.id.renderButton($('gsiButton'), {
-      theme: 'outline', size: 'large', text: 'signin_with',
-    });
-    google.accounts.id.prompt();
-  }
-
-  function handleCredential(response) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ts: Date.now() }));
-    loadDeals(response.credential);
+    setUiMode('app');
   }
 
   function logout() {
     try { google.accounts.id.disableAutoSelect(); } catch (e) {}
     localStorage.removeItem(SESSION_KEY);
-    showLogin();
+    localStorage.removeItem('cs_tool_token');
+    setUiMode('login');
   }
 
+  // =========================================================
+  // AUTH: Google Sign-in + API call
+  // =========================================================
   function loadDeals(token) {
     fetch(CFG.API_URL + '?token=' + encodeURIComponent(token))
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (data) {
-        if (!data.ok) { showLogin(data.error || 'Không đăng nhập được.'); return; }
+        if (!data.ok) { 
+          alert('Không đăng nhập được: ' + (data.error || 'Unknown error'));
+          resetGoogleButton();
+          return; 
+        }
         allDeals = (data.deals || []).map(normalizeDeal);
         showApp(data.email);
         setDefaultDateRange();
         renderOverview();
       })
-      .catch(function () {
-        showLogin('Không kết nối được tới dữ liệu. Thử tải lại trang.');
+      .catch(function (err) {
+        alert('Không kết nối được tới dữ liệu: ' + err.message);
+        resetGoogleButton();
       });
   }
 
   // =========================================================
-  // NORMALIZE DATA (bám theo cột tab "Data base")
+  // NORMALIZE DATA
   // =========================================================
   function findKey(keys, patterns) {
     for (var i = 0; i < patterns.length; i++) {
@@ -133,9 +111,9 @@
     if (v == null || v === '') return null;
     if (v instanceof Date) return isNaN(v) ? null : v;
     var s = String(v).trim();
-    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // dd/mm/yyyy
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
-    var d = new Date(s); // ISO từ Apps Script
+    var d = new Date(s);
     return isNaN(d) ? null : d;
   }
 
@@ -163,7 +141,7 @@
       n = Number(String(v).replace('%', '').replace(',', '.').trim());
       if (isNaN(n)) return null;
     }
-    if (n > 0 && n <= 1) n = n * 100; // sheet trả 0.28 thay vì 28
+    if (n > 0 && n <= 1) n = n * 100;
     return Math.round(n * 10) / 10;
   }
 
@@ -259,7 +237,7 @@
   }
 
   function setActiveChip(preset) {
-    document.querySelectorAll('.chip').forEach(function (c) {
+    document.querySelectorAll('.chip-btn').forEach(function (c) {
       c.classList.toggle('active', c.getAttribute('data-preset') === preset);
     });
   }
@@ -283,7 +261,7 @@
     var from = fromV ? new Date(fromV + 'T00:00:00') : null;
     var to = toV ? new Date(toV + 'T23:59:59') : null;
     return allDeals.filter(function (d) {
-      if (!d.received) return !from && !to; // deal thiếu ngày nhận chỉ hiện khi xem "Tất cả"
+      if (!d.received) return !from && !to;
       if (from && d.received < from) return false;
       if (to && d.received > to) return false;
       return true;
@@ -296,9 +274,7 @@
   function renderOverview() {
     var deals = getFilteredDeals();
     openDealId = null;
-
     $('filterCount').innerHTML = '<strong>' + deals.length + '</strong> / ' + allDeals.length + ' deal';
-
     renderKpis(deals);
     renderHealthStrip(deals);
     renderDonut('donutSolution', groupBy(deals, 'solution'));
@@ -409,7 +385,6 @@
     el.innerHTML = svg + legend;
   }
 
-  // ---------- Table ----------
   function glBadge(status) {
     var s = String(status || '');
     if (/đã go/i.test(s)) return '<span class="badge gl-done">' + esc(s) + '</span>';
@@ -536,7 +511,7 @@
     t.addEventListener('click', function () { switchTab(t.getAttribute('data-tab')); });
   });
 
-  document.querySelectorAll('.chip').forEach(function (c) {
+  document.querySelectorAll('.chip-btn').forEach(function (c) {
     c.addEventListener('click', function () { applyPreset(c.getAttribute('data-preset')); });
   });
 
@@ -553,18 +528,72 @@
   });
 
   // =========================================================
-  // BOOT
+  // BOOT: Check token & load app
   // =========================================================
-  window.onload = function () {
+  window.addEventListener('load', function () {
     if (!CFG.CLIENT_ID || CFG.CLIENT_ID.indexOf('DIEN_') === 0) {
-      showLogin('Chưa cấu hình CLIENT_ID trong config.js — xem README.md.');
+      alert('Error: CLIENT_ID not configured in config.js');
       return;
     }
+
+    // Check localStorage for saved token
+    var savedToken = localStorage.getItem('cs_tool_token');
+    if (savedToken) {
+      loadDeals(savedToken);
+      return;
+    }
+
+    // Init Google for future logins
     var check = setInterval(function () {
       if (window.google && google.accounts && google.accounts.id) {
         clearInterval(check);
-        initGoogle();
+        google.accounts.id.initialize({
+          client_id: CFG.CLIENT_ID,
+          hd: CFG.ALLOWED_DOMAIN,
+          callback: handleCredential,
+        });
+      }
+    }, 100);
+  });
+
+  // =========================================================
+  // GLOBAL FUNCTION for HTML button click
+  // =========================================================
+  function handleCredential(response) {
+    var token = response.credential;
+    localStorage.setItem('cs_tool_token', token);
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ts: Date.now() }));
+    loadDeals(token);
+  }
+
+  function resetGoogleButton() {
+    var logo = document.getElementById('glogo');
+    var spinner = document.getElementById('spinner');
+    var text = document.getElementById('gtext');
+    var btn = document.getElementById('gbtn');
+    if (logo) logo.classList.remove('hidden');
+    if (spinner) spinner.classList.add('hidden');
+    if (text) text.textContent = 'Continue with Google';
+    if (btn) btn.removeAttribute('disabled');
+  }
+
+  window.signInWithGoogle = function () {
+    var logo = document.getElementById('glogo');
+    var spinner = document.getElementById('spinner');
+    var text = document.getElementById('gtext');
+    var btn = document.getElementById('gbtn');
+    
+    if (logo) logo.classList.add('hidden');
+    if (spinner) spinner.classList.remove('hidden');
+    if (text) text.textContent = 'Connecting…';
+    if (btn) btn.setAttribute('disabled', '');
+
+    // Trigger Google prompt
+    setTimeout(function () {
+      if (window.google && google.accounts && google.accounts.id) {
+        google.accounts.id.prompt();
       }
     }, 100);
   };
+
 })();
