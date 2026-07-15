@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CS Personal Dashboard</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>CS Personal Dashboard</h1>
+  <div class="user-box" id="userBox" style="display:none;">
+    <span id="userEmail"></span>
+    <button class="btn" id="logoutBtn">Đăng xuất</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="login-screen" id="loginScreen">
+    <h2>Đăng nhập bằng email @base.vn</h2>
+    <p>Tool tự nhận diện đúng danh sách deal của m dựa theo email đăng nhập. Lần sau mở lại trên cùng thiết bị này sẽ không cần đăng nhập lại.</p>
+    <div id="gsiButton"></div>
+    <p id="loginError" class="error-box" style="display:none;"></p>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div class="summary-bar" id="summaryBar"></div>
+    <div class="deal-grid" id="dealGrid"></div>
+  </div>
+
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
