@@ -450,3 +450,62 @@ body.login-mode .app-wrapper { display: none; }
 .app-wrapper { display: none; }
 body.app-mode .app-wrapper { display: block; }
 body.app-mode .login-screen { display: none; }
+
+
+/* ============================================
+   FORECAST TAB
+   ============================================ */
+.fc-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+}
+.fc-bar-info h3 { font-family: 'Space Grotesk', sans-serif; font-size: 15px; margin: 0 0 3px; }
+.fc-bar-info p  { font-size: 12.5px; color: var(--ink-soft); margin: 0; max-width: 620px; line-height: 1.5; }
+.fc-bar-actions { display: flex; align-items: center; gap: 12px; }
+.fc-flag { font-size: 12px; color: var(--ink-soft); font-family: 'Space Mono', monospace; }
+.fc-save { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.fc-save:hover { background: #3B5CE6; border-color: #3B5CE6; }
+
+.fc-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.fc-press-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fc-month {
+  border: 1px solid var(--line); border-radius: 7px; padding: 2px 6px;
+  font: inherit; font-size: 12px; font-family: 'Space Mono', monospace;
+  color: var(--ink); background: var(--card);
+}
+.kpi-press .kpi-value { color: var(--accent); }
+
+/* yellow input group */
+.fc-table th.fc-yh { background: #FCF4E0; color: #9A6B12; }
+.fc-table td.fc-y  { background: #FEFAEF; }
+.fc-yL { border-left: 2px solid #EAC873 !important; }
+.fc-yR { border-right: 2px solid #EAC873 !important; }
+.fc-in {
+  border: 1px solid #E6CF96; border-radius: 6px; padding: 5px 6px;
+  font: inherit; font-size: 12.5px; font-family: 'Space Mono', monospace;
+  background: #fff; width: 100%;
+}
+.fc-in:focus { outline: 2px solid var(--amber); outline-offset: -1px; }
+.fc-in.fc-pct { width: 58px; text-align: right; }
+.fc-in.fc-date { width: 118px; }
+.fc-legend-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+  background: #F3D888; border: 1px solid #EAC873; vertical-align: 0; margin-right: 3px;
+}
+
+/* forecast status badge */
+.badge.st-ok   { background: var(--strong-bg); color: var(--strong); }
+.badge.st-late { background: var(--risk-bg);   color: var(--risk); }
+.badge.st-wip  { background: #E8EDF5;          color: var(--accent); }
+.badge.st-over { background: var(--weak-bg);   color: var(--weak); }
+
+.fc-table td { vertical-align: middle; }
+.fc-table tr:hover td { background: #FBFCFE; }
+.fc-table tr:hover td.fc-y { background: #FDF7E8; }
+
+@media (max-width: 900px) {
+  .fc-kpis { grid-template-columns: 1fr 1fr; }
+  .fc-bar  { flex-direction: column; align-items: stretch; }
+}

@@ -153,10 +153,67 @@
 
       <!-- TAB: FORECAST -->
       <section class="tab-panel" id="panel-forecast" style="display:none;">
-        <div class="placeholder-card">
-          <h3>Forecast — sắp ra mắt</h3>
-          <p>Phần này sẽ gồm: radar mốc T1/T4, nhập what-if (%Active, %Output) cho từng deal và dự phóng CHS_CS + commission theo bảng com của policy. Build ở bước tiếp theo.</p>
+
+        <div class="fc-bar">
+          <div class="fc-bar-info">
+            <h3>Forecast — nhập ô vàng, xem CHS &amp; doanh thu go-live</h3>
+            <p>Sửa Go-live thực tế / %Active / %Output cho từng deal → CHS_CS T1·T4 tính lại ngay tại chỗ. Bấm Lưu để đẩy 5 ô vàng về sheet Database (cột xanh tự tính lại).</p>
+          </div>
+          <div class="fc-bar-actions">
+            <span class="fc-flag" id="fcFlag"></span>
+            <button class="btn fc-save" id="fcSaveBtn">Lưu &amp; đẩy về sheet</button>
+          </div>
         </div>
+
+        <div class="fc-kpis">
+          <div class="kpi-card">
+            <div class="kpi-label">CHS_CS T1 · trung bình</div>
+            <div class="kpi-value" id="fcAvgT1">—</div>
+            <div class="kpi-sub" id="fcAvgT1Sub"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">CHS_CS T4 · trung bình</div>
+            <div class="kpi-value" id="fcAvgT4">—</div>
+            <div class="kpi-sub" id="fcAvgT4Sub"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Nền COM đủ điều kiện</div>
+            <div class="kpi-value" id="fcElig" style="font-size:20px;">—</div>
+            <div class="kpi-sub">ΣACR deal có CHS_CS_T ≥ 50</div>
+          </div>
+          <div class="kpi-card kpi-press">
+            <div class="kpi-label fc-press-head">
+              <span>DT phải go-live · không muộn</span>
+              <select id="fcMonth" class="fc-month"></select>
+            </div>
+            <div class="kpi-value" id="fcPress" style="font-size:20px;">—</div>
+            <div class="kpi-sub" id="fcPressSub"></div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-head">
+            <div class="chart-title">Deal của tôi <span class="chart-note">(nguồn: sheet Database)</span></div>
+            <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay · phần còn lại tự tính</div>
+          </div>
+          <div class="table-scroll">
+            <table class="deal-table fc-table">
+              <thead>
+                <tr>
+                  <th>Deal</th><th>Loại HĐ</th><th class="num">Giá trị</th>
+                  <th class="fc-yh fc-yL">Go-live thực tế</th>
+                  <th class="fc-yh num">%Act T1</th><th class="fc-yh num">%Out T1</th>
+                  <th class="fc-yh num">%Act T4</th><th class="fc-yh num fc-yR">%Out T4</th>
+                  <th>Tier</th><th>Trạng thái</th><th>Tháng CR</th>
+                  <th class="num">CHS T1</th><th class="num">CHS T4</th><th class="num">ACR</th>
+                </tr>
+              </thead>
+              <tbody id="fcTbody"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="fcEmpty" style="display:none;">Đang tải dữ liệu từ sheet Database…</div>
+        </div>
+
       </section>
 
       <!-- TAB: DASHBOARD -->
