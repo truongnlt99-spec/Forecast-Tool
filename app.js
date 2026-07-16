@@ -552,14 +552,9 @@ function loadDeals(token) {
       return;
     }
 
-    // Check localStorage for saved token
-    var savedToken = localStorage.getItem('cs_tool_token');
-    if (savedToken) {
-      loadDeals(savedToken);
-      return;
-    }
-
-    // Init Google for future logins
+    // Luôn initialize() ngay, bất kể đã có token lưu sẵn hay chưa —
+    // để nếu token hết hạn và cần đăng nhập lại, nút Google hoạt động được ngay
+    // (không cần reload trang để tránh lỗi "missing client_id").
     var check = setInterval(function () {
       if (window.google && google.accounts && google.accounts.id) {
         clearInterval(check);
@@ -568,6 +563,8 @@ function loadDeals(token) {
           hd: CFG.ALLOWED_DOMAIN,
           callback: handleCredential,
         });
+        var savedToken = localStorage.getItem('cs_tool_token');
+        if (savedToken) loadDeals(savedToken);
       }
     }, 100);
   });
@@ -758,7 +755,14 @@ function loadDeals(token) {
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (data) {
-        if (!data.ok) { alert('Phiên đăng nhập đã hết hạn, mời đăng nhập lại.'); return; }
+        if (!data.ok) {
+          if (empty) empty.textContent = 'Phiên đăng nhập đã hết hạn — vui lòng đăng nhập lại.';
+          localStorage.removeItem('cs_tool_token');
+          localStorage.removeItem(SESSION_KEY);
+          resetGoogleButton();
+          setUiMode('login');
+          return;
+        }
         fcDeals = (data.deals || []).map(fcNormalize).filter(function (d) { return d.id; });
         fcSeed(); fcLoaded = true;
         if (empty) empty.style.display = fcDeals.length ? 'none' : 'block';
