@@ -161,6 +161,10 @@
             <label for="dateTo">Đến</label>
             <input type="date" id="dateTo">
           </div>
+          <div class="filter-field">
+            <label for="ovSearch">Tìm theo tên deal</label>
+            <input type="text" id="ovSearch" class="search-input" placeholder="🔍 nhập tên deal…">
+          </div>
           <div class="filter-presets">
             <button class="chip-btn" data-preset="month">Tháng này</button>
             <button class="chip-btn" data-preset="quarter">Quý này</button>
@@ -270,35 +274,83 @@
           </div>
         </div>
 
-        <div class="fc-filter" id="fcFilter">
-          <div class="fc-filter-month">
-            <label for="fcFilterMonth">Tháng làm việc <span class="fc-filter-month-hint">— áp dụng cho cả bộ lọc &amp; ô "DT phải go-live"</span></label>
-            <select id="fcFilterMonth" class="fc-month"></select>
-          </div>
-          <div class="fc-chips" id="fcChips"></div>
+        <div class="fc-view-toggle" id="fcViewToggle">
+          <button type="button" class="fc-view-btn active" data-view="y1">Năm 1 (mặc định)</button>
+          <button type="button" class="fc-view-btn" data-view="multi">ACR nhiều năm (Năm 2-5)</button>
+          <input type="text" id="fcSearch" class="search-input fc-search-input" placeholder="🔍 Tìm theo tên deal…">
         </div>
 
-        <div class="table-card">
-          <div class="table-head">
-            <div class="chart-title">Deal của tôi <span class="chart-note">(nguồn: sheet Database)</span> <span class="fc-filter-note" id="fcFilterNote"></span></div>
-            <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay · phần còn lại tự tính</div>
+        <div id="fcYear1Block">
+          <div class="fc-filter" id="fcFilter">
+            <div class="fc-filter-month">
+              <label for="fcFilterMonth">Tháng làm việc <span class="fc-filter-month-hint">— áp dụng cho cả bộ lọc &amp; ô "DT phải go-live"</span></label>
+              <select id="fcFilterMonth" class="fc-month"></select>
+            </div>
+            <div class="fc-chips" id="fcChips"></div>
           </div>
-          <div class="table-scroll">
-            <table class="deal-table fc-table">
-              <thead>
-                <tr>
-                  <th>Deal</th><th>Loại HĐ</th><th class="num">Giá trị</th>
-                  <th class="fc-yh fc-yL">Go-live thực tế</th>
-                  <th class="fc-yh num">%Act T1</th><th class="fc-yh num">%Out T1</th>
-                  <th class="fc-yh num">%Act T4</th><th class="fc-yh num fc-yR">%Out T4</th>
-                  <th>Tier</th><th>Trạng thái</th><th>Tháng CR</th>
-                  <th class="num">CHS T1</th><th class="num">CHS T4</th><th class="num">ACR</th>
-                </tr>
-              </thead>
-              <tbody id="fcTbody"></tbody>
-            </table>
+
+          <div class="table-card">
+            <div class="table-head">
+              <div class="chart-title">Deal của tôi <span class="chart-note">(nguồn: sheet Database)</span> <span class="fc-filter-note" id="fcFilterNote"></span></div>
+              <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay · phần còn lại tự tính</div>
+            </div>
+            <div class="table-scroll">
+              <table class="deal-table fc-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th><th>Loại HĐ</th><th class="num">Giá trị</th>
+                    <th class="fc-yh fc-yL">Go-live thực tế</th>
+                    <th class="fc-yh num">%Act T1</th><th class="fc-yh num">%Out T1</th>
+                    <th class="fc-yh num">%Act T4</th><th class="fc-yh num fc-yR">%Out T4</th>
+                    <th>Tier</th><th>Trạng thái</th><th>Tháng CR</th>
+                    <th class="num">CHS T1</th><th class="num">CHS T4</th><th class="num">ACR</th>
+                  </tr>
+                </thead>
+                <tbody id="fcTbody"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="fcEmpty" style="display:none;">Đang tải dữ liệu từ sheet Database…</div>
           </div>
-          <div class="empty" id="fcEmpty" style="display:none;">Đang tải dữ liệu từ sheet Database…</div>
+        </div>
+
+        <!-- ACR NHIỀU NĂM (Năm 2-5) -->
+        <div id="fcMultiBlock" style="display:none;">
+          <div class="fc-filter">
+            <div class="fc-filter-month">
+              <label for="mcFilterMonth">Tháng nhận Com <span class="fc-filter-month-hint">— tìm deal có Tháng nhận Com T1/T4 Năm 2-5 khớp tháng này</span></label>
+              <select id="mcFilterMonth" class="fc-month"></select>
+            </div>
+          </div>
+
+          <div class="fc-bar" style="margin-top:0;">
+            <div class="fc-bar-info">
+              <p>Nhập %Active · %Output cho đúng kỳ (T1/T4) của đúng năm khớp bộ lọc tháng ở trên.</p>
+            </div>
+            <div class="fc-bar-actions">
+              <span class="fc-flag" id="mcFlag"></span>
+              <button class="btn fc-save" id="mcSaveBtn">Lưu &amp; đẩy về sheet</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-head">
+              <div class="chart-title">ACR nhiều năm <span class="chart-note">(nguồn: sheet Database, cột Năm 2-5)</span></div>
+              <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay</div>
+            </div>
+            <div class="table-scroll">
+              <table class="deal-table fc-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th><th>Kỳ · Năm</th><th>Tháng nhận Com</th>
+                    <th class="fc-yh num">%Active</th><th class="fc-yh num">%Output</th>
+                    <th class="num">CHS_CS</th><th class="num">ACR</th>
+                  </tr>
+                </thead>
+                <tbody id="mcTbody"></tbody>
+              </table>
+            </div>
+            <div class="empty" id="mcEmpty" style="display:none;"></div>
+          </div>
         </div>
 
       </section>

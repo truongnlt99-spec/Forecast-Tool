@@ -502,15 +502,17 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     renderOverview();
   }
 
+  var searchQuery = '';   // NEW — search box Overview, theo tên deal
+
   function getFilteredDeals() {
     var fromV = $('dateFrom').value;
     var toV = $('dateTo').value;
     var from = fromV ? new Date(fromV + 'T00:00:00') : null;
     var to = toV ? new Date(toV + 'T23:59:59') : null;
     return allDeals.filter(function (d) {
-      if (!d.received) return !from && !to;
-      if (from && d.received < from) return false;
-      if (to && d.received > to) return false;
+      if (!d.received) { if (from || to) return false; }
+      else { if (from && d.received < from) return false; if (to && d.received > to) return false; }
+      if (searchQuery && d.name.toLowerCase().indexOf(searchQuery) === -1) return false;   // NEW
       return true;
     });
   }
@@ -805,6 +807,24 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   logoutBtn.addEventListener('click', logout);
   if (refreshBtn) refreshBtn.addEventListener('click', manualRefresh);
 
+  // NEW — search box Overview + Forecast
+  var ovSearchEl = $('ovSearch');
+  if (ovSearchEl) ovSearchEl.addEventListener('input', function () {
+    searchQuery = this.value.trim().toLowerCase();
+    renderOverview();
+  });
+  var fcSearchEl = $('fcSearch');
+  if (fcSearchEl) fcSearchEl.addEventListener('input', function () {
+    fcSearchQuery = this.value.trim().toLowerCase();
+    fcRenderTable();
+    if (fcView === 'multi') mcRenderTable();
+  });
+  document.querySelectorAll('.fc-view-btn').forEach(function (b) {
+    b.addEventListener('click', function () { fcSetView(b.getAttribute('data-view')); });
+  });
+  var mcSaveBtnEl = $('mcSaveBtn');
+  if (mcSaveBtnEl) mcSaveBtnEl.addEventListener('click', mcSave);
+
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { switchTab(t.getAttribute('data-tab')); });
   });
@@ -1027,6 +1047,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     FKEY = {
       id:       findKey(keys, ['deal id']),
       name:     findKey(keys, ['tên khách hàng', 'khách hàng']),
+      role:     findKey(keys, ['vai trò']),                    // NEW — combo CS_PM+CS_A
       contract: findKey(keys, ['loại hợp đồng']),
       val:      findKey(keys, ['giá trị phần mềm bộ', 'giá trị phần mềm']),
       segment:  findKey(keys, ['phân khúc']),
@@ -1046,6 +1067,17 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       monthT1:  findKey(keys, ['tháng đo t1']),
       monthT4:  findKey(keys, ['tháng đo t4']),
     };
+    // NEW — cột ACR nhiều năm (Năm 2 → Năm 5). Pattern có "- năm N" nên KHÔNG
+    // đụng cột năm 1 gốc ở trên (findKey trả về cột đầu tiên khớp theo thứ tự
+    // cột trong sheet, mà cột năm 1 luôn đứng trước cột năm 2-5).
+    for (var n = 2; n <= 5; n++) {
+      FKEY['comMT1_y' + n] = findKey(keys, ['tháng nhận com t1 - năm ' + n]);
+      FKEY['comMT4_y' + n] = findKey(keys, ['tháng nhận com t4 - năm ' + n]);
+      FKEY['aT1_y' + n]    = findKey(keys, ['% active t1 - năm ' + n]);
+      FKEY['oT1_y' + n]    = findKey(keys, ['% output t1 - năm ' + n]);
+      FKEY['aT4_y' + n]    = findKey(keys, ['% active t4 - năm ' + n]);
+      FKEY['oT4_y' + n]    = findKey(keys, ['% output t4 - năm ' + n]);
+    }
   }
 
   // ---- Month key helpers ("MM/YYYY") ----
@@ -1075,9 +1107,10 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     if (!FKEY) fcBuildKeymap(raw);
     var K = FKEY, g = function (k) { return k ? raw[k] : null; };
     var tm = String(g(K.tier) || '').match(/\d+/);
-    return {
+    var out = {
       id: String(g(K.id) || ''),
       name: String(g(K.name) || '—'),
+      role: String(g(K.role) || ''),                 // NEW — dùng để combo CS_PM+CS_A
       contract: String(g(K.contract) || '—'),
       val: parseMoney(g(K.val)),
       segment: String(g(K.segment) || ''),
@@ -1095,6 +1128,16 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       aT1_0: parsePct(g(K.aT1)), oT1_0: parsePct(g(K.oT1)),
       aT4_0: parsePct(g(K.aT4)), oT4_0: parsePct(g(K.oT4)),
     };
+    // NEW — dữ liệu ACR nhiều năm (Năm 2-5), gom theo từng năm cho gọn
+    out.years = {};
+    for (var n = 2; n <= 5; n++) {
+      out.years[n] = {
+        mT1: mNorm(g(K['comMT1_y' + n])), mT4: mNorm(g(K['comMT4_y' + n])),
+        aT1_0: parsePct(g(K['aT1_y' + n])), oT1_0: parsePct(g(K['oT1_y' + n])),
+        aT4_0: parsePct(g(K['aT4_y' + n])), oT4_0: parsePct(g(K['oT4_y' + n])),
+      };
+    }
+    return out;
   }
 
   function fcSeed() {
@@ -1205,9 +1248,12 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
   function fcFilteredDeals() {
     if (!fcDeals) return [];
-    if (fcFocusId) return fcDeals.filter(function (d) { return d.id === fcFocusId; });
-    if (fcFilterKey === 'all') return fcDeals;
-    return fcDeals.filter(function (d) { return !!fcTags(d)[fcFilterKey]; });
+    var base;
+    if (fcFocusId) base = fcDeals.filter(function (d) { return d.id === fcFocusId; });
+    else if (fcFilterKey === 'all') base = fcDeals;
+    else base = fcDeals.filter(function (d) { return !!fcTags(d)[fcFilterKey]; });
+    if (fcSearchQuery) base = base.filter(function (d) { return d.name.toLowerCase().indexOf(fcSearchQuery) !== -1; });  // NEW
+    return base;
   }
 
   function fcClearFocus() {
@@ -1297,6 +1343,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     if (!fcLoaded) { fcLoad(); return; }
     try {
       fcInitFilterMonth(); fcRenderChips(); fcRenderKpis(); fcRenderTable();
+      if (fcView === 'multi') { mcRenderFilterMonth(); mcRenderTable(); }   // NEW
     } catch (err) {
       console.error('renderForecast error:', err);
       showToast('Lỗi hiển thị Forecast: ' + err.message, 'err');
@@ -1331,6 +1378,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
         fcInitFilterMonth();
         fcRenderChips();
         fcRenderKpis(); fcRenderTable();
+        if (fcView === 'multi') mcRenderTable();   // NEW
         if (typeof onDone === 'function') onDone();
       })
       .catch(function (err) {
@@ -1516,6 +1564,180 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   }
 
   // =========================================================
+  // ACR NHIỀU NĂM (Năm 2 → Năm 5) — mở rộng của Forecast
+  // =========================================================
+  var mcState = {};              // key = dealId + '|' + year + '|' + ky  ->  { a, o }
+  var mcFilterMonthKey = mKeyNow();
+  var fcView = 'y1';             // 'y1' | 'multi' — sub-tab đang xem trong Forecast
+  var fcSearchQuery = '';        // search box Forecast (dùng chung cho cả 2 sub-tab)
+
+  function mcEff(d, n, ky) {
+    var key = d.id + '|' + n + '|' + ky;
+    var e = mcState[key] || {};
+    var y = (d.years && d.years[n]) || {};
+    var a0 = (ky === 'T1') ? y.aT1_0 : y.aT4_0;
+    var o0 = (ky === 'T1') ? y.oT1_0 : y.oT4_0;
+    return { a: (e.a !== undefined) ? e.a : a0, o: (e.o !== undefined) ? e.o : o0 };
+  }
+
+  // %Output của kỳ liền trước (năm N-1 cùng kỳ T1/T4) — dùng làm gợi ý
+  function mcPrevOutput(d, n, ky) {
+    if (n <= 2) return (ky === 'T1') ? d.oT1_0 : d.oT4_0;      // năm 2 → gợi ý theo năm 1
+    return mcEff(d, n - 1, ky).o;
+  }
+
+  // CHS_CS của 1 (deal, năm, kỳ) — TÁI DÙNG đúng công thức năm 1 (fcUPoint, tier 4 = 100% Output)
+  function mcChs(d, n, ky) {
+    var v = mcEff(d, n, ky);
+    if (v.o == null || v.o === '') return null;
+    var t = d.tierNum;
+    if (t === 4) return +v.o;
+    var u = fcUPoint(t, v.a); if (u == null) return null;
+    return Math.round((0.7 * u + 0.3 * v.o) * 10) / 10;
+  }
+
+  // Các (năm, kỳ) của 1 deal có "Tháng nhận Com" khớp đúng tháng đang lọc
+  function mcMatches(d, monthKey) {
+    var out = [];
+    for (var n = 2; n <= 5; n++) {
+      var y = d.years && d.years[n]; if (!y) continue;
+      if (y.mT1 && y.mT1 === monthKey) out.push({ n: n, ky: 'T1', month: y.mT1 });
+      if (y.mT4 && y.mT4 === monthKey) out.push({ n: n, ky: 'T4', month: y.mT4 });
+    }
+    return out;
+  }
+
+  // Gộp toàn bộ deal khớp 1 tháng — dùng cho cả bảng nhập liệu lẫn Scorecard
+  function mcAllMatches(monthKey) {
+    var rows = [];
+    (fcDeals || []).forEach(function (d) {
+      mcMatches(d, monthKey).forEach(function (m) { rows.push({ d: d, n: m.n, ky: m.ky, month: m.month }); });
+    });
+    return rows;
+  }
+
+  function mcRenderFilterMonth() {
+    var sel = $('mcFilterMonth');
+    if (!sel || sel.options.length) return;
+    for (var i = -6; i <= 24; i++) {                     // ACR nhiều năm cần nhìn xa hơn tháng thường
+      var k = mAdd(mKeyNow(), i);
+      var o = document.createElement('option');
+      o.value = k; o.textContent = k + (i === 0 ? ' · hiện tại' : '');
+      sel.appendChild(o);
+    }
+    sel.value = mKeyNow();
+    sel.addEventListener('change', function () { mcFilterMonthKey = sel.value; mcRenderTable(); });
+  }
+
+  function mcRenderTable() {
+    var tb = $('mcTbody'), empty = $('mcEmpty');
+    if (!tb || !fcDeals) return;
+    var rows = mcAllMatches(mcFilterMonthKey);
+    if (fcSearchQuery) rows = rows.filter(function (r) { return r.d.name.toLowerCase().indexOf(fcSearchQuery) !== -1; });
+
+    if (empty) {
+      empty.style.display = rows.length ? 'none' : 'block';
+      if (!rows.length) empty.textContent = 'Không có deal nào có kỳ nhận Com (Năm 2-5) rơi vào tháng ' + mcFilterMonthKey + '.';
+    }
+
+    tb.innerHTML = rows.map(function (row) {
+      var d = row.d, n = row.n, ky = row.ky, key = d.id + '|' + n + '|' + ky;
+      var eff = mcEff(d, n, ky);
+      var chs = mcChs(d, n, ky);
+      var prevOut = mcPrevOutput(d, n, ky);
+      var inp = function (field, val) {
+        var edited = !!(mcState[key] && mcState[key][field] !== undefined);
+        return '<input class="fc-in mc-in fc-pct' + (edited ? ' fc-edited' : '') + '" type="number" min="0" max="100" placeholder="0-100" ' +
+          'data-key="' + esc(key) + '" data-field="' + field + '" value="' + esc(val == null ? '' : val) + '">';
+      };
+      return '<tr id="mc-row-' + esc(key) + '">' +
+        '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
+        '<td><span class="badge ' + (ky === 'T1' ? 'ky-t1' : 'ky-t4') + '">' + ky + ' · Năm ' + n + '</span></td>' +
+        '<td>' + esc(row.month) + '</td>' +
+        '<td class="fc-y num">' + inp('a', eff.a) + '</td>' +
+        '<td class="fc-y num">' + inp('o', eff.o) +
+          (prevOut != null
+            ? '<div class="mc-hint">gợi ý năm trước: <b>' + String(prevOut).replace('.', ',') + '%</b> ' +
+              '<button type="button" class="mc-use-hint" data-key="' + esc(key) + '" data-val="' + prevOut + '">dùng</button></div>'
+            : '') +
+        '</td>' +
+        '<td class="num" data-c="chs">' + fcChsBadge(chs) + '</td>' +
+        '<td class="num">' + fmtMoneyShort(d.acr) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    tb.querySelectorAll('.mc-in').forEach(function (el) {
+      el.addEventListener('change', function () { mcEdit(el.getAttribute('data-key'), el.getAttribute('data-field'), el.value); });
+    });
+    tb.querySelectorAll('.mc-use-hint').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        mcEdit(btn.getAttribute('data-key'), 'o', btn.getAttribute('data-val'));
+        mcRenderTable();
+      });
+    });
+  }
+
+  function mcEdit(key, field, val) {
+    val = (val === '' ? null : (isNaN(+val) ? null : +val));
+    if (!mcState[key]) mcState[key] = {};
+    mcState[key][field] = val;
+    var row = document.getElementById('mc-row-' + key);
+    if (row) {
+      var parts = key.split('|');
+      row.querySelector('[data-c="chs"]').innerHTML = fcChsBadge(mcChs(fcDeals.find(function (x) { return x.id === parts[0]; }), +parts[1], parts[2]));
+    }
+    mcFlag('• chưa lưu về sheet');
+  }
+
+  function mcFlag(t) { var el = $('mcFlag'); if (el) el.textContent = t; }
+
+  function mcSave() {
+    var token = localStorage.getItem('cs_tool_token');
+    var keys = Object.keys(mcState);
+    if (!keys.length) { mcFlag('không có gì để lưu'); return; }
+    var rows = keys.map(function (key) {
+      var parts = key.split('|');                 // [dealId, year, ky]
+      var d = fcDeals.find(function (x) { return x.id === parts[0]; });
+      var eff = mcEff(d, +parts[1], parts[2]);
+      return { dealId: parts[0], year: +parts[1], period: parts[2], active: eff.a, output: eff.o };
+    });
+    mcFlag('đang lưu ' + rows.length + ' mục…');
+    fetch(CFG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ token: token, multiYearRows: rows }),
+    })
+      .then(function (r) { return r.text(); })
+      .then(function (text) {
+        var d; try { d = JSON.parse(text); } catch (e) { d = { ok: true }; }
+        if (d.ok) {
+          mcState = {};
+          mcFlag('✓ đã lưu ' + rows.length + ' mục · ' + new Date().toLocaleTimeString('vi-VN'));
+          showToast('Đã lưu ACR nhiều năm — chuyển sang Scorecard xem commission', 'ok');
+          // Yêu cầu: lưu xong tự nhảy Scorecard, chấm đúng tháng vừa nhập
+          dbMonthKey = mcFilterMonthKey;
+          var dbSel = $('dbMonth'); if (dbSel) dbSel.value = mcFilterMonthKey;
+          switchTab('dashboard');
+        } else {
+          mcFlag('⚠ lưu lỗi — backend chưa xử lý multiYearRows?');
+        }
+      })
+      .catch(function (err) { mcFlag('⚠ lưu lỗi: ' + err.message); });
+  }
+
+  // Toggle sub-tab Năm 1 / ACR nhiều năm trong Forecast
+  function fcSetView(v) {
+    fcView = v;
+    document.querySelectorAll('.fc-view-btn').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-view') === v);
+    });
+    var y1 = $('fcYear1Block'), mc = $('fcMultiBlock');
+    if (y1) y1.style.display = (v === 'y1') ? 'block' : 'none';
+    if (mc) mc.style.display = (v === 'multi') ? 'block' : 'none';
+    if (v === 'multi') { mcRenderFilterMonth(); mcRenderTable(); }
+  }
+
+  // =========================================================
   // DASHBOARD TAB — dữ liệu đã tính ở sheet Database + quy định policy
   // (mục 6.2 Performance, 6.3 Commission năm đầu, 6.5 thưởng Upsale/Cross)
   // =========================================================
@@ -1675,27 +1897,53 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     hint.push('%Com T4: ' + (def.comT4 ? (rT4 != null ? rT4 + '%' : '—') : 'CS_A không áp dụng'));
     $('comRateHint').textContent = hint.join(' · ');
 
+    // NEW — combo CS_PM + CS_A khi 1 mình cân cả deal (chính sách kiêm nhiệm — mục 4 policy:
+    // "nhân sự CS sẽ được cộng dồn 100% quyền lợi của vị trí CS_A"). CS_A level 1 & 2 có cùng
+    // 1 mức %Com T1 (1.5/2/2.3), không có T4 -> chỉ cộng vào rate T1. Chỉ áp dụng cho nhân sự
+    // CS_PM (không tự cộng cho chính CS_A), và hiển thị %Com cuối cùng đã gộp, không lộ phép tính.
+    var CS_A_ADDON_T1 = { under: null, kpi: 1.5, goal: 2, out: 2.3 };
+    function comboRate(d, baseRate, ky) {
+      if (baseRate == null) return null;
+      if (def.group === 'CSA' || ky !== 'T1') return baseRate;
+      var role = String(d.role || '').toUpperCase();
+      var solo = role.indexOf('CS_PM') !== -1 && role.indexOf('CS_A') !== -1;
+      if (!solo) return baseRate;
+      var addon = CS_A_ADDON_T1[rating];
+      return (addon != null) ? Math.round((baseRate + addon) * 100) / 100 : baseRate;
+    }
+
     var rows = [], totT1 = 0, totT4 = 0;
-    var pushRows = function (list, ky, rate) {
-      list.forEach(function (d) {
-        var r = fcCompute(d);
-        var chs = (ky === 'T1') ? r.cT1 : r.cT4;
+    var pushRows = function (list, ky, baseRate) {
+      list.forEach(function (item) {
+        var d = item.d || item;                              // deal thường HOẶC {d,n,ky,month} multi-year
+        var yearTag = item.n ? (' · Năm ' + item.n) : '';
+        var monthTag = item.month || p.m;
+        var chs = item.n ? mcChs(d, item.n, ky) : fcCompute(d)[ky === 'T1' ? 'cT1' : 'cT4'];
         var pass = chs != null && chs >= 50;
+        var rate = comboRate(d, baseRate, ky);
         var com = (pass && rate != null) ? Math.round((d.acr || 0) * rate / 100) : 0;
         if (ky === 'T1') totT1 += com; else totT4 += com;
         rows.push('<tr class="com-row' + (pass ? '' : ' com-fail') + '" data-id="' + esc(d.id) + '" data-name="' + esc(d.name) + '">' +
           '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
-          '<td><span class="badge ' + (ky === 'T1' ? 'ky-t1' : 'ky-t4') + '">' + ky + ' · ' + esc(p.m) + '</span></td>' +
+          '<td><span class="badge ' + (ky === 'T1' ? 'ky-t1' : 'ky-t4') + '">' + ky + ' · ' + esc(monthTag) + esc(yearTag) + '</span></td>' +
           '<td class="num">' + fmtMoney(d.acr) + '</td>' +
           '<td class="num">' + fcChsBadge(chs) + '</td>' +
           '<td>' + (chs == null ? '<span class="badge chs-none">chưa có số</span>' : pass ? '<span class="badge gl-done">Đạt ✓</span>' : '<span class="badge gl-overdue">Không đạt</span>') + '</td>' +
-          '<td class="num">' + (pass && rate != null ? rate + '%' : '—') + '</td>' +
+          '<td class="num">' + (pass && rate != null ? String(rate).replace('.', ',') + '%' : '—') + '</td>' +
           '<td class="num"><b>' + (com ? fmtMoney(com) : '—') + '</b></td>' +
           '</tr>');
       });
     };
+
     pushRows(p.t1Deals, 'T1', rT1);
     if (def.comT4) pushRows(p.t4Deals, 'T4', rT4);
+
+    // NEW — ACR nhiều năm (Năm 2-5) khớp đúng tháng Scorecard đang xem, tính y hệt cơ chế năm 1
+    var multi = mcAllMatches(p.m);
+    var multiT1 = multi.filter(function (x) { return x.ky === 'T1'; });
+    var multiT4 = multi.filter(function (x) { return x.ky === 'T4'; });
+    pushRows(multiT1, 'T1', rT1);
+    if (def.comT4) pushRows(multiT4, 'T4', rT4);
 
     // Thưởng Upsale / Cross sale — tháng nhận PL (≈ tháng nhận deal, mục 6.5)
     var usDeals = fcDeals.filter(function (d) {
@@ -1712,7 +1960,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       });
     });
     emptyEl.style.display = rows.length ? 'none' : 'block';
-    if (!rows.length) emptyEl.textContent = 'Không có deal nào tới kỳ đo T1/T4 trong tháng ' + p.m + '.';
+    if (!rows.length) emptyEl.textContent = 'Không có deal nào tới kỳ đo T1/T4 (kể cả ACR nhiều năm) trong tháng ' + p.m + '.';
 
     var salary = profile ? parseMoney(profile.salary) : null;
     var totalCom = totT1 + totT4 + usBonus;
@@ -1720,9 +1968,9 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       return '<tr class="' + (cls || '') + '"><td colspan="6">' + label + '</td><td class="num"><b>' + val + '</b></td></tr>';
     };
     tf.innerHTML =
-      frow('Σ Com hiệu quả triển khai 1 tháng (' + p.t1Deals.length + ' deal đo T1)', fmtMoney(totT1)) +
+      frow('Σ Com hiệu quả triển khai 1 tháng (' + (p.t1Deals.length + multiT1.length) + ' deal đo T1, gồm ' + multiT1.length + ' ACR nhiều năm)', fmtMoney(totT1)) +
       (def.comT4
-        ? frow('Σ Com hiệu quả triển khai 4 tháng (' + p.t4Deals.length + ' deal đo T4)', fmtMoney(totT4))
+        ? frow('Σ Com hiệu quả triển khai 4 tháng (' + (p.t4Deals.length + multiT4.length) + ' deal đo T4, gồm ' + multiT4.length + ' ACR nhiều năm)', fmtMoney(totT4))
         : frow('Com 4 tháng — CS_A không áp dụng theo policy 6.3', '—')) +
       frow('Thưởng Upsale/Cross sale — DT ghi nhận ' + fmtMoneyShort(usBase) + ' (' + usDeals.length + ' PL) × ' + usPct + '%', fmtMoney(usBonus)) +
       frow('TỔNG COMMISSION THÁNG ' + p.m, fmtMoney(totalCom), 'com-total') +
@@ -1799,7 +2047,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       notes.push('Lưu ý: bảng com 4 tháng của CS level 7 trong policy đang trùng level 6 (3% · 3.3% · 3.5%) — tool giữ đúng văn bản.');
     }
     if (def.group === 'CS') {
-      notes.push('Nếu bạn làm solo không có CS_A, policy cộng thêm 100% quyền lợi CS_A (chính sách kiêm nhiệm) — tool CHƯA cộng phần này, đối soát tay khi có deal solo.');
+      notes.push('Deal nào cột "Vai trò phụ trách" ghi cả CS_PM,CS_A (bạn tự cân, không có CS_A riêng) — tool đã tự cộng 100% %Com CS_A vào %Com T1 của bạn theo chính sách kiêm nhiệm (mục 4).');
     }
     $('dashNote').innerHTML = notes.map(function (n) { return '• ' + n; }).join('<br>');
   }
@@ -1855,6 +2103,17 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   // CHANGELOG — mỗi lần cập nhật tool, thêm 1 entry mới lên ĐẦU mảng này.
   // =========================================================
   var CHANGELOG = [
+    {
+      date: '18/07/2026',
+      title: 'Big Update: ACR nhiều năm · combo CS_PM+CS_A · search box',
+      items: [
+        'Forecast: thêm sub-tab "ACR nhiều năm (Năm 2-5)" — lọc theo tháng (mặc định tháng hiện tại), tự tìm deal có "Tháng nhận Com T1/T4 - Năm 2..5" khớp tháng đó, cho nhập %Active/%Output, gợi ý %Output năm liền trước kèm nút "dùng".',
+        'Lưu ACR nhiều năm xong tự nhảy sang Scorecard, chấm đúng tháng vừa nhập.',
+        'Scorecard: bảng Commission giờ gộp cả deal năm 1 lẫn ACR nhiều năm khớp tháng đang xem, tính chung 1 bảng %Com theo Level (policy 6.4 không có bảng riêng cho năm 2+).',
+        'Combo CS_PM+CS_A: deal nào cột "Vai trò phụ trách" ghi cả CS_PM,CS_A (tự cân, không có CS_A riêng) → %Com T1 = %Com Level cộng thêm 1.5/2/2.3% (Under/KPI/GOAL/OUT) của CS_A, đúng theo "chính sách kiêm nhiệm" mục 4 policy. Bảng chỉ hiện %Com cuối cùng, không lộ phép cộng.',
+        'Thêm search box theo tên deal ở cả Overview và Forecast (dùng chung cho cả 2 sub-tab Forecast).',
+      ],
+    },
     {
       date: '17/07/2026',
       title: 'Fix: đăng nhập Google bị khoá khi Chrome tắt "Third-party sign-in" (FedCM)',
@@ -1924,6 +2183,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
         '<h4>Forecast</h4>' +
         '<p>Nơi duy nhất được nhập tay 5 ô vàng: <b>Go-live thực tế, %Active T1/T4, %Output T1/T4</b>. Các cột còn lại (Tier, Trạng thái, CHS T1/T4, ACR) tự tính lại ngay khi bạn gõ, và chỉ đẩy về sheet khi bấm <b>"Lưu &amp; đẩy về sheet"</b>.</p>' +
         '<p><b>Tháng làm việc</b> ở thanh lọc dùng chung cho cả 7 chip lọc lẫn ô KPI "DT phải go-live". Ưu tiên xử lý theo thứ tự: <i>Thiếu số kỳ đã qua</i> (khẩn nhất — CHS trống là mất luôn nền commission của deal đó) → <i>Kỳ đo T1/T4 tháng này</i> → các chip "Chưa GL".</p>' +
+        '<p><b>ACR nhiều năm:</b> bấm nút "ACR nhiều năm (Năm 2-5)" ở đầu tab để chuyển sang nhập %Active/%Output cho các deal đã sang năm hợp đồng thứ 2 trở đi — chọn đúng tháng, tool tự tìm deal có kỳ nhận Com khớp tháng đó, có gợi ý %Output năm liền trước để đỡ phải tra lại. Bấm Lưu xong tool tự chuyển sang Scorecard đúng tháng vừa nhập.</p>' +
+        '<p><b>Tìm nhanh:</b> gõ vào ô tìm kiếm ở đầu tab (Overview và Forecast đều có) để lọc theo tên deal.</p>' +
       '</div>' +
       '<div class="pb-section">' +
         '<h4>Scorecard</h4>' +

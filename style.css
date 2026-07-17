@@ -787,3 +787,30 @@ tr.fc-flash td { animation: fcFlash 2.2s ease; }
   padding: 4px;
 }
 .gbtn-retry:hover { color: var(--accent); }
+
+/* ============================================
+   ACR NHIỀU NĂM + SEARCH BOX
+   ============================================ */
+.fc-view-toggle {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.fc-view-btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+  padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-soft);
+}
+.fc-view-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.search-input, .fc-search-input {
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px;
+  font: inherit; font-size: 13px; background: var(--card); color: var(--ink);
+  min-width: 220px;
+}
+.fc-search-input { margin-left: auto; }
+.filter-field .search-input { min-width: 200px; }
+.mc-hint {
+  font-size: 11px; color: var(--ink-soft); margin-top: 4px; display: flex; align-items: center; gap: 6px;
+}
+.mc-use-hint {
+  border: 1px solid var(--line); background: #fff; border-radius: 5px; padding: 1px 6px;
+  font-size: 10.5px; cursor: pointer; color: var(--accent);
+}
+.mc-use-hint:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
