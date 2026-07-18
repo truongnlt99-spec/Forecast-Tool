@@ -212,6 +212,7 @@
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (d) {
+        saveSessionToken_(d);
         btn.removeAttribute('disabled'); sp.classList.add('hidden'); tx.textContent = 'Lưu & vào hệ thống';
         if (!d.ok) { err.textContent = 'Lưu không thành công: ' + (d.error || 'lỗi không rõ'); return; }
         profile = d.profile || { email: currentEmail, hoTen: hoTen, level: level, salary: salary };
@@ -245,11 +246,21 @@
     if (!fcLoaded) fcLoad(false, afterReady);
     else afterReady();
   }
+// =========================================================
+// SESSION TOKEN — backend v4 cấp kèm 1 "vé" riêng (CST1...) sống 30 ngày mỗi
+// lần gọi API thành công, KHÔNG phụ thuộc id_token của Google (chỉ sống ~1h).
+// Cứ nhận được là ghi đè localStorage ngay để lần sau dùng vé mới nhất.
+// =========================================================
+function saveSessionToken_(data) {
+  if (data && data.sessionToken) localStorage.setItem('cs_tool_token', data.sessionToken);
+}
+
 function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     fetch(CFG.API_URL + '?token=' + encodeURIComponent(token))
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (data) {
+        saveSessionToken_(data);
         if (!data.ok) {
           // QUAN TRỌNG: trước đây hễ thấy {ok:false} là xoá token đang hợp lệ + bắt
           // đăng nhập lại — dù lỗi có thể chỉ là Apps Script tạm trục trặc (cold
@@ -912,19 +923,6 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   });
 
   // =========================================================
-  // CHỦ ĐỘNG LÀM MỚI TOKEN ÂM THẦM — id_token của Google chỉ sống ~1h theo
-  // thiết kế (không đổi được). Để phiên làm việc cả ngày đỡ bị gián đoạn,
-  // cứ mỗi 50 phút (sớm hơn mốc hết hạn) thử âm thầm lấy token mới một lần;
-  // thất bại thì thôi, không ảnh hưởng gì — vẫn còn cơ chế fallback lúc
-  // reload/hết hạn thật như bình thường.
-  // =========================================================
-  setInterval(function () {
-    if (document.body.className === 'app-mode' && !silentReauthInProgress) {
-      trySilentSignIn(function () { /* im lặng bỏ qua nếu thất bại */ });
-    }
-  }, 50 * 60 * 1000);
-
-  // =========================================================
   // GOOGLE SIGN-IN: 1 hàm prompt() dùng chung, có khoá để tránh gọi
   // chồng nhiều lần — đây là nguyên nhân của lỗi "AbortError: signal is
   // aborted without reason" thấy trong console (gọi prompt() lần 2 khi
@@ -1389,7 +1387,13 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       .then(function (r) { return r.text(); })
       .then(function (text) { return JSON.parse(text); })
       .then(function (data) {
+        saveSessionToken_(data);
         if (!data.ok) {
+          if (data.error !== 'invalid_token') {
+            if (empty) { empty.style.display = 'block'; empty.textContent = 'Không tải được dữ liệu: ' + (data.error || 'lỗi không rõ') + ' — thử bấm "Làm mới".'; }
+            showToast('Forecast: ' + (data.error || 'lỗi không rõ') + ' — thử lại sau.', 'err');
+            return;
+          }
           if (empty) { empty.style.display = 'block'; empty.textContent = 'Phiên đăng nhập đã hết hạn — vui lòng đăng nhập lại.'; }
           localStorage.removeItem('cs_tool_token');
           localStorage.removeItem(SESSION_KEY);
@@ -1579,6 +1583,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       .then(function (r) { return r.text(); })
       .then(function (text) {
         var d; try { d = JSON.parse(text); } catch (e) { d = { ok: true }; }
+        saveSessionToken_(d);
         if (d.ok) {
           document.querySelectorAll('.fc-in.fc-edited').forEach(function(el) { el.classList.remove('fc-edited'); });
           fcFlag('✓ đã lưu ' + edited.length + ' deal · ' + new Date().toLocaleTimeString('vi-VN'));
@@ -1736,6 +1741,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       .then(function (r) { return r.text(); })
       .then(function (text) {
         var d; try { d = JSON.parse(text); } catch (e) { d = { ok: true }; }
+        saveSessionToken_(d);
         if (d.ok) {
           // QUAN TRỌNG: cập nhật thẳng vào fcDeals (bộ nhớ) đúng số vừa lưu, để
           // Scorecard tính CHS_CS/commission ngay lập tức. Trước đây xoá mcState
