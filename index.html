@@ -174,24 +174,44 @@
 
         <div class="filter-bar">
           <div class="filter-field">
-            <label for="dateFrom">Nhận deal từ</label>
-            <input type="date" id="dateFrom">
+            <label for="ovPeriod">Thời gian</label>
+            <select id="ovPeriod">
+              <option value="month">Tháng này</option>
+              <option value="quarter">Quý này</option>
+              <option value="year">Năm nay</option>
+              <option value="all">Tất cả</option>
+              <option value="custom">Khoảng thời gian…</option>
+            </select>
           </div>
+
           <div class="filter-field">
-            <label for="dateTo">Đến</label>
-            <input type="date" id="dateTo">
+            <label for="ovContract">Loại hợp đồng</label>
+            <select id="ovContract"><option value="">Tất cả loại HĐ</option></select>
           </div>
+
           <div class="filter-field">
-            <label for="ovSearch">Tìm theo tên deal</label>
-            <input type="text" id="ovSearch" class="search-input" placeholder="🔍 nhập tên deal…">
+            <label for="ovSolution">Bộ giải pháp</label>
+            <select id="ovSolution"><option value="">Tất cả bộ giải pháp</option></select>
           </div>
-          <div class="filter-presets">
-            <button class="chip-btn" data-preset="month">Tháng này</button>
-            <button class="chip-btn" data-preset="quarter">Quý này</button>
-            <button class="chip-btn" data-preset="year">Năm nay</button>
-            <button class="chip-btn" data-preset="all">Tất cả</button>
+
+          <div class="filter-field">
+            <label for="ovSearch">Tìm kiếm</label>
+            <input type="text" id="ovSearch" class="search-input" placeholder="🔍 tên công ty, Sys ID…">
           </div>
+
           <div class="filter-count" id="filterCount"></div>
+
+          <!-- Chỉ hiện khi chọn "Khoảng thời gian…" -->
+          <div class="ov-custom-range" id="ovCustomRange" style="display:none;">
+            <div class="filter-field">
+              <label for="dateFrom">Nhận deal từ</label>
+              <input type="date" id="dateFrom">
+            </div>
+            <div class="filter-field">
+              <label for="dateTo">Đến</label>
+              <input type="date" id="dateTo">
+            </div>
+          </div>
         </div>
 
         <div class="health-strip" id="healthStrip"></div>
@@ -238,7 +258,7 @@
             <table class="deal-table">
               <thead>
                 <tr>
-                  <th>Tên deal</th>
+                  <th>Khách hàng</th>
                   <th>Vai trò</th>
                   <th class="th-sort" id="sortDate">Ngày nhận ▾</th>
                   <th class="num">ARR</th>
@@ -257,11 +277,7 @@
       <!-- TAB: FORECAST -->
       <section class="tab-panel" id="panel-forecast" style="display:none;">
 
-        <div class="fc-bar">
-          <div class="fc-bar-info">
-            <h3>Forecast — nhập ô vàng, xem CHS &amp; doanh thu go-live</h3>
-            <p>Sửa Go-live thực tế / %Active / %Output cho từng deal → CHS_CS T1·T4 tính lại ngay tại chỗ. Bấm Lưu để đẩy 5 ô vàng về sheet Database (cột xanh tự tính lại).</p>
-          </div>
+        <div class="fc-bar fc-bar-slim">
           <div class="fc-bar-actions">
             <span class="fc-flag" id="fcFlag"></span>
             <button class="btn fc-save" id="fcSaveBtn">Lưu &amp; đẩy về sheet</button>
@@ -272,21 +288,23 @@
           <div class="kpi-card">
             <div class="kpi-label">CHS_CS T1 · trung bình</div>
             <div class="kpi-value" id="fcAvgT1">—</div>
+            <div class="kpi-uo" id="fcUoT1"></div>
             <div class="kpi-sub" id="fcAvgT1Sub"></div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">CHS_CS T4 · trung bình</div>
             <div class="kpi-value" id="fcAvgT4">—</div>
+            <div class="kpi-uo" id="fcUoT4"></div>
             <div class="kpi-sub" id="fcAvgT4Sub"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Nền COM đủ điều kiện</div>
+            <div class="kpi-label">Tổng ACR</div>
             <div class="kpi-value" id="fcElig" style="font-size:20px;">—</div>
-            <div class="kpi-sub">ΣACR deal có CHS_CS_T ≥ 50</div>
+            <div class="kpi-sub" id="fcEligSub"></div>
           </div>
           <div class="kpi-card kpi-press">
             <div class="kpi-label fc-press-head">
-              <span>DT phải go-live · không muộn</span>
+              <span>DT cần go-live</span>
               <span class="fc-press-month" id="fcPressMonthLabel"></span>
             </div>
             <div class="kpi-value" id="fcPress" style="font-size:20px;">—</div>
@@ -295,35 +313,35 @@
         </div>
 
         <div class="fc-view-toggle" id="fcViewToggle">
-          <button type="button" class="fc-view-btn active" data-view="y1">Năm 1 (mặc định)</button>
-          <button type="button" class="fc-view-btn" data-view="multi">ACR nhiều năm (Năm 2-5)</button>
+          <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
+          <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
           <input type="text" id="fcSearch" class="search-input fc-search-input" placeholder="🔍 Tìm theo tên deal…">
         </div>
 
         <div id="fcYear1Block">
-          <div class="fc-filter" id="fcFilter">
-            <div class="fc-filter-month">
-              <label for="fcFilterMonth">Tháng làm việc <span class="fc-filter-month-hint">— áp dụng cho cả bộ lọc &amp; ô "DT phải go-live"</span></label>
+          <div class="fc-filter fc-filter-slim" id="fcFilter">
+            <div class="fc-filter-row">
+              <label class="fc-filter-lbl" for="fcFilterMonth">Tháng</label>
               <select id="fcFilterMonth" class="fc-month"></select>
+              <span class="fc-filter-note" id="fcFilterNote"></span>
+              <button type="button" class="fc-cols-toggle" id="fcColsToggle">⊞ Hiện đầy đủ</button>
             </div>
             <div class="fc-chips" id="fcChips"></div>
           </div>
 
           <div class="table-card">
-            <div class="table-head">
-              <div class="chart-title">Deal của tôi <span class="chart-note">(nguồn: sheet Database)</span> <span class="fc-filter-note" id="fcFilterNote"></span></div>
-              <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay · phần còn lại tự tính</div>
-            </div>
             <div class="table-scroll">
-              <table class="deal-table fc-table">
+              <table class="deal-table fc-table fc-compact" id="fcTable">
                 <thead>
                   <tr>
-                    <th>Deal</th><th>Loại HĐ</th><th class="num">Giá trị</th>
+                    <th>Khách hàng</th>
+                    <th class="fc-extra">Loại HĐ</th><th class="num fc-extra">Giá trị</th>
                     <th class="fc-yh fc-yL">Go-live thực tế</th>
                     <th class="fc-yh num">%Act T1</th><th class="fc-yh num">%Out T1</th>
                     <th class="fc-yh num">%Act T4</th><th class="fc-yh num fc-yR">%Out T4</th>
-                    <th>Tier</th><th>Trạng thái</th><th>Tháng CR</th>
-                    <th class="num">CHS T1</th><th class="num">CHS T4</th><th class="num">ACR</th>
+                    <th class="num">CHS T1</th><th class="num">CHS T4</th>
+                    <th class="fc-extra">Tier</th><th class="fc-extra">Trạng thái</th>
+                    <th class="fc-extra">Tháng CR</th><th class="num fc-extra">ACR</th>
                   </tr>
                 </thead>
                 <tbody id="fcTbody"></tbody>
@@ -335,17 +353,15 @@
 
         <!-- ACR NHIỀU NĂM (Năm 2-5) -->
         <div id="fcMultiBlock" style="display:none;">
-          <div class="fc-filter">
-            <div class="fc-filter-month">
-              <label for="mcFilterMonth">Tháng nhận Com <span class="fc-filter-month-hint">— tìm deal có Tháng nhận Com T1/T4 Năm 2-5 khớp tháng này</span></label>
+          <div class="fc-filter fc-filter-slim">
+            <div class="fc-filter-row">
+              <label class="fc-filter-lbl" for="mcFilterMonth">Tháng nhận Com</label>
               <select id="mcFilterMonth" class="fc-month"></select>
+              <span class="fc-filter-note">— deal có kỳ nhận Com Năm 2++ rơi vào tháng này</span>
             </div>
           </div>
 
-          <div class="fc-bar" style="margin-top:0;">
-            <div class="fc-bar-info">
-              <p>Nhập %Active · %Output cho đúng kỳ (T1/T4) của đúng năm khớp bộ lọc tháng ở trên.</p>
-            </div>
+          <div class="fc-bar fc-bar-slim">
             <div class="fc-bar-actions">
               <span class="fc-flag" id="mcFlag"></span>
               <button class="btn fc-save" id="mcSaveBtn">Lưu &amp; đẩy về sheet</button>
@@ -353,17 +369,13 @@
           </div>
 
           <div class="table-card">
-            <div class="table-head">
-              <div class="chart-title">ACR nhiều năm <span class="chart-note">(nguồn: sheet Database, cột Năm 2-5)</span></div>
-              <div class="table-hint"><span class="fc-legend-dot"></span> Ô vàng nhập tay</div>
-            </div>
             <div class="table-scroll">
               <table class="deal-table fc-table">
                 <thead>
                   <tr>
-                    <th>Deal</th><th>Kỳ · Năm</th><th>Tháng nhận Com</th>
+                    <th>Khách hàng</th><th>Kỳ · Năm</th><th class="fc-extra">Tháng nhận Com</th>
                     <th class="fc-yh num">%Active</th><th class="fc-yh num">%Output</th>
-                    <th class="num">CHS_CS</th><th class="num">ACR</th>
+                    <th class="num">CHS_CS</th><th class="num fc-extra">ACR</th>
                   </tr>
                 </thead>
                 <tbody id="mcTbody"></tbody>
@@ -413,7 +425,7 @@
               <table class="deal-table com-table">
                 <thead>
                   <tr>
-                    <th>Deal</th><th>Kỳ</th><th>Nguồn</th><th class="num">ACR</th>
+                    <th>Khách hàng</th><th>Kỳ</th><th>Nguồn</th><th class="num">ACR</th>
                     <th class="num">CHS_CS</th><th>Điều kiện ≥ 50</th>
                     <th class="num">% Com</th><th class="num">Commission</th>
                   </tr>

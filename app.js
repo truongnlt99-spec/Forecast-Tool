@@ -415,6 +415,10 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     KEYMAP = {
       id:        findKey(keys, ['deal id']),
       name:      findKey(keys, ['tên khách hàng', 'khách hàng', 'company']),
+      // NEW — ưu tiên hiển thị Tên công ty; Sys ID để tra cứu trong thẻ chi tiết.
+      // Dò theo TÊN cột (không phải vị trí cột) nên sheet có chèn/xoá cột vẫn chạy đúng.
+      companyName: findKey(keys, ['tên công ty', 'ten cong ty']),
+      sysId:     findKey(keys, ['system id', 'sys id', 'sysid']),
       role:      findKey(keys, ['vai trò']),
       segment:   findKey(keys, ['phân khúc']),
       solution:  findKey(keys, ['bộ giải pháp']),
@@ -525,6 +529,10 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       raw: raw,
       id: String(get(K.id) || ''),
       name: String(get(K.name) || '—'),
+      // company = thứ hiển thị chính ở mọi bảng. Nếu sheet chưa có cột "Tên công ty"
+      // thì tự lùi về tên deal để không bị trống trơn.
+      company: String(get(K.companyName) || get(K.name) || '—'),
+      sysId: String(get(K.sysId) || ''),
       role: String(get(K.role) || ''),
       segment: String(get(K.segment) || ''),
       solution: String(get(K.solution) || 'Khác'),
@@ -572,49 +580,86 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // Tìm kiếm: quét cả tên công ty, tên deal, Sys ID và Deal ID — gõ gì cũng ra.
+  function dealMatchesQuery(d, q) {
+    if (!q) return true;
+    var hay = [d.company, d.name, d.sysId, d.id].join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
   var BAND_LABEL = { strong: 'Strong', healthy: 'Healthy', weak: 'Weak', risk: 'At Risk', none: 'Chưa có CHS' };
 
+  // Dòng phụ nhỏ dưới tên công ty trong các bảng: ưu tiên Sys ID (dễ tra cứu
+  // chéo với hệ thống), kèm Deal ID. Sheet chưa có cột System ID thì chỉ hiện Deal ID.
+  function dealSubLine(d) {
+    var sys = String((d && d.sysId) || '').trim();
+    return (sys ? 'Sys ' + sys + ' · ' : '') + 'Deal ' + ((d && d.id) || '—');
+  }
+
   // =========================================================
-  // FILTER
+  // FILTER — Overview có 3 bộ lọc chính, bấm tới đâu dữ liệu đổi tới đó:
+  //   1) Thời gian (droplist: tháng này / quý này / năm nay / tất cả / khoảng tuỳ chọn)
+  //   2) Loại hợp đồng   3) Bộ giải pháp
+  // Hai bộ lọc sau tự sinh danh sách từ chính dữ liệu deal của user.
   // =========================================================
+  var searchQuery = '';
+  var ovPeriod = 'month';      // month | quarter | year | all | custom — mặc định tháng này
+  var ovContract = '';          // '' = tất cả
+  var ovSolution = '';          // '' = tất cả
+
   function setDefaultDateRange() {
-    var now = new Date();
-    var first = new Date(now.getFullYear(), now.getMonth(), 1);
-    $('dateFrom').value = toInputDate(first);
-    $('dateTo').value = toInputDate(now);
-    setActiveChip('month');
+    ovPeriod = 'month';
+    var sel = $('ovPeriod'); if (sel) sel.value = 'month';
+    applyPeriodToDates();
+    toggleCustomRange();
   }
 
-  function setActiveChip(preset) {
-    document.querySelectorAll('.chip-btn').forEach(function (c) {
-      c.classList.toggle('active', c.getAttribute('data-preset') === preset);
-    });
-  }
-
-  function applyPreset(preset) {
+  // Quy đổi lựa chọn thời gian → 2 ô ngày (ô ngày chỉ hiện khi chọn "Khoảng thời gian")
+  function applyPeriodToDates() {
+    if (ovPeriod === 'custom') return;   // giữ nguyên ngày user tự chọn
     var now = new Date();
     var from = null, to = now;
-    if (preset === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
-    else if (preset === 'quarter') from = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    else if (preset === 'year') from = new Date(now.getFullYear(), 0, 1);
-    else if (preset === 'all') { from = null; to = null; }
-    $('dateFrom').value = from ? toInputDate(from) : '';
-    $('dateTo').value = to ? toInputDate(to) : '';
-    setActiveChip(preset);
-    renderOverview();
+    if (ovPeriod === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (ovPeriod === 'quarter') from = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    else if (ovPeriod === 'year') from = new Date(now.getFullYear(), 0, 1);
+    else if (ovPeriod === 'all') { from = null; to = null; }
+    if ($('dateFrom')) $('dateFrom').value = from ? toInputDate(from) : '';
+    if ($('dateTo')) $('dateTo').value = to ? toInputDate(to) : '';
   }
 
-  var searchQuery = '';   // NEW — search box Overview, theo tên deal
+  function toggleCustomRange() {
+    var box = $('ovCustomRange');
+    if (box) box.style.display = (ovPeriod === 'custom') ? 'flex' : 'none';
+  }
+
+  // Đổ danh sách Loại hợp đồng / Bộ giải pháp từ dữ liệu thật, giữ nguyên lựa chọn đang chọn
+  function buildOverviewFilters() {
+    var fill = function (id, field, current, allLabel) {
+      var sel = $(id); if (!sel) return;
+      var vals = {};
+      allDeals.forEach(function (d) { var v = String(d[field] || '').trim(); if (v) vals[v] = 1; });
+      var list = Object.keys(vals).sort();
+      sel.innerHTML = '<option value="">' + allLabel + '</option>' +
+        list.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+      sel.value = (current && list.indexOf(current) !== -1) ? current : '';
+    };
+    fill('ovContract', 'contract', ovContract, 'Tất cả loại HĐ');
+    fill('ovSolution', 'solution', ovSolution, 'Tất cả bộ giải pháp');
+    ovContract = $('ovContract') ? $('ovContract').value : '';
+    ovSolution = $('ovSolution') ? $('ovSolution').value : '';
+  }
 
   function getFilteredDeals() {
-    var fromV = $('dateFrom').value;
-    var toV = $('dateTo').value;
+    var fromV = $('dateFrom') ? $('dateFrom').value : '';
+    var toV = $('dateTo') ? $('dateTo').value : '';
     var from = fromV ? new Date(fromV + 'T00:00:00') : null;
     var to = toV ? new Date(toV + 'T23:59:59') : null;
     return allDeals.filter(function (d) {
       if (!d.received) { if (from || to) return false; }
       else { if (from && d.received < from) return false; if (to && d.received > to) return false; }
-      if (searchQuery && d.name.toLowerCase().indexOf(searchQuery) === -1) return false;   // NEW
+      if (ovContract && String(d.contract || '').trim() !== ovContract) return false;
+      if (ovSolution && String(d.solution || '').trim() !== ovSolution) return false;
+      if (!dealMatchesQuery(d, searchQuery)) return false;
       return true;
     });
   }
@@ -639,6 +684,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   }
 
   function renderOverview() {
+    buildOverviewFilters();
     var deals = getFilteredDeals();
     openDealId = null;
     renderProfileStrip();
@@ -791,7 +837,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
     tbody.innerHTML = sorted.map(function (d) {
       return '<tr class="deal-row band-' + d.band + '" data-id="' + esc(d.id) + '">' +
-        '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
+        '<td><div class="deal-name">' + esc(d.company) + '</div><div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
         '<td><span class="badge role">' + esc(d.role || '—') + '</span></td>' +
         '<td>' + fmtDate(d.received) + '</td>' +
         '<td class="num">' + fmtMoney(d.arr) + '</td>' +
@@ -822,6 +868,9 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     tr.classList.add('open');
 
     var items = [
+      ['Sys ID', deal.sysId || '—'],
+      ['Deal ID', deal.id || '—'],
+      ['Tên deal', deal.name || '—'],
       ['Phân khúc', deal.segment || '—'],
       ['Bộ giải pháp', deal.solution || '—'],
       ['Tier', deal.tier != null && String(deal.tier) !== '' ? (/tier/i.test(String(deal.tier)) ? String(deal.tier) : 'Tier ' + deal.tier) : '—'],
@@ -855,7 +904,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       '</td>';
     tr.parentNode.insertBefore(detail, tr.nextSibling);
     var gotoBtn = $('detailGoto');
-    if (gotoBtn) gotoBtn.addEventListener('click', function () { goToForecastDeal(deal.id, deal.name); });
+    if (gotoBtn) gotoBtn.addEventListener('click', function () { goToForecastDeal(deal.id, deal.company); });
   }
 
   function miniBar(label, pct) {
@@ -933,19 +982,39 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   var mcSaveBtnEl = $('mcSaveBtn');
   if (mcSaveBtnEl) mcSaveBtnEl.addEventListener('click', mcSave);
 
+  // Nút ẩn/hiện các cột phụ ở Forecast — mặc định ẩn để bảng chỉ còn tên khách
+  // hàng + 5 ô cần nhập + CHS, đỡ rối mắt khi nhập liệu.
+  var fcColsBtn = $('fcColsToggle');
+  if (fcColsBtn) fcColsBtn.addEventListener('click', function () {
+    var tb = $('fcTable'); if (!tb) return;
+    var compact = tb.classList.toggle('fc-compact');
+    this.textContent = compact ? '⊞ Hiện đầy đủ' : '⊟ Ẩn bớt';
+  });
+
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { switchTab(t.getAttribute('data-tab')); });
   });
 
-  document.querySelectorAll('.chip-btn').forEach(function (c) {
-    c.addEventListener('click', function () { applyPreset(c.getAttribute('data-preset')); });
+  // Bộ lọc Overview: 3 droplist, đổi cái nào là dữ liệu cập nhật ngay cái đó
+  var ovPeriodEl = $('ovPeriod');
+  if (ovPeriodEl) ovPeriodEl.addEventListener('change', function () {
+    ovPeriod = this.value;
+    toggleCustomRange();
+    applyPeriodToDates();
+    renderOverview();
+  });
+  var ovContractEl = $('ovContract');
+  if (ovContractEl) ovContractEl.addEventListener('change', function () {
+    ovContract = this.value; renderOverview();
+  });
+  var ovSolutionEl = $('ovSolution');
+  if (ovSolutionEl) ovSolutionEl.addEventListener('change', function () {
+    ovSolution = this.value; renderOverview();
   });
 
   ['dateFrom', 'dateTo'].forEach(function (id) {
-    $(id).addEventListener('change', function () {
-      setActiveChip('');
-      renderOverview();
-    });
+    var el = $(id);
+    if (el) el.addEventListener('change', function () { renderOverview(); });
   });
 
   $('sortDate').addEventListener('click', function () {
@@ -1155,6 +1224,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     FKEY = {
       id:       findKey(keys, ['deal id']),
       name:     findKey(keys, ['tên khách hàng', 'khách hàng']),
+      companyName: findKey(keys, ['tên công ty', 'ten cong ty']),   // NEW — hiển thị chính
+      sysId:    findKey(keys, ['system id', 'sys id', 'sysid']),    // NEW
       role:     findKey(keys, ['vai trò']),                    // NEW — combo CS_PM+CS_A
       contract: findKey(keys, ['loại hợp đồng']),
       val:      findKey(keys, ['giá trị phần mềm bộ', 'giá trị phần mềm']),
@@ -1218,6 +1289,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     var out = {
       id: String(g(K.id) || ''),
       name: String(g(K.name) || '—'),
+      company: String(g(K.companyName) || g(K.name) || '—'),   // NEW — hiển thị chính
+      sysId: String(g(K.sysId) || ''),                          // NEW
       role: String(g(K.role) || ''),                 // NEW — dùng để combo CS_PM+CS_A
       contract: String(g(K.contract) || '—'),
       val: parseMoney(g(K.val)),
@@ -1360,7 +1433,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     if (fcFocusId) base = fcDeals.filter(function (d) { return d.id === fcFocusId; });
     else if (fcFilterKey === 'all') base = fcDeals;
     else base = fcDeals.filter(function (d) { return !!fcTags(d)[fcFilterKey]; });
-    if (fcSearchQuery) base = base.filter(function (d) { return d.name.toLowerCase().indexOf(fcSearchQuery) !== -1; });  // NEW
+    if (fcSearchQuery) base = base.filter(function (d) { return dealMatchesQuery(d, fcSearchQuery); });  // NEW
     return base;
   }
 
@@ -1514,7 +1587,36 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     var a4 = t4.length ? Math.round(t4.reduce(function (s, r) { return s + r.cT4; }, 0) / t4.length * 10) / 10 : null;
     fcSetKpi('fcAvgT1', a1, t1.length);
     fcSetKpi('fcAvgT4', a4, t4.length);
-    $('fcElig').textContent = fmtMoney(rows.reduce(function (s, r) { return s + r.acrT1 + r.acrT4; }, 0));
+
+    // NEW — điểm U & O trung bình (2 cấu phần tạo nên CHS_CS: 70% U + 30% O).
+    // Tier 4 không có điểm U (CHS = 100% Output) nên bị loại khỏi phần trung bình U.
+    var avgUO = function (ky) {
+      var us = [], os = [];
+      fcDeals.forEach(function (d) {
+        var v = fcEff(d);
+        var a = (ky === 'T1') ? v.aT1 : v.aT4;
+        var o = (ky === 'T1') ? v.oT1 : v.oT4;
+        var u = fcUPoint(d.tierNum, a);
+        if (u != null) us.push(u);
+        if (o != null && o !== '') os.push(+o);
+      });
+      var mean = function (arr) { return arr.length ? Math.round(arr.reduce(function (s, x) { return s + x; }, 0) / arr.length * 10) / 10 : null; };
+      return { u: mean(us), o: mean(os) };
+    };
+    var fmtUO = function (id, x) {
+      var el = $(id); if (!el) return;
+      var t = function (v) { return v == null ? '—' : String(v).replace('.', ','); };
+      el.innerHTML = '<span class="uo-pill uo-u">U ' + t(x.u) + '</span><span class="uo-pill uo-o">O ' + t(x.o) + '</span>';
+    };
+    fmtUO('fcUoT1', avgUO('T1'));
+    fmtUO('fcUoT4', avgUO('T4'));
+
+    // NEW — "Tổng ACR" = ΣACR toàn bộ deal; phần đủ điều kiện COM đưa xuống dòng phụ
+    var totalAcr = fcDeals.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
+    var eligible = rows.reduce(function (s, r) { return s + r.acrT1 + r.acrT4; }, 0);
+    $('fcElig').textContent = fmtMoney(totalAcr);
+    var eligSub = $('fcEligSub');
+    if (eligSub) eligSub.textContent = 'Đủ điều kiện COM (CHS ≥ 50): ' + fmtMoneyShort(eligible);
 
     var byM = {};
     fcDeals.forEach(function (d, i) {
@@ -1525,8 +1627,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       byM[m].dat += r.dtDat;
     });
     // Dùng chung 1 bộ chọn tháng duy nhất (fcFilterMonthKey) cho cả bộ lọc chip
-    // lẫn ô KPI "DT phải go-live" — trước đây có 2 dropdown tháng riêng biệt
-    // (#fcMonth và #fcFilterMonth) đứng cạnh nhau gây nhầm lẫn, nay gộp lại.
+    // lẫn ô KPI "DT cần go-live".
     var cur = fcFilterMonthKey || mKeyNow();
     var cd = byM[cur] || { phai: 0, sach: 0, dat: 0 };
     $('fcPress').textContent = fmtMoney(cd.sach);
@@ -1577,20 +1678,20 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
              + (placeholder ? ' placeholder="' + placeholder + '"' : '') + (type === 'number' && cls.indexOf('pct') > -1 ? ' min="0" max="100"' : '') + '>';
       };
       return '<tr id="fc-row-' + esc(d.id) + '">' +
-        '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
-        '<td><span class="badge role">' + esc(d.contract) + '</span></td>' +
-        '<td class="num">' + fmtMoneyShort(d.val) + '</td>' +
+        '<td><div class="deal-name">' + esc(d.company) + '</div><div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
+        '<td class="fc-extra"><span class="badge role">' + esc(d.contract) + '</span></td>' +
+        '<td class="num fc-extra">' + fmtMoneyShort(d.val) + '</td>' +
         '<td class="fc-y fc-yL">' + inp('goLive', 'fc-date') + '</td>' +
         '<td class="fc-y num">' + inp('aT1', 'fc-pct') + '</td>' +
         '<td class="fc-y num">' + inp('oT1', 'fc-pct') + '</td>' +
         '<td class="fc-y num">' + inp('aT4', 'fc-pct') + '</td>' +
         '<td class="fc-y num fc-yR">' + inp('oT4', 'fc-pct') + '</td>' +
-        '<td>' + (d.tierNum ? 'Tier ' + d.tierNum : '—') + '</td>' +
-        '<td data-c="status">' + fcStatusBadge(r.status) + '</td>' +
-        '<td>' + esc(d.crMonth || '—') + '</td>' +
         '<td class="num" data-c="cT1">' + fcChsBadge(r.cT1) + '</td>' +
         '<td class="num" data-c="cT4">' + fcChsBadge(r.cT4) + '</td>' +
-        '<td class="num">' + fmtMoneyShort(d.acr) + '</td>' +
+        '<td class="fc-extra">' + (d.tierNum ? 'Tier ' + d.tierNum : '—') + '</td>' +
+        '<td class="fc-extra" data-c="status">' + fcStatusBadge(r.status) + '</td>' +
+        '<td class="fc-extra">' + esc(d.crMonth || '—') + '</td>' +
+        '<td class="num fc-extra">' + fmtMoneyShort(d.acr) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -1748,7 +1849,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     var tb = $('mcTbody'), empty = $('mcEmpty');
     if (!tb || !fcDeals) return;
     var rows = mcAllMatches(mcFilterMonthKey);
-    if (fcSearchQuery) rows = rows.filter(function (r) { return r.d.name.toLowerCase().indexOf(fcSearchQuery) !== -1; });
+    if (fcSearchQuery) rows = rows.filter(function (r) { return dealMatchesQuery(r.d, fcSearchQuery); });
 
     if (empty) {
       empty.style.display = rows.length ? 'none' : 'block';
@@ -1766,9 +1867,9 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
           'data-key="' + esc(key) + '" data-field="' + field + '" value="' + esc(val == null ? '' : val) + '">';
       };
       return '<tr id="mc-row-' + esc(key) + '">' +
-        '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
+        '<td><div class="deal-name">' + esc(d.company) + '</div><div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
         '<td><span class="badge ' + (ky === 'T1' ? 'ky-t1' : 'ky-t4') + '">' + ky + ' · Năm ' + n + '</span></td>' +
-        '<td>' + esc(row.month) + '</td>' +
+        '<td class="fc-extra">' + esc(row.month) + '</td>' +
         '<td class="fc-y num">' + inp('a', eff.a) + '</td>' +
         '<td class="fc-y num">' + inp('o', eff.o) +
           (prevOut != null
@@ -1777,7 +1878,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
             : '') +
         '</td>' +
         '<td class="num" data-c="chs">' + fcChsBadge(chs) + '</td>' +
-        '<td class="num">' + fmtMoneyShort(d.acr) + '</td>' +
+        '<td class="num fc-extra">' + fmtMoneyShort(d.acr) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -2058,8 +2159,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
         var nguonBadge = isMulti
           ? '<span class="badge yr-multi">Năm ' + item.n + '</span>'
           : '<span class="badge yr-1">Năm 1</span>';
-        rows.push('<tr class="com-row' + (pass ? '' : ' com-fail') + (isMulti ? ' com-row-multi' : '') + '" data-id="' + esc(d.id) + '" data-name="' + esc(d.name) + '">' +
-          '<td><div class="deal-name">' + esc(d.name) + '</div><div class="deal-id">' + esc(d.id) + '</div></td>' +
+        rows.push('<tr class="com-row' + (pass ? '' : ' com-fail') + (isMulti ? ' com-row-multi' : '') + '" data-id="' + esc(d.id) + '" data-name="' + esc(d.company) + '">' +
+          '<td><div class="deal-name">' + esc(d.company) + '</div><div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
           '<td><span class="badge ' + (ky === 'T1' ? 'ky-t1' : 'ky-t4') + '">' + ky + ' · ' + esc(monthTag) + '</span></td>' +
           '<td>' + nguonBadge + '</td>' +
           '<td class="num">' + fmtMoney(d.acr) + '</td>' +
@@ -2147,8 +2248,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       ? '<div class="rescue-ok">Không có deal nào CHS_T1 &lt; 50 còn chờ kỳ T4 — ổn ✓</div>'
       : '<div class="rescue-head">⚠ Cần cứu trước kỳ đo T4 (CHS_T1 &lt; 50):</div>' +
         rescue.slice(0, 6).map(function (x) {
-          return '<div class="rescue-item rescue-clickable" data-id="' + esc(x.d.id) + '" data-name="' + esc(x.d.name) + '">' +
-            '<span class="rn">' + esc(x.d.name) + '</span>' +
+          return '<div class="rescue-item rescue-clickable" data-id="' + esc(x.d.id) + '" data-name="' + esc(x.d.company) + '">' +
+            '<span class="rn">' + esc(x.d.company) + '</span>' +
             '<span class="rv">' + fcChsBadge(x.chs) + ' · T4: ' + esc(x.d.monthT4) + ' · ACR ' + fmtMoneyShort(x.d.acr) + ' →</span></div>';
         }).join('') + (rescue.length > 6 ? '<div class="rescue-more">… và ' + (rescue.length - 6) + ' deal khác</div>' : '');
     $('dbRescue').querySelectorAll('.rescue-clickable').forEach(function (el) {
