@@ -102,9 +102,9 @@
      vào việc chuyển tab.
      ------------------------------------------------------- */
   var TITLES = {
-    overview:  ['Tổng quan', 'Sức khỏe portfolio'],
-    forecast:  ['Nhập & dự phóng', 'Mỗi ô nhập xong nhớ bấm Lưu'],
-    dashboard: ['Thu nhập & xếp loại', 'Performance · commission tháng']
+    overview:  ['Overview', 'Sức khỏe portfolio'],
+    forecast:  ['Forecast', 'Nhập số kỳ đo, nhập xong nhớ bấm Lưu'],
+    dashboard: ['Scorecard', 'Performance · commission tháng']
   };
   function syncTitle() {
     var active = document.querySelector('.tab.active');
@@ -113,6 +113,15 @@
     var ttl = $('pageTitle'), sub = $('pageSub');
     if (ttl) ttl.textContent = t[0];
     if (sub) sub.textContent = t[1];
+
+    // Ô tìm kiếm trên header: mỗi tab dùng một ô riêng của app.js,
+    // ở đây chỉ bật/tắt cho đúng tab, không đụng vào sự kiện.
+    var wrap = $('headSearch'), ov = $('ovSearch'), fc = $('fcSearch');
+    if (wrap && ov && fc) {
+      wrap.classList.toggle('off', key === 'dashboard');
+      ov.style.display = key === 'overview' ? '' : 'none';
+      fc.style.display = key === 'forecast' ? '' : 'none';
+    }
   }
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { setTimeout(syncTitle, 0); });
@@ -146,33 +155,86 @@
   }
 
   function syncHero() {
-    if (!comTfoot || !hero) return;
+    if (!comTfoot) return;
     var rows = comTfoot.querySelectorAll('tr');
-    if (!rows.length) { hero.style.display = 'none'; return; }
+    var breakCard = $('breakCard'), brk = $('comBreak');
+
+    if (!rows.length) {
+      if (hero) hero.style.display = 'none';
+      if (breakCard) breakCard.style.display = 'none';
+      return;
+    }
 
     var total = null, salary = null, com = null, month = '';
+    var parts = [];
+
+    // Bảng màu cho từng cấu phần, khớp thứ tự app.js render ở #comTfoot
+    var COLORS = ['var(--cyan)', 'var(--lav)', 'var(--healthy)', '#5FE0C0', 'var(--magenta)'];
 
     rows.forEach(function (tr) {
       var r = textOf(tr);
       var lb = r.label.toUpperCase();
-      if (lb.indexOf('THU NHẬP ƯỚC TÍNH') !== -1) total = r.value;
-      else if (lb.indexOf('LƯƠNG CỨNG') !== -1) salary = r.value;
-      else if (lb.indexOf('TỔNG COMMISSION') !== -1) {
+
+      if (lb.indexOf('THU NHẬP ƯỚC TÍNH') !== -1) { total = r.value; return; }
+      if (lb.indexOf('LƯƠNG CỨNG') !== -1) { salary = r.value; return; }
+      if (lb.indexOf('TỔNG COMMISSION') !== -1) {
         com = r.value;
         var m = r.label.match(/(\d{1,2}\/\d{4})/);
         if (m) month = m[1];
+        return;
       }
+      // còn lại là các cấu phần con: Com 1 tháng, Com 4 tháng, thưởng Upsale…
+      parts.push({ label: r.label, value: r.value, num: moneyToNumber(r.value) });
     });
 
-    // Chưa đăng ký lương thì app.js không render 2 dòng cuối →
-    // vẫn hiện banner nhưng lấy commission làm số chính.
-    if (!total && !com) { hero.style.display = 'none'; return; }
+    // --- banner tổng thu nhập ---
+    if (hero) {
+      if (!total && !com) {
+        hero.style.display = 'none';
+      } else {
+        hero.style.display = 'grid';
+        $('ihTotal').textContent = total || com || '—';
+        $('ihSalary').textContent = salary || 'Chưa đăng ký';
+        $('ihCom').textContent = com || '—';
+        $('ihMonth').textContent = month ? 'Tháng ' + month : '';
+      }
+    }
 
-    hero.style.display = 'grid';
-    $('ihTotal').textContent = total || com || '—';
-    $('ihSalary').textContent = salary || 'Chưa đăng ký';
-    $('ihCom').textContent = com || '—';
-    $('ihMonth').textContent = month ? 'Tháng ' + month : '';
+    // --- khung cấu phần ---
+    if (!breakCard || !brk) return;
+    if (!parts.length) { breakCard.style.display = 'none'; return; }
+
+    var max = parts.reduce(function (m, p) { return Math.max(m, p.num); }, 0) || 1;
+    var html = parts.map(function (p, i) {
+      var col = COLORS[i % COLORS.length];
+      var zero = p.num <= 0 ? ' zero' : '';
+      return '<div class="brk-row' + zero + '">' +
+        '<div><div class="brk-tag"><i style="background:' + col + '"></i>' + p.label + '</div>' +
+        '<div class="brk-bar"><i style="width:' + (p.num / max * 100) + '%; background:' + col + '"></i></div></div>' +
+        '<div class="brk-amt" style="color:' + (p.num > 0 ? col : 'var(--tx-3)') + '">' + p.value + '</div></div>';
+    }).join('');
+
+    if (com) {
+      html += '<div class="brk-row sum"><div><div class="brk-tag">' +
+        '<i style="background:var(--lav)"></i>Tổng commission' + (month ? ' tháng ' + month : '') + '</div>' +
+        '<div class="brk-note">Cộng ' + parts.length + ' cấu phần trên · chưa gồm lương cứng</div></div>' +
+        '<div class="brk-amt">' + com + '</div></div>';
+    }
+    if (total) {
+      html += '<div class="brk-row grand"><div><div class="brk-tag">' +
+        '<i style="background:var(--cyan)"></i>Thu nhập ước tính</div>' +
+        '<div class="brk-note">Lương cứng ' + (salary || '—') + ' + commission ' + (com || '—') + '</div></div>' +
+        '<div class="brk-amt">' + total + '</div></div>';
+    }
+
+    brk.innerHTML = html;
+    breakCard.style.display = 'block';
+  }
+
+  // "12.345.000 đ" -> 12345000 (chỉ dùng để vẽ độ dài thanh, không dùng để tính tiền)
+  function moneyToNumber(txt) {
+    var n = String(txt || '').replace(/[^\d]/g, '');
+    return n ? parseInt(n, 10) : 0;
   }
 
   if (comTfoot) {
