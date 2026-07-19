@@ -226,8 +226,18 @@
           <button class="icon-btn" id="themeBtn" title="Đổi sáng / tối" aria-label="Đổi giao diện">
             <svg id="themeIco" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
           </button>
+
+          <!-- Hồ sơ CS: app.js điền qua các id psAvatar / psName / psSub / psChips -->
+          <div class="profile-strip" id="profileStrip" style="display:none;">
+            <div class="ps-chips" id="psChips"></div>
+            <div class="ps-info">
+              <div class="ps-name" id="psName">—</div>
+              <div class="ps-sub" id="psSub">—</div>
+            </div>
+            <div class="ps-avatar" id="psAvatar">CS</div>
+          </div>
+
           <span id="userEmail"></span>
-          <div class="avatar-top" id="topAvatar">CS</div>
         </div>
       </header>
 
@@ -235,15 +245,6 @@
 
         <!-- TAB: TỔNG QUAN -->
         <section class="tab-panel" id="panel-overview">
-
-          <div class="profile-strip" id="profileStrip" style="display:none;">
-            <div class="ps-avatar" id="psAvatar">CS</div>
-            <div class="ps-info">
-              <div class="ps-name" id="psName">—</div>
-              <div class="ps-sub" id="psSub">—</div>
-            </div>
-            <div class="ps-chips" id="psChips"></div>
-          </div>
 
           <div class="filter-bar">
             <div class="filter-field">

@@ -121,21 +121,9 @@
   syncTitle();
 
   /* -------------------------------------------------------
-     5. AVATAR GÓC PHẢI — lấy chữ cái đầu từ ô tên mà app.js
-        đã điền sẵn (#psName), theo dõi bằng MutationObserver.
+     5. (đã bỏ) Avatar riêng ở góc phải — nay dùng luôn khối
+        hồ sơ #profileStrip mà app.js tự điền, đặt trên header.
      ------------------------------------------------------- */
-  function initials(name) {
-    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-    if (!parts.length || parts[0] === '—') return 'CS';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  var psName = $('psName'), topAvatar = $('topAvatar');
-  if (psName && topAvatar) {
-    var syncAvatar = function () { topAvatar.textContent = initials(psName.textContent); };
-    new MutationObserver(syncAvatar).observe(psName, { childList: true, characterData: true, subtree: true });
-    syncAvatar();
-  }
 
   /* -------------------------------------------------------
      6. BANNER TỔNG THU NHẬP (tab Scorecard)
