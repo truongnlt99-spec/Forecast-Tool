@@ -2344,6 +2344,54 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   // =========================================================
   var CHANGELOG = [
     {
+      date: '20/07/2026',
+      title: 'Ra mắt CS Console — từ số liệu rời rạc đến bức tranh sức khỏe portfolio',
+      body:
+        '<p class="cl-lead">Trước nhu cầu tự theo dõi 10-15 deal mỗi tháng theo đúng khung CHS_CS và chính sách CS Members Version, CS Console ra đời như một lớp tính toán cá nhân nằm giữa sheet Database và policy — nhập vài con số mỗi kỳ đo, mọi thứ còn lại (Tier, trạng thái, CHS, ACR, commission) tự chạy theo đúng logic chính sách.</p>' +
+
+        '<h5>I. Vấn đề</h5>' +
+        '<p>Trước đây, để biết một deal đang khỏe hay yếu, phải tự tra chính sách, tự tính CHS_CS bằng tay, tự nhớ ngày go-live để không trễ kỳ đo.</p>' +
+        '<p>Dẫn đến việc số liệu nằm rải rác — vừa phải nhớ deal nào sắp đến hạn, vừa phải tự cộng trừ theo công thức 70% U + 30% O, vừa phải tự đối chiếu xem mình đang ở band nào để ước tính commission.</p>' +
+        '<p>Ví dụ như với một deal Tier 2 sắp tới kỳ đo T1: CS phải tự lật chính sách xem TTGL bao nhiêu ngày, tự tính %Active quy đổi ra điểm U, tự cộng điểm O, tự so với mốc 50 để biết deal có đủ điều kiện vào nền commission hay không.</p>' +
+
+        '<h5>II. Giải pháp từ CS Console</h5>' +
+        '<p>CS Console cung cấp một luồng nhập liệu tối giản: mỗi kỳ đo, CS chỉ nhập %Active user và %Output hoàn thành cho từng deal. Toàn bộ phần còn lại được tự động hóa theo đúng logic policy: quy đổi Tier, tính CHS_CS T1/T4, xác định trạng thái deal, tính ACR, đối chiếu Performance với KPI/GOAL/OUT của đúng level, và tính commission theo mục 6.3 + 6.5 — kể cả trường hợp kiêm nhiệm CS_PM+CS_A hay deal đã bước sang năm hợp đồng thứ 2 trở đi.</p>' +
+        '<p>Dữ liệu nguồn đồng bộ 2 chiều với sheet Database — CS xem, sửa, lưu ngay trên Console, không cần mở sheet.</p>' +
+
+        '<h5>III. Điểm nổi bật</h5>' +
+        '<ul>' +
+          '<li>Tự tính CHS_CS theo đúng công thức 70% U + 30% O (riêng Tier 4 là 100% O), không cần tra công thức thủ công</li>' +
+          '<li>Cảnh báo ưu tiên theo mức độ khẩn: deal thiếu số kỳ đã qua, deal chưa go-live theo mốc, deal quá 200% TTGL</li>' +
+          '<li>Tự cộng thêm phần trăm commission CS_A khi CS kiêm nhiệm CS_PM+CS_A trên cùng deal, đúng chính sách kiêm nhiệm mục 4 — không phải tự tính tay</li>' +
+          '<li>Theo dõi cả ACR nhiều năm (Năm 2-5), không chỉ deal mới go-live năm đầu</li>' +
+          '<li>Tìm nhanh deal theo tên ở cả Overview và Forecast</li>' +
+          '<li>Liên kết chéo: bấm vào deal ở bất kỳ tab nào cũng nhảy thẳng sang đúng chỗ để sửa số liệu</li>' +
+          '<li>Radar cảnh báo kỳ đo 3 tháng tới, giúp chủ động xử lý trước khi deal rơi vào nhóm rủi ro</li>' +
+        '</ul>' +
+
+        '<h5>IV. Giới thiệu các khái niệm</h5>' +
+        '<p><b>Các khái niệm cơ bản</b></p>' +
+        '<ul>' +
+          '<li><b>CHS_CS:</b> điểm sức khỏe deal = 70% điểm U (Active user quy đổi) + 30% điểm O (Output hoàn thành). Riêng Tier 4 tính 100% theo O.</li>' +
+          '<li><b>T1 / T4:</b> hai kỳ đo sức khỏe của một deal — T1 gần go-live, T4 sau 4 tháng. CHS_CS ưu tiên lấy T4, chưa có thì lấy T1.</li>' +
+          '<li><b>Tier:</b> phân hạng deal theo đặc điểm hợp đồng, quyết định TTGL và cách quy đổi điểm U/O.</li>' +
+          '<li><b>TTGL:</b> số ngày quy định để deal phải go-live theo Tier. Vượt mốc 200% TTGL thì vào diện cần giải cứu ngay.</li>' +
+          '<li><b>ACR:</b> doanh thu hợp đồng quy theo năm, dùng làm nền tính commission khi CHS_CS_T ≥ 50.</li>' +
+        '</ul>' +
+        '<p><b>Các khái niệm mở rộng</b></p>' +
+        '<ul>' +
+          '<li><b>Nền COM đủ điều kiện:</b> tổng ACR của các deal có CHS_CS_T ≥ 50.</li>' +
+          '<li><b>Combo CS_PM+CS_A:</b> khi một CS kiêm cả vai trò CS_PM và CS_A trên cùng deal (không có CS_A riêng), %Com T1 được cộng thêm phần của CS_A theo band Under/KPI/GOAL/OUT tương ứng.</li>' +
+          '<li><b>ACR nhiều năm (Năm 2-5):</b> deal đã qua năm hợp đồng đầu vẫn tiếp tục được đo %Active/%Output và tính CHS_CS mỗi năm, dùng chung 1 bảng %Com theo Level vì chính sách không quy định bảng riêng cho năm 2 trở đi.</li>' +
+          '<li><b>Rescue list:</b> danh sách deal có nguy cơ trượt kỳ đo T4 hoặc đã quá hạn go-live, cần xử lý ưu tiên.</li>' +
+        '</ul>' +
+
+        '<h5>V. Hướng dẫn sử dụng</h5>' +
+        '<p><b>1. Overview</b> — Xem tổng ARR, CHS_CS trung bình, cơ cấu deal theo bộ giải pháp/loại hợp đồng. Lọc theo khoảng thời gian nhận deal hoặc gõ tìm theo tên deal. Bấm vào một dòng deal để bung chi tiết, có nút nhảy sang Forecast.</p>' +
+        '<p><b>2. Forecast</b> — Sub-tab <i>Năm 1</i>: nhập Go-live thực tế, %Active T1/T4, %Output T1/T4 cho deal đang trong năm hợp đồng đầu; các cột Tier/Trạng thái/CHS/ACR tự tính lại tại chỗ, chỉ lưu chính thức khi bấm Lưu. Sub-tab <i>Năm 2++</i>: nhập %Active/%Output cho deal đã sang năm hợp đồng thứ 2 trở đi, lọc theo tháng nhận Com, có gợi ý %Output năm liền trước. Lưu xong tự nhảy sang Scorecard đúng tháng vừa nhập.</p>' +
+        '<p><b>3. Scorecard</b> — Chọn tháng đánh giá để xem Performance so với KPI/GOAL/OUT của đúng level, bảng Commission (gộp cả deal năm 1 và ACR nhiều năm khớp tháng đang xem), sức khỏe portfolio và rescue list trước kỳ đo T4. Bấm vào deal trong bảng hoặc rescue list để nhảy sang Forecast sửa số liệu.</p>',
+    },
+    {
       date: '18/07/2026',
       title: 'Big Update: ACR nhiều năm · combo CS_PM+CS_A · search box',
       items: [
@@ -2401,10 +2449,13 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
   function renderChangelog() {
     $('changelogBody').innerHTML = CHANGELOG.map(function (rel) {
+      var content = rel.body
+        ? '<div class="cl-body">' + rel.body + '</div>'
+        : '<ul class="cl-list">' + rel.items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</ul>';
       return '<div class="cl-entry">' +
         '<div class="cl-date">' + esc(rel.date) + '</div>' +
         '<div class="cl-title">' + esc(rel.title) + '</div>' +
-        '<ul class="cl-list">' + rel.items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</ul>' +
+        content +
         '</div>';
     }).join('');
   }
@@ -2415,25 +2466,23 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   function renderPlaybook() {
     $('playbookBody').innerHTML =
       '<div class="pb-section">' +
-        '<h4>Overview</h4>' +
-        '<p>Nhìn lại toàn bộ deal đang phụ trách: lọc theo khoảng ngày nhận deal, xem tổng revenue, CHS_CS trung bình (lấy từ CHS_CS T4, chưa có thì T1), và cơ cấu theo bộ giải pháp / loại hợp đồng.</p>' +
-        '<p><b>Mẹo:</b> bấm vào 1 dòng deal để mở chi tiết ngay dưới dòng đó, có nút <i>"→ Mở trong Forecast để sửa số liệu"</i> để nhảy thẳng sang tab Forecast.</p>' +
+        '<h4 class="pb-tab-h">Overview</h4>' +
+        '<p>Chỗ nhìn tổng deal đang cầm. Lọc theo ngày nhận deal, xem tổng ARR, CHS_CS trung bình (ưu tiên lấy T4, chưa có thì lấy T1), với cơ cấu theo bộ giải pháp / loại hợp đồng.</p>' +
+        '<p><b>Mẹo:</b> bấm vào 1 dòng deal để bung chi tiết ngay dưới, có nút nhảy thẳng sang Forecast để sửa số.</p>' +
       '</div>' +
       '<div class="pb-section">' +
-        '<h4>Forecast</h4>' +
-        '<p>Nơi duy nhất được nhập tay 5 ô vàng: <b>Go-live thực tế, %Active T1/T4, %Output T1/T4</b>. Các cột còn lại (Tier, Trạng thái, CHS T1/T4, ACR) tự tính lại ngay khi bạn gõ, và chỉ đẩy về sheet khi bấm <b>"Lưu &amp; đẩy về sheet"</b>.</p>' +
-        '<p><b>Tháng làm việc</b> ở thanh lọc dùng chung cho cả 7 chip lọc lẫn ô KPI "DT phải go-live". Ưu tiên xử lý theo thứ tự: <i>Thiếu số kỳ đã qua</i> (khẩn nhất — CHS trống là mất luôn nền commission của deal đó) → <i>Kỳ đo T1/T4 tháng này</i> → các chip "Chưa GL".</p>' +
-        '<p><b>ACR nhiều năm:</b> bấm nút "ACR nhiều năm (Năm 2-5)" ở đầu tab để chuyển sang nhập %Active/%Output cho các deal đã sang năm hợp đồng thứ 2 trở đi — chọn đúng tháng, tool tự tìm deal có kỳ nhận Com khớp tháng đó, có gợi ý %Output năm liền trước để đỡ phải tra lại. Bấm Lưu xong tool tự chuyển sang Scorecard đúng tháng vừa nhập.</p>' +
-        '<p><b>Tìm nhanh:</b> gõ vào ô tìm kiếm ở đầu tab (Overview và Forecast đều có) để lọc theo tên deal.</p>' +
+        '<h4 class="pb-tab-h">Forecast</h4>' +
+        '<p>Đây là chỗ duy nhất được gõ tay — 5 ô vàng: <b>Go-live thực tế, %Active T1/T4, %Output T1/T4</b>. Gõ xong tự tính lại Tier, Trạng thái, CHS T1/T4, ACR ngay tại chỗ, nhưng chỉ lưu vào database khi bấm <b>"Lưu"</b>.</p>' +
+        '<p>Có bộ lọc: theo tháng làm việc, các deal đo T1/T4 rơi vào đúng tháng đã chọn, Thiếu số kỳ đã qua, Chưa Go-live, Quá 200% TTGL, ...</p>' +
       '</div>' +
       '<div class="pb-section">' +
-        '<h4>Scorecard</h4>' +
-        '<p>Chọn "Tháng đánh giá" để xem Performance (CR/SRR_1/SRR_4 so với mốc KPI/GOAL/OUT của đúng level bạn đã đăng ký — theo chính sách mục 6.2), bảng Commission chi tiết từng deal (mục 6.3 + thưởng Upsale/Cross mục 6.5), sức khỏe portfolio và deal "cần cứu" trước kỳ đo T4.</p>' +
-        '<p><b>Mẹo:</b> bấm vào deal trong danh sách "cần cứu" hoặc bảng Commission để nhảy thẳng sang Forecast sửa số liệu của đúng deal đó.</p>' +
+        '<h4 class="pb-tab-h">Scorecard</h4>' +
+        '<p>Chọn tháng đánh giá để xem Performance (CR/SRR_1/SRR_4) so với mốc KPI/GOAL/OUT đúng level đã đăng ký (theo mục 6.2), bảng Commission chi tiết từng deal (mục 6.3 + thưởng Upsale/Cross mục 6.5), sức khỏe portfolio và danh sách cần giải cứu trước kỳ đo T4.</p>' +
+        '<p><b>Mẹo:</b> bấm vào deal trong danh sách cần giải cứu hoặc bảng Commission để nhảy sang Forecast sửa luôn.</p>' +
       '</div>' +
       '<div class="pb-section pb-note">' +
         '<h4>Lưu ý chung</h4>' +
-        '<p>Thông tin Level/Salary chỉ khai báo 1 lần lúc đăng ký — muốn sửa thì báo Operation cập nhật trực tiếp ở sheet "Danh sách CS".</p>' +
+        '<p>Level/Salary được khai báo lúc đăng ký, sau đó có thể tự chỉnh sửa lại ở trang cá nhân.</p>' +
       '</div>';
   }
 

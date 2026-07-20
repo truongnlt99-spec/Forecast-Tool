@@ -1,5 +1,5 @@
 /* =========================================================
-   CS PERSONAL TOOL — UI/UX v2
+   CS CONSOLE — UI/UX v2
    Bento glass · pastel neon · sidebar rail
    Lưu ý: app.js KHÔNG đổi. Mọi class cũ app.js sinh ra đều
    được style lại ở dưới, không xoá class nào.
@@ -774,6 +774,7 @@ tr.detail-row td{background:var(--glass-2); padding:0}
 .modal-body b{color:var(--tx)}
 .pb-section{margin-bottom:20px}
 .pb-section h4{font:600 13.5px "Space Grotesk"; color:var(--tx); margin:0 0 8px}
+.pb-section h4.pb-tab-h{font:700 16px "Space Grotesk"; margin:0 0 8px}
 .pb-note{font-size:12px; color:var(--tx-3); line-height:1.6}
 .pm-panel{width:min(460px,100%)}
 .pm-avatar-row{display:flex; align-items:center; gap:18px; margin-bottom:20px}
@@ -790,6 +791,12 @@ tr.detail-row td{background:var(--glass-2); padding:0}
 .cl-entry{padding-left:14px; border-left:2px solid var(--stroke)}
 .cl-date{font:600 11px Inter; letter-spacing:.08em; color:var(--cyan)}
 .cl-title{font:600 13px Inter; color:var(--tx); margin:3px 0 6px}
+.cl-body{display:flex; flex-direction:column; gap:9px}
+.cl-body p{margin:0}
+.cl-body ul{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px}
+.cl-body h5{font:600 12.5px "Space Grotesk"; color:var(--tx); margin:12px 0 0; letter-spacing:.01em}
+.cl-body h5:first-of-type{margin-top:2px}
+.cl-lead{font-style:italic; color:var(--tx-2); border-left:2px solid var(--stroke); padding-left:12px; margin:0 0 4px}
 
 .toast{
   position:fixed; right:24px; bottom:24px; z-index:90; display:flex; align-items:center; gap:10px;
