@@ -1008,9 +1008,10 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   }
   [
     ['fcT1OkDetail', 't1ge50', false],
+    ['fcT1LowDetail', 't1lt50', false],
+    ['fcT4OkDetail', 't4ge50', false],
     ['fcT4RiskDetail', 't4lt50', false],
     ['fcCrNumDetail', null, true],
-    ['fcCrDenDetail', null, true],
   ].forEach(function (row) {
     var el = $(row[0]);
     if (el) el.addEventListener('click', function () { fcGoDetail(row[1], row[2]); });
@@ -1563,8 +1564,11 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     box.innerHTML = FC_CHIPS.map(function (c) {
       var n = counts[c.key] || 0;
       var warn = (c.key === 'missPast' || c.key === 'overdue' || c.key === 'over200') && n > 0;
+      // NEW — số lượng hiện dạng notification badge (chấm tròn đỏ ở góc nút)
+      // thay vì số in đậm nằm cạnh label; ẩn badge khi = 0 (đúng kiểu notification).
+      var badge = n > 0 ? '<span class="fc-chip-badge">' + (n > 99 ? '99+' : n) + '</span>' : '';
       return '<button class="chip-btn fc-chip' + (fcFilterKey === c.key ? ' active' : '') + (warn ? ' warn' : '') +
-        '" data-fck="' + c.key + '">' + esc(c.label) + ' <b>' + n + '</b></button>';
+        '" data-fck="' + c.key + '">' + esc(c.label) + badge + '</button>';
     }).join('');
     box.querySelectorAll('.fc-chip').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1655,45 +1659,46 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       });
   }
 
-  // NEW — Big Update Forecast (07/2026): 4 card KPI mới, tất cả cùng nhìn theo
-  // 1 tháng làm việc đang chọn (fcFilterMonthKey) ở bộ lọc bên dưới:
-  //   1) Số deal CHS_T1 ≥ 50 (kỳ đo T1 rơi vào tháng này) + tổng ACR
-  //   2) Số deal CHS_T4 < 50 (kỳ đo T4 rơi vào tháng này) + tổng ACR — nhóm rủi ro mất COM
-  //   3) Tử số tính CR = Σ DT go-live đạt (nhóm theo tháng ghi nhận CR)
-  //   4) Mẫu số tính CR = Σ DT phải go-live (cùng nhóm tháng ghi nhận CR)
-  // Công thức CR giống hệt dashPerf() ở Scorecard — chỉ khác đang nhóm theo
-  // tháng làm việc của Forecast thay vì tháng đánh giá của Scorecard.
+  // NEW — Big Update Forecast (07/2026, bản 10 card): tất cả cùng nhìn theo
+  // 1 tháng làm việc đang chọn (fcFilterMonthKey) ở bộ lọc bên dưới. Bố cục
+  // lưới 5 cột × 2 hàng — mỗi cột hàng dưới là ACR tương ứng đúng nhóm ở
+  // hàng trên (trừ cột 5 là Tử số/Mẫu số của cùng phép tính CR):
+  //   Hàng 1: Số deal CHS_T1≥50 | CHS_T1<50 | CHS_T4≥50 | CHS_T4<50 | Tử số CR
+  //   Hàng 2: ACR CHS_T1≥50     | CHS_T1<50 | CHS_T4≥50 | CHS_T4<50 | Mẫu số CR
+  function fcChsGroup(cur, monthKey, chsKey, cmp) {
+    var list = [];
+    fcDeals.forEach(function (d) {
+      if (d[monthKey] !== cur) return;
+      var r = fcCompute(d);
+      var v = (chsKey === 'cT1') ? r.cT1 : r.cT4;
+      if (v == null) return;
+      if (cmp === 'ge50' ? v >= 50 : v < 50) list.push(d);
+    });
+    return { list: list, acr: list.reduce(function (s, d) { return s + (d.acr || 0); }, 0) };
+  }
+
   function fcRenderKpis() {
     if (!fcDeals) return;
-    var rows = fcDeals.map(fcCompute);
     var cur = fcFilterMonthKey || mKeyNow();
 
-    // 1) CHS_T1 ≥ 50
-    var t1okList = [];
-    fcDeals.forEach(function (d, i) {
-      var r = rows[i];
-      if (d.monthT1 === cur && r.cT1 != null && r.cT1 >= 50) t1okList.push(d);
+    var groups = [
+      { key: 't1ge50', mk: 'monthT1', ck: 'cT1', cmp: 'ge50', countId: 'fcT1OkCount',   subId: 'fcT1OkSub',   acrId: 'fcT1OkAcr',   label: 'kỳ đo T1' },
+      { key: 't1lt50', mk: 'monthT1', ck: 'cT1', cmp: 'lt50', countId: 'fcT1LowCount',  subId: 'fcT1LowSub',  acrId: 'fcT1LowAcr',  label: 'kỳ đo T1' },
+      { key: 't4ge50', mk: 'monthT4', ck: 'cT4', cmp: 'ge50', countId: 'fcT4OkCount',   subId: 'fcT4OkSub',   acrId: 'fcT4OkAcr',   label: 'kỳ đo T4' },
+      { key: 't4lt50', mk: 'monthT4', ck: 'cT4', cmp: 'lt50', countId: 'fcT4RiskCount', subId: 'fcT4RiskSub', acrId: 'fcT4RiskAcr', label: 'kỳ đo T4' },
+    ];
+    groups.forEach(function (g) {
+      var res = fcChsGroup(cur, g.mk, g.ck, g.cmp);
+      var countEl = $(g.countId), subEl = $(g.subId), acrEl = $(g.acrId);
+      if (countEl) countEl.textContent = res.list.length + ' deal';
+      if (subEl) subEl.textContent = g.label + ' tháng ' + cur;
+      if (acrEl) acrEl.textContent = fmtMoneyShort(res.acr);
     });
-    var t1okAcr = t1okList.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
-    var t1okEl = $('fcT1OkCount'), t1okSub = $('fcT1OkSub');
-    if (t1okEl) t1okEl.textContent = t1okList.length + ' deal';
-    if (t1okSub) t1okSub.textContent = 'ACR ' + fmtMoneyShort(t1okAcr) + ' · kỳ đo T1 tháng ' + cur;
 
-    // 2) CHS_T4 < 50 — nhóm rủi ro mất điều kiện COM khi chốt kỳ T4
-    var t4riskList = [];
-    fcDeals.forEach(function (d, i) {
-      var r = rows[i];
-      if (d.monthT4 === cur && r.cT4 != null && r.cT4 < 50) t4riskList.push(d);
-    });
-    var t4riskAcr = t4riskList.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
-    var t4riskEl = $('fcT4RiskCount'), t4riskSub = $('fcT4RiskSub');
-    if (t4riskEl) t4riskEl.textContent = t4riskList.length + ' deal';
-    if (t4riskSub) t4riskSub.textContent = 'ACR ' + fmtMoneyShort(t4riskAcr) + ' · kỳ đo T4 tháng ' + cur;
-
-    // 3+4) Tử số / mẫu số CR, nhóm theo tháng ghi nhận CR (d.crMonth)
+    // Tử số / mẫu số CR, nhóm theo tháng ghi nhận CR (d.crMonth)
     var byM = {};
-    fcDeals.forEach(function (d, i) {
-      var r = rows[i], m = d.crMonth || '—';
+    fcDeals.forEach(function (d) {
+      var r = fcCompute(d), m = d.crMonth || '—';
       if (!byM[m]) byM[m] = { phai: 0, dat: 0 };
       byM[m].phai += d.dtPhai || 0;
       byM[m].dat += r.dtDat;
@@ -1707,7 +1712,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
     var denEl = $('fcCrDen'), denSub = $('fcCrDenSub');
     if (denEl) denEl.textContent = fmtMoney(cd.phai);
-    if (denSub) denSub.textContent = 'DT phải go-live · CR = ' + (crPct == null ? '—' : String(crPct).replace('.', ',') + '%');
+    if (denSub) denSub.textContent = 'CR = ' + (crPct == null ? '—' : String(crPct).replace('.', ',') + '%');
   }
 
   function fcRenderTable() {
@@ -2424,10 +2429,11 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       date: '23/07/2026',
       title: 'Big Update Forecast — đổi bộ KPI + bộ lọc theo đúng CHS_T1/T4, gọn lại bảng deal',
       items: [
-        'Bỏ 4 card KPI cũ (CHS_CS T1/T4 trung bình, Tổng ACR, DT cần go-live), thay bằng 4 card mới, đều tính theo đúng tháng đang chọn ở bộ lọc: Số deal CHS_T1 ≥ 50 kèm ACR, Số deal CHS_T4 < 50 kèm ACR, Tử số tính CR, Mẫu số tính CR.',
-        'Mỗi card có nút "Chi tiết" — bấm vào tự bật đúng bộ lọc tương ứng và cuộn xuống bảng deal.',
+        'Bỏ 4 card KPI cũ (CHS_CS T1/T4 trung bình, Tổng ACR, DT cần go-live), thay bằng 10 card mới xếp lưới 5 cột × 2 hàng, đều tính theo đúng tháng đang chọn ở bộ lọc: hàng trên là số deal (CHS_T1 ≥ 50 / < 50, CHS_T4 ≥ 50 / < 50, Tử số CR), hàng dưới đúng cùng cột là ACR tương ứng (riêng cột CR là Mẫu số).',
+        '4 card số deal (hàng trên, trừ Tử số CR) có nút "Chi tiết" — bấm vào tự bật đúng bộ lọc tương ứng và cuộn xuống bảng deal.',
         'Tách chip lọc "Kỳ đo T1/T4 tháng này" thành 2 chip riêng: Kỳ đo T1 tháng này / Kỳ đo T4 tháng này.',
         'Thêm bộ lọc CHS cụ thể (droplist): CHS_T1 ≥ 50 / < 50, CHS_T4 ≥ 50 / < 50 — dùng kết hợp được với các chip lọc khác.',
+        'Số lượng deal trên các chip lọc (Tất cả, Kỳ đo T1/T4 tháng này, ...) đổi sang dạng chấm thông báo đỏ ở góc nút, tự ẩn khi bằng 0.',
         'Bảng deal: thêm label Bộ giải pháp cạnh tên khách hàng, bỏ cột Loại HĐ ở chế độ Hiện đầy đủ, thêm cột Go-live dự kiến.',
         'Nút "Ẩn bớt / Hiện đầy đủ" chuyển lên đầu bảng deal cho dễ thấy.',
       ],
@@ -2509,7 +2515,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
         '<h4 class="pb-tab-h">Forecast</h4>' +
         '<p>Đây là chỗ duy nhất được gõ tay — 5 ô vàng: <b>Go-live thực tế, %Active T1/T4, %Output T1/T4</b>. Gõ xong tự tính lại Tier, Trạng thái, CHS T1/T4, ACR ngay tại chỗ, nhưng chỉ lưu vào database khi bấm <b>"Lưu"</b>.</p>' +
         '<p>Có bộ lọc: theo tháng làm việc, kỳ đo T1 hoặc T4 rơi vào đúng tháng đã chọn (2 chip riêng), Thiếu số kỳ đã qua, Chưa Go-live, Quá 200% TTGL, và droplist lọc CHS cụ thể (CHS_T1/T4 ≥ 50 hoặc &lt; 50) — dùng kết hợp được với nhau.</p>' +
-        '<p>4 card KPI phía trên (số deal CHS_T1 ≥ 50, CHS_T4 &lt; 50 kèm ACR, tử số/mẫu số tính CR) đều tính theo đúng tháng đang chọn; bấm nút "Chi tiết" trên từng card để tự lọc đúng nhóm deal đó ở bảng bên dưới.</p>' +
+        '<p>10 card KPI phía trên xếp lưới 5 cột × 2 hàng, đều tính theo đúng tháng đang chọn: hàng trên là số deal (CHS_T1 ≥ 50/&lt; 50, CHS_T4 ≥ 50/&lt; 50, Tử số CR), hàng dưới cùng cột là ACR tương ứng (riêng cột 5 là Mẫu số CR). Bấm nút "Chi tiết" trên card hàng trên để tự lọc đúng nhóm deal đó ở bảng bên dưới.</p>' +
       '</div>' +
       '<div class="pb-section">' +
         '<h4 class="pb-tab-h">Scorecard</h4>' +

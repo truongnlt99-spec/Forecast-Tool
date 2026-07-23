@@ -598,8 +598,9 @@
     if (!fcChips || !navMissing) return;
     var warn = fcChips.querySelector('.fc-chip.warn');
     if (!warn) { navMissing.textContent = ''; return; }
-    var m = warn.textContent.match(/(\d+)/);
-    navMissing.textContent = (m && m[1] !== '0') ? m[1] : '';
+    var badge = warn.querySelector('.fc-chip-badge');
+    var n = badge ? badge.textContent.trim() : '';
+    navMissing.textContent = (n && n !== '0') ? n : '';
   }
   if (fcChips) {
     new MutationObserver(syncMissing).observe(fcChips, { childList: true, subtree: true });

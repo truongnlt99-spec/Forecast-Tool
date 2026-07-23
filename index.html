@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -416,19 +416,36 @@
         <section class="tab-panel" id="panel-forecast" style="display:none;">
         <div class="tab-panel-body">
 
-          <div class="fc-kpis">
+          <div class="fc-kpis fc-kpis-10">
+            <!-- Hàng 1: số lượng deal theo từng nhóm CHS + Tử số CR -->
             <div class="kpi-card kpi-press">
               <div class="kpi-label fc-press-head">
                 <span>CHS_T1 ≥ 50</span>
-                <button type="button" class="kpi-detail-btn" id="fcT1OkDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+                <button type="button" class="kpi-detail-btn" id="fcT1OkDetail" title="Xem danh sách deal">⤵</button>
               </div>
               <div class="kpi-value" id="fcT1OkCount" style="font-size:22px;">—</div>
               <div class="kpi-sub" id="fcT1OkSub"></div>
             </div>
             <div class="kpi-card kpi-press">
               <div class="kpi-label fc-press-head">
+                <span>CHS_T1 &lt; 50</span>
+                <button type="button" class="kpi-detail-btn" id="fcT1LowDetail" title="Xem danh sách deal">⤵</button>
+              </div>
+              <div class="kpi-value" id="fcT1LowCount" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcT1LowSub"></div>
+            </div>
+            <div class="kpi-card kpi-press">
+              <div class="kpi-label fc-press-head">
+                <span>CHS_T4 ≥ 50</span>
+                <button type="button" class="kpi-detail-btn" id="fcT4OkDetail" title="Xem danh sách deal">⤵</button>
+              </div>
+              <div class="kpi-value" id="fcT4OkCount" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcT4OkSub"></div>
+            </div>
+            <div class="kpi-card kpi-press">
+              <div class="kpi-label fc-press-head">
                 <span>CHS_T4 &lt; 50</span>
-                <button type="button" class="kpi-detail-btn" id="fcT4RiskDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+                <button type="button" class="kpi-detail-btn" id="fcT4RiskDetail" title="Xem danh sách deal">⤵</button>
               </div>
               <div class="kpi-value" id="fcT4RiskCount" style="font-size:22px;">—</div>
               <div class="kpi-sub" id="fcT4RiskSub"></div>
@@ -436,19 +453,35 @@
             <div class="kpi-card kpi-press">
               <div class="kpi-label fc-press-head">
                 <span>Tử số tính CR</span>
-                <button type="button" class="kpi-detail-btn" id="fcCrNumDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+                <button type="button" class="kpi-detail-btn" id="fcCrNumDetail" title="Xem danh sách deal">⤵</button>
               </div>
               <div class="kpi-value" id="fcCrNum" style="font-size:22px;">—</div>
               <div class="kpi-sub" id="fcCrNumSub"></div>
             </div>
-            <div class="kpi-card kpi-press">
-              <div class="kpi-label fc-press-head">
-                <span>Mẫu số tính CR</span>
-                <button type="button" class="kpi-detail-btn" id="fcCrDenDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
-              </div>
+
+            <!-- Hàng 2: ACR tương ứng đúng cột phía trên + Mẫu số CR -->
+            <div class="kpi-card">
+              <div class="kpi-label">ACR · CHS_T1 ≥ 50</div>
+              <div class="kpi-value" id="fcT1OkAcr" style="font-size:22px;">—</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">ACR · CHS_T1 &lt; 50</div>
+              <div class="kpi-value" id="fcT1LowAcr" style="font-size:22px;">—</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">ACR · CHS_T4 ≥ 50</div>
+              <div class="kpi-value" id="fcT4OkAcr" style="font-size:22px;">—</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">ACR · CHS_T4 &lt; 50</div>
+              <div class="kpi-value" id="fcT4RiskAcr" style="font-size:22px;">—</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Mẫu số tính CR</div>
               <div class="kpi-value" id="fcCrDen" style="font-size:22px;">—</div>
               <div class="kpi-sub" id="fcCrDenSub"></div>
             </div>
+          </div>
           </div>
 
           <!-- Toggle Năm 1 / Năm 2++ đã chuyển lên header — xem #hteForecast -->
@@ -752,9 +785,9 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=7"></script>
+  <script src="ui.js?v=8"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 
 </body>
 </html>
