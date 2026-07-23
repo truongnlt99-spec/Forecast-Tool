@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -288,6 +288,7 @@
 
         <!-- TAB: TỔNG QUAN -->
         <section class="tab-panel" id="panel-overview">
+        <div class="tab-panel-body">
 
           <div class="filter-bar">
             <div class="filter-field">
@@ -383,10 +384,12 @@
             <div class="empty" id="tableEmpty" style="display:none;">Không có deal nào nhận trong khoảng thời gian này.<br>Thử nới rộng bộ lọc hoặc bấm "Tất cả".</div>
           </div>
 
+        </div>
         </section>
 
         <!-- TAB: FORECAST -->
         <section class="tab-panel" id="panel-forecast" style="display:none;">
+        <div class="tab-panel-body">
 
           <div class="fc-kpis">
             <div class="kpi-card">
@@ -419,6 +422,7 @@
           <!-- Toggle Năm 1 / Năm 2++ đã chuyển lên header — xem #hteForecast -->
 
           <div id="fcYear1Block">
+          <div class="fc-block-body">
             <div class="fc-filter fc-filter-slim" id="fcFilter">
               <div class="fc-filter-row">
                 <label class="fc-filter-lbl" for="fcFilterMonth">Tháng</label>
@@ -454,9 +458,11 @@
               <div class="empty" id="fcEmpty" style="display:none;">Đang tải dữ liệu từ sheet Database…</div>
             </div>
           </div>
+          </div>
 
           <!-- ACR NHIỀU NĂM (Năm 2-5) -->
           <div id="fcMultiBlock" style="display:none;">
+          <div class="fc-block-body">
             <div class="fc-filter fc-filter-slim">
               <div class="fc-filter-row">
                 <label class="fc-filter-lbl" for="mcFilterMonth">Tháng nhận Com</label>
@@ -485,11 +491,14 @@
               <div class="empty" id="mcEmpty" style="display:none;"></div>
             </div>
           </div>
+          </div>
 
+        </div>
         </section>
 
         <!-- TAB: DASHBOARD / SCORECARD -->
         <section class="tab-panel" id="panel-dashboard" style="display:none;">
+        <div class="tab-panel-body">
 
           <!-- Hero thu nhập: ui.js tự lấy số từ #comTfoot, app.js không đổi -->
           <div class="income-hero" id="incomeHero" style="display:none;">
@@ -519,6 +528,7 @@
           <div class="dash-empty" id="dashEmpty" style="display:none;"></div>
 
           <div id="dashBody" style="display:none;">
+          <div class="dash-body-inner">
 
             <!-- PERFORMANCE + CẤU PHẦN THU NHẬP: hiện cùng hàng, mỗi cái nửa trang -->
             <div class="chart-row">
@@ -573,6 +583,8 @@
 
             <p class="dash-note" id="dashNote"></p>
           </div>
+          </div>
+        </div>
         </section>
 
       </main>
@@ -695,9 +707,9 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=4"></script>
+  <script src="ui.js?v=5"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 
 </body>
 </html>

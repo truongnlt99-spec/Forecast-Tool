@@ -339,9 +339,15 @@ body.app-mode .app-wrapper{display:grid}
 .menu-btn{display:none}
 
 .app-content{padding:24px 30px 70px; display:flex; flex-direction:column; gap:28px; min-width:0}
-/* gap giữa các khối lớn trong 1 tab (KPI row, chart row, bảng…) — đây là
-   khoảng cách chính giữa các section, tăng nhẹ so với trước cho thoáng hơn */
-.tab-panel{display:flex; flex-direction:column; gap:44px; animation:rise .4s var(--ease) both}
+/* QUAN TRỌNG: app.js (switchTab) tự set inline panels[k].style.display =
+   'block'/'none' để ẩn/hiện tab — inline style này LUÔN thắng bất kỳ
+   display/gap nào khai ở .tab-panel, dù CSS ghi gap bao nhiêu cũng vô
+   nghĩa (đây là nguyên nhân thật của lỗi các khối "dính liền nhau" dù đã
+   sửa gap nhiều lần). Vì vậy .tab-panel CHỈ còn lo hiệu ứng xuất hiện,
+   không đặt display/gap ở đây nữa — gap thật nằm ở .tab-panel-body, một
+   lớp con mà app.js không bao giờ đụng vào. */
+.tab-panel{animation:rise .4s var(--ease) both}
+.tab-panel-body{display:flex; flex-direction:column; gap:44px}
 @keyframes rise{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
 
 /* =========================================================
@@ -679,13 +685,13 @@ tr.detail-row td{background:var(--glass-2); padding:0}
 .dash-hero-left{display:flex; align-items:center; gap:14px; min-width:0}
 .dash-hero-right{margin-left:auto; display:flex; flex-direction:column; gap:5px}
 .dash-hero-right label{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--tx-3)}
-#dashBody{display:flex; flex-direction:column; gap:44px}
-/* #fcYear1Block/#fcMultiBlock (bảng ở tab Forecast) chưa từng có rule gap
-   riêng — khác với #dashBody ở trên — nên khối lọc (.fc-filter) và bảng
-   (.table-card) bên trong nằm sát nhau, không có khoảng cách. Đây là
-   nguyên nhân gốc của lỗi 2 khối "dính liền" ở tab Forecast dù .tab-panel
-   đã có gap: 2 khối này không phải con trực tiếp của .tab-panel. */
-#fcYear1Block,#fcMultiBlock{display:flex; flex-direction:column; gap:22px}
+/* .fc-block-body / .dash-body-inner: cùng lý do như .tab-panel-body ở trên
+   — app.js set inline display:block/none thẳng lên #fcYear1Block/
+   #fcMultiBlock (fcSetView) và lên #dashBody (renderDashboard), nên gap
+   thật phải đặt ở 1 lớp con app.js không đụng tới, không đặt ngay trên
+   các id đó nữa. */
+.fc-block-body{display:flex; flex-direction:column; gap:22px}
+.dash-body-inner{display:flex; flex-direction:column; gap:44px}
 .dash-card{margin-top:0}
 .dash-note{font-size:11.5px; color:var(--tx-3); line-height:1.65; margin:4px 2px 0}
 
