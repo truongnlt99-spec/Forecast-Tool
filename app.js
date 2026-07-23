@@ -991,6 +991,31 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     this.textContent = compact ? '⊞ Hiện đầy đủ' : '⊟ Ẩn bớt';
   });
 
+  // NEW — Big Update Forecast (07/2026): droplist lọc CHS cụ thể + 4 nút "xem
+  // chi tiết" trên card KPI, tự bật đúng bộ lọc rồi cuộn xuống bảng deal.
+  var fcChsFilterEl = $('fcChsFilter');
+  if (fcChsFilterEl) fcChsFilterEl.addEventListener('change', function () {
+    fcChsFilterKey = this.value;
+    fcRenderChips(); fcRenderTable();
+  });
+  function fcGoDetail(chsKey, crMonthMode) {
+    fcFocusId = null; fcFocusName = '';
+    if (crMonthMode) { fcChsFilterKey = ''; fcFilterKey = 'crMonth'; }
+    else { fcChsFilterKey = chsKey; fcFilterKey = 'all'; }
+    fcSyncChsFilterUi();
+    fcRenderChips(); fcRenderTable();
+    var card = $('fcTableCard'); if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  [
+    ['fcT1OkDetail', 't1ge50', false],
+    ['fcT4RiskDetail', 't4lt50', false],
+    ['fcCrNumDetail', null, true],
+    ['fcCrDenDetail', null, true],
+  ].forEach(function (row) {
+    var el = $(row[0]);
+    if (el) el.addEventListener('click', function () { fcGoDetail(row[1], row[2]); });
+  });
+
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { switchTab(t.getAttribute('data-tab')); });
   });
@@ -1228,6 +1253,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       sysId:    findKey(keys, ['system id', 'sys id', 'sysid']),    // NEW
       role:     findKey(keys, ['vai trò']),                    // NEW — combo CS_PM+CS_A
       contract: findKey(keys, ['loại hợp đồng']),
+      solution: findKey(keys, ['bộ giải pháp']),               // NEW — Big Update Forecast: label bộ giải pháp cạnh Khách hàng
       val:      findKey(keys, ['giá trị phần mềm bộ', 'giá trị phần mềm']),
       segment:  findKey(keys, ['phân khúc']),
       tier:     findKey(keys, ['tier']),
@@ -1293,6 +1319,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       sysId: String(g(K.sysId) || ''),                          // NEW
       role: String(g(K.role) || ''),                 // NEW — dùng để combo CS_PM+CS_A
       contract: String(g(K.contract) || '—'),
+      solution: String(g(K.solution) || 'Khác'),     // NEW — Big Update Forecast: label bộ giải pháp
       val: parseMoney(g(K.val)),
       segment: String(g(K.segment) || ''),
       tierNum: tm ? +tm[0] : null,
@@ -1383,10 +1410,14 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   // =========================================================
   // FORECAST — BỘ LỌC NHẬP LIỆU THEO THÁNG (yêu cầu Big Update III)
   // =========================================================
-  var fcFilterKey = 'needNow';      // chip đang chọn
+  var fcFilterKey = 'needNowT1';    // chip đang chọn
   var fcFilterMonthKey = mKeyNow(); // tháng làm việc
   var fcFocusId = null;             // set khi nhảy từ Overview/Scorecard sang xem đúng 1 deal
   var fcFocusName = '';
+  // NEW — Big Update Forecast (07/2026): bộ lọc CHS cụ thể, độc lập với chip
+  // "việc cần làm" phía trên — AND với nhau trong fcFilteredDeals().
+  // '' = tất cả · 't1ge50'/'t1lt50'/'t4ge50'/'t4lt50'
+  var fcChsFilterKey = '';
 
   // Phân loại 1 deal theo các "việc cần làm" trong tháng làm việc
   function fcTags(d) {
@@ -1396,8 +1427,13 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     var t = d.tierNum;
     var missT = function (a, o) { return (t === 4) ? (o == null) : (a == null || o == null); };
 
-    // 1) Kỳ đo T1/T4 rơi vào tháng làm việc → cần nhập 4 chỉ số %
-    if (d.monthT1 === cur || d.monthT4 === cur) tags.needNow = true;
+    // 1) Kỳ đo T1/T4 rơi vào tháng làm việc → cần nhập chỉ số % (tách riêng T1/T4 — Big Update)
+    if (d.monthT1 === cur) tags.needNowT1 = true;
+    if (d.monthT4 === cur) tags.needNowT4 = true;
+
+    // 1b) NEW — deal thuộc kỳ ghi nhận CR của tháng làm việc (dùng nội bộ cho nút
+    // "xem chi tiết" ở 2 card tử số/mẫu số CR — không hiện thành chip riêng).
+    if (d.crMonth === cur) tags.crMonth = true;
 
     // 2) Kỳ đo ĐÃ QUA nhưng còn thiếu số → nhập bù gấp (CHS trống = mất SRR & commission)
     if ((d.monthT1 && mCmp(d.monthT1, cur) < 0 && missT(v.aT1, v.oT1)) ||
@@ -1418,28 +1454,57 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   }
 
   var FC_CHIPS = [
-    { key: 'all',      label: 'Tất cả' },
-    { key: 'needNow',  label: 'Kỳ đo T1/T4 tháng này' },
-    { key: 'missPast', label: 'Thiếu số kỳ đã qua' },
-    { key: 'notYet',   label: 'Chưa GL · chưa tới hạn' },
-    { key: 'dueSoon',  label: 'Chưa GL · sắp trễ hạn' },
-    { key: 'overdue',  label: 'Chưa GL · đã trễ hạn' },
-    { key: 'over200',  label: 'Quá 200% TTGL' },
+    { key: 'all',       label: 'Tất cả' },
+    { key: 'needNowT1', label: 'Kỳ đo T1 tháng này' },
+    { key: 'needNowT4', label: 'Kỳ đo T4 tháng này' },
+    { key: 'missPast',  label: 'Thiếu số kỳ đã qua' },
+    { key: 'notYet',    label: 'Chưa GL · chưa tới hạn' },
+    { key: 'dueSoon',   label: 'Chưa GL · sắp trễ hạn' },
+    { key: 'overdue',   label: 'Chưa GL · đã trễ hạn' },
+    { key: 'over200',   label: 'Quá 200% TTGL' },
   ];
+
+  // NEW — Big Update Forecast: bộ lọc CHS cụ thể (droplist #fcChsFilter — 5
+  // option đã khai báo trực tiếp trong index.html, xem #fcChsFilter)
+  var CHS_FILTER_LABEL = {
+    t1ge50: 'CHS_T1 ≥ 50', t1lt50: 'CHS_T1 < 50',
+    t4ge50: 'CHS_T4 ≥ 50', t4lt50: 'CHS_T4 < 50',
+  };
+  function fcChsFilterMatch(d) {
+    if (!fcChsFilterKey) return true;
+    var cur = fcFilterMonthKey;
+    var r = fcCompute(d);
+    // NEW — luôn khớp cùng tháng đo T1/T4 với tháng đang chọn ở trên, để con số
+    // ra ở bảng luôn khớp đúng với con số đã đếm trên 2 card CHS_T1/CHS_T4.
+    if (fcChsFilterKey === 't1ge50') return d.monthT1 === cur && r.cT1 != null && r.cT1 >= 50;
+    if (fcChsFilterKey === 't1lt50') return d.monthT1 === cur && r.cT1 != null && r.cT1 < 50;
+    if (fcChsFilterKey === 't4ge50') return d.monthT4 === cur && r.cT4 != null && r.cT4 >= 50;
+    if (fcChsFilterKey === 't4lt50') return d.monthT4 === cur && r.cT4 != null && r.cT4 < 50;
+    return true;
+  }
 
   function fcFilteredDeals() {
     if (!fcDeals) return [];
     var base;
-    if (fcFocusId) base = fcDeals.filter(function (d) { return d.id === fcFocusId; });
-    else if (fcFilterKey === 'all') base = fcDeals;
-    else base = fcDeals.filter(function (d) { return !!fcTags(d)[fcFilterKey]; });
+    if (fcFocusId) {
+      base = fcDeals.filter(function (d) { return d.id === fcFocusId; });
+    } else {
+      base = (fcFilterKey === 'all') ? fcDeals : fcDeals.filter(function (d) { return !!fcTags(d)[fcFilterKey]; });
+      base = base.filter(fcChsFilterMatch); // NEW — AND với bộ lọc CHS cụ thể
+    }
     if (fcSearchQuery) base = base.filter(function (d) { return dealMatchesQuery(d, fcSearchQuery); });  // NEW
     return base;
+  }
+
+  // NEW — set droplist CHS trên UI khớp với fcChsFilterKey hiện tại
+  function fcSyncChsFilterUi() {
+    var sel = $('fcChsFilter'); if (sel) sel.value = fcChsFilterKey;
   }
 
   function fcClearFocus() {
     fcFocusId = null; fcFocusName = '';
     fcFilterKey = 'all'; // nút ghi "xem tất cả" thì phải thật sự về view Tất cả, không giữ lại chip trước đó
+    fcChsFilterKey = ''; fcSyncChsFilterUi(); // NEW — "xem tất cả" thì bỏ luôn cả lọc CHS
     fcRenderChips(); fcRenderTable();
   }
 
@@ -1475,7 +1540,22 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       return;
     }
 
-    var counts = { all: fcDeals.length, needNow: 0, missPast: 0, notYet: 0, dueSoon: 0, overdue: 0, over200: 0 };
+    // NEW — Big Update Forecast: fcFilterKey='crMonth' là filter ẩn (không có chip
+    // riêng), chỉ được bật từ nút "xem chi tiết" ở 2 card tử số/mẫu số CR.
+    if (fcFilterKey === 'crMonth') {
+      box.innerHTML =
+        '<span class="fc-focus-banner">📊 Đang xem: deal thuộc kỳ ghi nhận CR tháng ' + esc(fcFilterMonthKey) + '</span>' +
+        '<button class="chip-btn fc-focus-clear" id="fcClearCrBtn">✕ Bỏ lọc, xem tất cả</button>';
+      var clearCrBtn = $('fcClearCrBtn');
+      if (clearCrBtn) clearCrBtn.addEventListener('click', function () {
+        fcFilterKey = 'all'; fcRenderChips(); fcRenderTable();
+      });
+      var noteEl2 = $('fcFilterNote');
+      if (noteEl2) noteEl2.textContent = '· đang lọc theo kỳ ghi nhận CR';
+      return;
+    }
+
+    var counts = { all: fcDeals.length, needNowT1: 0, needNowT4: 0, missPast: 0, notYet: 0, dueSoon: 0, overdue: 0, over200: 0, crMonth: 0 };
     fcDeals.forEach(function (d) {
       var t = fcTags(d);
       Object.keys(t).forEach(function (k) { counts[k]++; });
@@ -1494,8 +1574,13 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     });
     var note = $('fcFilterNote');
     if (note) {
-      var cur = FC_CHIPS.find(function (c) { return c.key === fcFilterKey; });
-      note.textContent = fcFilterKey === 'all' ? '' : '· lọc: ' + cur.label + ' — tháng ' + fcFilterMonthKey;
+      var parts = [];
+      if (fcFilterKey !== 'all') {
+        var curChip = FC_CHIPS.find(function (c) { return c.key === fcFilterKey; });
+        if (curChip) parts.push(curChip.label);
+      }
+      if (fcChsFilterKey && CHS_FILTER_LABEL[fcChsFilterKey]) parts.push(CHS_FILTER_LABEL[fcChsFilterKey]);
+      note.textContent = parts.length ? '· lọc: ' + parts.join(' + ') + ' — tháng ' + fcFilterMonthKey : '';
     }
   }
 
@@ -1511,14 +1596,6 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   }
   // (fcMonthCmp cũ đã gộp vào mCmp ở trên — dùng chung 1 hàm so sánh tháng MM/YYYY)
   function fcFlag(t) { var el = $('fcFlag'); if (el) el.textContent = t; }
-
-  function fcSetKpi(id, val, cnt) {
-    var el = $(id), sub = $(id + 'Sub');
-    if (val == null) { el.textContent = '—'; el.style.color = ''; if (sub) sub.textContent = 'chưa có deal nào đo'; return; }
-    el.textContent = String(val).replace('.', ',');
-    el.style.color = 'var(--' + healthBand(val) + ')';
-    if (sub) sub.textContent = cnt + ' deal đã đo · ' + BAND_LABEL[healthBand(val)];
-  }
 
   function renderForecast() {
     if (!fcLoaded) { fcLoad(); return; }
@@ -1578,61 +1655,59 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       });
   }
 
+  // NEW — Big Update Forecast (07/2026): 4 card KPI mới, tất cả cùng nhìn theo
+  // 1 tháng làm việc đang chọn (fcFilterMonthKey) ở bộ lọc bên dưới:
+  //   1) Số deal CHS_T1 ≥ 50 (kỳ đo T1 rơi vào tháng này) + tổng ACR
+  //   2) Số deal CHS_T4 < 50 (kỳ đo T4 rơi vào tháng này) + tổng ACR — nhóm rủi ro mất COM
+  //   3) Tử số tính CR = Σ DT go-live đạt (nhóm theo tháng ghi nhận CR)
+  //   4) Mẫu số tính CR = Σ DT phải go-live (cùng nhóm tháng ghi nhận CR)
+  // Công thức CR giống hệt dashPerf() ở Scorecard — chỉ khác đang nhóm theo
+  // tháng làm việc của Forecast thay vì tháng đánh giá của Scorecard.
   function fcRenderKpis() {
     if (!fcDeals) return;
     var rows = fcDeals.map(fcCompute);
-    var t1 = rows.filter(function (r) { return r.cT1 != null; });
-    var t4 = rows.filter(function (r) { return r.cT4 != null; });
-    var a1 = t1.length ? Math.round(t1.reduce(function (s, r) { return s + r.cT1; }, 0) / t1.length * 10) / 10 : null;
-    var a4 = t4.length ? Math.round(t4.reduce(function (s, r) { return s + r.cT4; }, 0) / t4.length * 10) / 10 : null;
-    fcSetKpi('fcAvgT1', a1, t1.length);
-    fcSetKpi('fcAvgT4', a4, t4.length);
+    var cur = fcFilterMonthKey || mKeyNow();
 
-    // NEW — điểm U & O trung bình (2 cấu phần tạo nên CHS_CS: 70% U + 30% O).
-    // Tier 4 không có điểm U (CHS = 100% Output) nên bị loại khỏi phần trung bình U.
-    var avgUO = function (ky) {
-      var us = [], os = [];
-      fcDeals.forEach(function (d) {
-        var v = fcEff(d);
-        var a = (ky === 'T1') ? v.aT1 : v.aT4;
-        var o = (ky === 'T1') ? v.oT1 : v.oT4;
-        var u = fcUPoint(d.tierNum, a);
-        if (u != null) us.push(u);
-        if (o != null && o !== '') os.push(+o);
-      });
-      var mean = function (arr) { return arr.length ? Math.round(arr.reduce(function (s, x) { return s + x; }, 0) / arr.length * 10) / 10 : null; };
-      return { u: mean(us), o: mean(os) };
-    };
-    var fmtUO = function (id, x) {
-      var el = $(id); if (!el) return;
-      var t = function (v) { return v == null ? '—' : String(v).replace('.', ','); };
-      el.innerHTML = '<span class="uo-pill uo-u">U ' + t(x.u) + '</span><span class="uo-pill uo-o">O ' + t(x.o) + '</span>';
-    };
-    fmtUO('fcUoT1', avgUO('T1'));
-    fmtUO('fcUoT4', avgUO('T4'));
+    // 1) CHS_T1 ≥ 50
+    var t1okList = [];
+    fcDeals.forEach(function (d, i) {
+      var r = rows[i];
+      if (d.monthT1 === cur && r.cT1 != null && r.cT1 >= 50) t1okList.push(d);
+    });
+    var t1okAcr = t1okList.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
+    var t1okEl = $('fcT1OkCount'), t1okSub = $('fcT1OkSub');
+    if (t1okEl) t1okEl.textContent = t1okList.length + ' deal';
+    if (t1okSub) t1okSub.textContent = 'ACR ' + fmtMoneyShort(t1okAcr) + ' · kỳ đo T1 tháng ' + cur;
 
-    // NEW — "Tổng ACR" = ΣACR toàn bộ deal; phần đủ điều kiện COM đưa xuống dòng phụ
-    var totalAcr = fcDeals.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
-    var eligible = rows.reduce(function (s, r) { return s + r.acrT1 + r.acrT4; }, 0);
-    $('fcElig').textContent = fmtMoney(totalAcr);
-    var eligSub = $('fcEligSub');
-    if (eligSub) eligSub.textContent = 'Đủ điều kiện COM (CHS ≥ 50): ' + fmtMoneyShort(eligible);
+    // 2) CHS_T4 < 50 — nhóm rủi ro mất điều kiện COM khi chốt kỳ T4
+    var t4riskList = [];
+    fcDeals.forEach(function (d, i) {
+      var r = rows[i];
+      if (d.monthT4 === cur && r.cT4 != null && r.cT4 < 50) t4riskList.push(d);
+    });
+    var t4riskAcr = t4riskList.reduce(function (s, d) { return s + (d.acr || 0); }, 0);
+    var t4riskEl = $('fcT4RiskCount'), t4riskSub = $('fcT4RiskSub');
+    if (t4riskEl) t4riskEl.textContent = t4riskList.length + ' deal';
+    if (t4riskSub) t4riskSub.textContent = 'ACR ' + fmtMoneyShort(t4riskAcr) + ' · kỳ đo T4 tháng ' + cur;
 
+    // 3+4) Tử số / mẫu số CR, nhóm theo tháng ghi nhận CR (d.crMonth)
     var byM = {};
     fcDeals.forEach(function (d, i) {
       var r = rows[i], m = d.crMonth || '—';
-      if (!byM[m]) byM[m] = { phai: 0, sach: 0, dat: 0 };
+      if (!byM[m]) byM[m] = { phai: 0, dat: 0 };
       byM[m].phai += d.dtPhai || 0;
-      if (!r.late) byM[m].sach += d.dtPhai || 0;
       byM[m].dat += r.dtDat;
     });
-    // Dùng chung 1 bộ chọn tháng duy nhất (fcFilterMonthKey) cho cả bộ lọc chip
-    // lẫn ô KPI "DT cần go-live".
-    var cur = fcFilterMonthKey || mKeyNow();
-    var cd = byM[cur] || { phai: 0, sach: 0, dat: 0 };
-    $('fcPress').textContent = fmtMoney(cd.sach);
-    $('fcPressSub').textContent = 'gồm cả muộn: ' + fmtMoneyShort(cd.phai) + ' · đã go-live: ' + fmtMoneyShort(cd.dat);
-    var lbl = $('fcPressMonthLabel'); if (lbl) lbl.textContent = 'tháng ' + cur;
+    var cd = byM[cur] || { phai: 0, dat: 0 };
+    var crPct = (cd.phai > 0) ? Math.round(cd.dat / cd.phai * 1000) / 10 : null;
+
+    var numEl = $('fcCrNum'), numSub = $('fcCrNumSub');
+    if (numEl) numEl.textContent = fmtMoney(cd.dat);
+    if (numSub) numSub.textContent = 'DT go-live đạt · tháng CR ' + cur;
+
+    var denEl = $('fcCrDen'), denSub = $('fcCrDenSub');
+    if (denEl) denEl.textContent = fmtMoney(cd.phai);
+    if (denSub) denSub.textContent = 'DT phải go-live · CR = ' + (crPct == null ? '—' : String(crPct).replace('.', ',') + '%');
   }
 
   function fcRenderTable() {
@@ -1678,9 +1753,11 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
              + (placeholder ? ' placeholder="' + placeholder + '"' : '') + (type === 'number' && cls.indexOf('pct') > -1 ? ' min="0" max="100"' : '') + '>';
       };
       return '<tr id="fc-row-' + esc(d.id) + '">' +
-        '<td><div class="deal-name">' + esc(d.company) + '</div><div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
-        '<td class="fc-extra"><span class="badge role">' + esc(d.contract) + '</span></td>' +
+        '<td><div class="deal-name-row"><span class="deal-name">' + esc(d.company) + '</span>' +
+          '<span class="badge solution">' + esc(d.solution) + '</span></div>' +
+          '<div class="deal-id">' + esc(dealSubLine(d)) + '</div></td>' +
         '<td class="num fc-extra">' + fmtMoneyShort(d.val) + '</td>' +
+        '<td class="fc-extra">' + esc(fmtDate(d.glPlan)) + '</td>' +
         '<td class="fc-y fc-yL">' + inp('goLive', 'fc-date') + '</td>' +
         '<td class="fc-y num">' + inp('aT1', 'fc-pct') + '</td>' +
         '<td class="fc-y num">' + inp('oT1', 'fc-pct') + '</td>' +
@@ -2344,6 +2421,18 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   // =========================================================
   var CHANGELOG = [
     {
+      date: '23/07/2026',
+      title: 'Big Update Forecast — đổi bộ KPI + bộ lọc theo đúng CHS_T1/T4, gọn lại bảng deal',
+      items: [
+        'Bỏ 4 card KPI cũ (CHS_CS T1/T4 trung bình, Tổng ACR, DT cần go-live), thay bằng 4 card mới, đều tính theo đúng tháng đang chọn ở bộ lọc: Số deal CHS_T1 ≥ 50 kèm ACR, Số deal CHS_T4 < 50 kèm ACR, Tử số tính CR, Mẫu số tính CR.',
+        'Mỗi card có nút "Chi tiết" — bấm vào tự bật đúng bộ lọc tương ứng và cuộn xuống bảng deal.',
+        'Tách chip lọc "Kỳ đo T1/T4 tháng này" thành 2 chip riêng: Kỳ đo T1 tháng này / Kỳ đo T4 tháng này.',
+        'Thêm bộ lọc CHS cụ thể (droplist): CHS_T1 ≥ 50 / < 50, CHS_T4 ≥ 50 / < 50 — dùng kết hợp được với các chip lọc khác.',
+        'Bảng deal: thêm label Bộ giải pháp cạnh tên khách hàng, bỏ cột Loại HĐ ở chế độ Hiện đầy đủ, thêm cột Go-live dự kiến.',
+        'Nút "Ẩn bớt / Hiện đầy đủ" chuyển lên đầu bảng deal cho dễ thấy.',
+      ],
+    },
+    {
       date: '20/07/2026',
       title: 'Ra mắt CS Console — từ số liệu rời rạc đến bức tranh sức khỏe portfolio',
       body:
@@ -2419,7 +2508,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       '<div class="pb-section">' +
         '<h4 class="pb-tab-h">Forecast</h4>' +
         '<p>Đây là chỗ duy nhất được gõ tay — 5 ô vàng: <b>Go-live thực tế, %Active T1/T4, %Output T1/T4</b>. Gõ xong tự tính lại Tier, Trạng thái, CHS T1/T4, ACR ngay tại chỗ, nhưng chỉ lưu vào database khi bấm <b>"Lưu"</b>.</p>' +
-        '<p>Có bộ lọc: theo tháng làm việc, các deal đo T1/T4 rơi vào đúng tháng đã chọn, Thiếu số kỳ đã qua, Chưa Go-live, Quá 200% TTGL, ...</p>' +
+        '<p>Có bộ lọc: theo tháng làm việc, kỳ đo T1 hoặc T4 rơi vào đúng tháng đã chọn (2 chip riêng), Thiếu số kỳ đã qua, Chưa Go-live, Quá 200% TTGL, và droplist lọc CHS cụ thể (CHS_T1/T4 ≥ 50 hoặc &lt; 50) — dùng kết hợp được với nhau.</p>' +
+        '<p>4 card KPI phía trên (số deal CHS_T1 ≥ 50, CHS_T4 &lt; 50 kèm ACR, tử số/mẫu số tính CR) đều tính theo đúng tháng đang chọn; bấm nút "Chi tiết" trên từng card để tự lọc đúng nhóm deal đó ở bảng bên dưới.</p>' +
       '</div>' +
       '<div class="pb-section">' +
         '<h4 class="pb-tab-h">Scorecard</h4>' +

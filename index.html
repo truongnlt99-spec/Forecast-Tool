@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -417,30 +417,37 @@
         <div class="tab-panel-body">
 
           <div class="fc-kpis">
-            <div class="kpi-card">
-              <div class="kpi-label">CHS_CS T1 · trung bình</div>
-              <div class="kpi-value" id="fcAvgT1">—</div>
-              <div class="kpi-uo" id="fcUoT1"></div>
-              <div class="kpi-sub" id="fcAvgT1Sub"></div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">CHS_CS T4 · trung bình</div>
-              <div class="kpi-value" id="fcAvgT4">—</div>
-              <div class="kpi-uo" id="fcUoT4"></div>
-              <div class="kpi-sub" id="fcAvgT4Sub"></div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Tổng ACR</div>
-              <div class="kpi-value" id="fcElig" style="font-size:22px;">—</div>
-              <div class="kpi-sub" id="fcEligSub"></div>
+            <div class="kpi-card kpi-press">
+              <div class="kpi-label fc-press-head">
+                <span>CHS_T1 ≥ 50</span>
+                <button type="button" class="kpi-detail-btn" id="fcT1OkDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+              </div>
+              <div class="kpi-value" id="fcT1OkCount" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcT1OkSub"></div>
             </div>
             <div class="kpi-card kpi-press">
               <div class="kpi-label fc-press-head">
-                <span>DT cần go-live</span>
-                <span class="fc-press-month" id="fcPressMonthLabel"></span>
+                <span>CHS_T4 &lt; 50</span>
+                <button type="button" class="kpi-detail-btn" id="fcT4RiskDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
               </div>
-              <div class="kpi-value" id="fcPress" style="font-size:22px;">—</div>
-              <div class="kpi-sub" id="fcPressSub"></div>
+              <div class="kpi-value" id="fcT4RiskCount" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcT4RiskSub"></div>
+            </div>
+            <div class="kpi-card kpi-press">
+              <div class="kpi-label fc-press-head">
+                <span>Tử số tính CR</span>
+                <button type="button" class="kpi-detail-btn" id="fcCrNumDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+              </div>
+              <div class="kpi-value" id="fcCrNum" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcCrNumSub"></div>
+            </div>
+            <div class="kpi-card kpi-press">
+              <div class="kpi-label fc-press-head">
+                <span>Mẫu số tính CR</span>
+                <button type="button" class="kpi-detail-btn" id="fcCrDenDetail" title="Xem danh sách deal">⤵ Chi tiết</button>
+              </div>
+              <div class="kpi-value" id="fcCrDen" style="font-size:22px;">—</div>
+              <div class="kpi-sub" id="fcCrDenSub"></div>
             </div>
           </div>
 
@@ -452,8 +459,15 @@
               <div class="fc-filter-row">
                 <label class="fc-filter-lbl" for="fcFilterMonth">Tháng</label>
                 <select id="fcFilterMonth" class="fc-month"></select>
+                <label class="fc-filter-lbl" for="fcChsFilter">CHS</label>
+                <select id="fcChsFilter" class="fc-month">
+                  <option value="">CHS: Tất cả</option>
+                  <option value="t1ge50">CHS_T1 ≥ 50</option>
+                  <option value="t1lt50">CHS_T1 &lt; 50</option>
+                  <option value="t4ge50">CHS_T4 ≥ 50</option>
+                  <option value="t4lt50">CHS_T4 &lt; 50</option>
+                </select>
                 <span class="fc-filter-note" id="fcFilterNote"></span>
-                <button type="button" class="fc-cols-toggle" id="fcColsToggle">⊞ Hiện đầy đủ</button>
                 <div class="fc-bar-actions">
                   <span class="fc-flag" id="fcFlag"></span>
                   <button class="btn fc-save" id="fcSaveBtn">Lưu</button>
@@ -462,13 +476,18 @@
               <div class="fc-chips" id="fcChips"></div>
             </div>
 
-            <div class="table-card">
+            <div class="table-card" id="fcTableCard">
+              <div class="table-head">
+                <div class="chart-title">Danh sách deal</div>
+                <button type="button" class="fc-cols-toggle" id="fcColsToggle" style="margin-left:auto;">⊞ Hiện đầy đủ</button>
+              </div>
               <div class="table-scroll">
                 <table class="deal-table fc-table fc-compact" id="fcTable">
                   <thead>
                     <tr>
                       <th>Khách hàng</th>
-                      <th class="fc-extra">Loại HĐ</th><th class="num fc-extra">Giá trị</th>
+                      <th class="num fc-extra">Giá trị</th>
+                      <th class="fc-extra">Go-live dự kiến</th>
                       <th class="fc-yh fc-yL">Go-live thực tế</th>
                       <th class="fc-yh num">%Act T1</th><th class="fc-yh num">%Out T1</th>
                       <th class="fc-yh num">%Act T4</th><th class="fc-yh num fc-yR">%Out T4</th>
@@ -735,7 +754,7 @@
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
   <script src="ui.js?v=7"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 
 </body>
 </html>
