@@ -77,7 +77,10 @@ body.app-mode .grid-layer,body.app-mode .math-layer{display:none}
   animation:float 14s ease-in-out infinite;
   will-change:transform; backface-visibility:hidden; contain:layout paint;
 }
-.m.op{font:700 120px "Space Grotesk"; color:var(--lav)}
+/* Ký hiệu toán khổng lồ (110-150px) chỉ hiện trên desktop (xem @media dưới) —
+   để TĨNH (không animate) vì đây là layer nặng nhất, animate chúng là nguồn
+   giật chính trên desktop trong khi mobile không hiện nên luôn mượt. */
+.m.op{font:700 120px "Space Grotesk"; color:var(--lav); animation:none; will-change:auto}
 .m.formula{font:600 18px "Space Mono",monospace; color:var(--cyan)}
 .m.small{font:500 13px "Space Mono",monospace}
 .m.min{display:none}
@@ -131,6 +134,15 @@ body.reg-mode .reg-screen{display:grid}
 }
 .gbtn:hover{opacity:.94} .gbtn:active{transform:scale(.97)}
 .gbtn:disabled{opacity:.6; cursor:default}
+/* .gbtn-wrap: nút Google THẬT (renderButton, xem #gRealButton) phủ vô hình
+   đúng khít lên .gbtn — để cú bấm đầu tiên của user luôn là bấm thật vào nút
+   Google, không phụ thuộc One Tap/FedCM (hay bị chặn, phải bấm lại lần 2). */
+.gbtn-wrap{position:relative}
+.gbtn-overlay{
+  position:absolute; inset:0; z-index:2; overflow:hidden; cursor:pointer;
+  opacity:.01; /* gần như 0 nhưng vẫn chắc chắn nhận click ở mọi trình duyệt/tiện ích */
+}
+.gbtn-overlay > div{position:absolute; top:0; left:0}
 .glogo{width:18px; height:18px}
 .spinner{width:18px; height:18px; animation:spin .8s linear infinite; will-change:transform}
 .spinner circle{fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-dasharray:40; stroke-dashoffset:26}

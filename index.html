@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -27,7 +27,7 @@
     <div class="login-card boot-card">
       <div class="brand">
         <div class="brand-mark"><span>CS</span></div>
-        <div class="name">Customer Success<small>Performance Console</small></div>
+        <div class="name">CS Console<small>Nhìn thấu deal. Làm chủ con số.</small></div>
       </div>
       <div class="boot-spinner"></div>
       <p class="boot-text">Đang đăng nhập…</p>
@@ -45,35 +45,46 @@
 
       <div class="brand">
         <div class="brand-mark"><span>CS</span></div>
-        <div class="name">Customer Success<small>Performance Console</small></div>
+        <div class="name">CS Console<small>Nhìn thấu deal. Làm chủ con số.</small></div>
       </div>
 
       <h1 class="login-h1">Welcome back,<br><span class="accent">Customer Success</span></h1>
-      <p class="login-sub">Đăng nhập để mở bảng theo dõi deal, sức khỏe khách hàng &amp; dự phóng commission của bạn.</p>
+      <p class="login-sub">Đăng nhập để mở bảng theo dõi deal, sức khỏe khách hàng &amp; tính toán chỉ số của bạn.</p>
 
-      <button class="gbtn" id="gbtn" onclick="signInWithGoogle()">
-        <svg class="glogo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" id="glogo">
-          <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
-          <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
-          <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
-          <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
-        </svg>
-        <svg class="spinner hidden" id="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle></svg>
-        <span id="gtext">Continue with Google</span>
-      </button>
+      <!-- gbtn-wrap: nút custom + nút Google THẬT phủ vô hình đúng khít lên trên.
+           Lý do: One Tap/FedCM (silent prompt) hay bị trình duyệt/tiện ích chặn,
+           lúc đó phải rơi về nút Google renderButton() thật thì mới bấm được —
+           nghĩa là user bấm 1 lần thấy lỗi, rồi phải bấm THÊM 1 lần nữa vào nút
+           dự phòng. Với nút thật phủ sẵn từ đầu, cú bấm ĐẦU TIÊN của user luôn
+           là bấm thẳng vào nút Google chính chủ (real user-gesture, trình duyệt
+           luôn cho phép) — khỏi phụ thuộc One Tap có thành công hay không, khỏi
+           cần bấm lại lần 2. ui.js co giãn + canh #gRealButton theo đúng kích
+           thước #gbtn (xem mục X trong ui.js). -->
+      <div class="gbtn-wrap" id="gbtnWrap">
+        <button class="gbtn" id="gbtn" onclick="signInWithGoogle()">
+          <svg class="glogo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" id="glogo">
+            <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+            <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+            <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
+            <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+          </svg>
+          <svg class="spinner hidden" id="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle></svg>
+          <span id="gtext">Continue with Google</span>
+        </button>
+        <div class="gbtn-overlay" id="gRealButton" tabindex="-1" aria-hidden="true"></div>
+      </div>
 
-      <!-- Fallback: nút Google THẬT (renderButton chính chủ), ẩn mặc định. -->
+      <!-- Chỉ hiện khi lần thử đăng nhập âm thầm lúc tải trang bị chặn — gợi ý bấm nút phía trên. -->
       <div class="gbtn-fallback hidden" id="gbtnFallback">
-        <p class="gbtn-fallback-note">One Tap không mở được (trình duyệt/tài khoản đang chặn). Dùng nút Google chính thức bên dưới:</p>
-        <div id="gRealButton"></div>
-        <button class="gbtn-retry" id="gbtnRetry">↻ Thử lại One Tap</button>
+        <p class="gbtn-fallback-note">Không tự đăng nhập được — bấm nút phía trên để tiếp tục.</p>
+        <button class="gbtn-retry" id="gbtnRetry">↻ Thử lại</button>
       </div>
 
       <div class="divider">SSO WORKSPACE</div>
       <p class="login-note">Chỉ tài khoản <b>@base.vn</b> mới được cấp quyền truy cập.</p>
 
       <div class="login-foot">
-        <span class="heart">⌁</span> From <b>CS</b> to <b>CS</b>
+        <span class="heart">⌁</span> From <b>Customer Success</b> to <b>Customer Success</b>
       </div>
     </div>
   </section>
@@ -665,6 +676,12 @@
   <script src="config.js"></script>
   <script>
     // Background: floating metrics từ login design
+    // Lưu ý hiệu năng: trên desktop (≥900px), mọi item có min:true đều hiện thêm
+    // (xem @media trong style.css) — bản cũ có tới 21 item chạy animation "float"
+    // cùng lúc trên desktop (so với chỉ 6 trên mobile), trong đó 4 ký hiệu toán
+    // (÷×+−) cỡ 110-150px là layer nặng nhất. Đây chính là nguyên nhân desktop
+    // giật còn mobile mượt. Đã cắt bớt xuống 16 item + 4 ký hiệu toán đổi thành
+    // TĨNH (không animate, xem .m.op trong style.css) để giảm tải compositor.
     const items = [
       {t:'÷', c:'op', s:150, o:.05, x:6,  y:8,  r:-8, min:true},
       {t:'×', c:'op', s:120, o:.05, x:88, y:70, r:10, min:true},
@@ -673,20 +690,15 @@
       {t:'CHS_CS = 70%U + 30%O', c:'formula', o:.14, x:5,  y:26, r:-4},
       {t:'CHS = 50%U + 20%P + 10%T + 20%O', c:'small', o:.13, x:60, y:9, r:3, min:true},
       {t:'COM = %perf × ACR', c:'formula', o:.14, x:70, y:82, r:-3},
-      {t:'ACR = ΣHĐ ÷ số năm', c:'small', o:.12, x:6,  y:88, r:2, min:true},
-      {t:'Active Rate = login ÷ phân quyền', c:'small', o:.12, x:58, y:90, r:-2, min:true},
       {t:'CR ≥ 75%',   c:'small', o:.16, x:78, y:34, r:4, min:true},
       {t:'SRR_1 ≥ 78%',c:'small', o:.16, x:4,  y:46, r:-3},
       {t:'SRR_4 ≥ 80%',c:'small', o:.16, x:80, y:52, r:5, min:true},
       {t:'Tier 1 → 100đ', c:'small', o:.13, x:66, y:24, r:-2, min:true},
-      {t:'T(0) → T(1)', c:'small', o:.14, x:14, y:60, r:3, min:true},
       {t:'Up sale +5%', c:'small', o:.13, x:84, y:44, r:-4, min:true},
       {t:'KPI',  c:'chip kpi',  o:.9, x:22, y:16, r:-5},
       {t:'GOAL', c:'chip goal', o:.9, x:73, y:60, r:6},
       {t:'OUT',  c:'chip out',  o:.9, x:16, y:34, r:4, min:true},
       {t:'MVP CS', c:'chip mvp', o:.9, x:70, y:40, r:-4},
-      {t:'GOAL', c:'chip goal', o:.55, x:30, y:82, r:5, min:true},
-      {t:'KPI',  c:'chip kpi',  o:.5, x:60, y:74, r:-6, min:true},
     ];
 
     const layer = document.getElementById('mathLayer');
@@ -707,7 +719,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=5"></script>
+  <script src="ui.js?v=6"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=5"></script>
 

@@ -66,6 +66,64 @@
   }
 
   /* -------------------------------------------------------
+     0b. NÚT GOOGLE "XỊN" PHỦ VÔ HÌNH LÊN NÚT CUSTOM
+     app.js render nút Google thật (renderButton) vào #gRealButton.
+     Trước đây nút thật này bị ẩn (display:none) và chỉ hiện ra sau
+     khi One Tap/FedCM thất bại → user phải bấm thêm 1 lần nữa vào
+     nút dự phòng. Giờ #gRealButton là 1 overlay vô hình (opacity gần
+     0) phủ đúng khít lên #gbtn ngay từ đầu (xem style.css), nên cú
+     bấm ĐẦU TIÊN của user đã là bấm thẳng vào nút Google chính chủ —
+     không phụ thuộc One Tap thành công hay không, khỏi cần bấm lại.
+     Google chèn nút vào bất đồng bộ với kích thước cố định (~280px)
+     nên phải co giãn (scale) nó cho khớp bề rộng #gbtn thực tế.
+     ------------------------------------------------------- */
+  (function () {
+    var wrap = $('gbtnWrap'), overlay = $('gRealButton');
+    if (!wrap || !overlay) return;
+
+    function fitOverlay() {
+      var inner = overlay.firstElementChild;
+      if (!inner) return;
+      var wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;
+      var natW = inner.offsetWidth, natH = inner.offsetHeight;
+      if (!wrapW || !wrapH || !natW || !natH) return;
+      inner.style.transformOrigin = '0 0';
+      inner.style.transform = 'scale(' + (wrapW / natW) + ',' + (wrapH / natH) + ')';
+    }
+    new MutationObserver(fitOverlay).observe(overlay, { childList: true });
+    fitOverlay();
+    window.addEventListener('resize', fitOverlay);
+
+    // Phản hồi UI ngay lúc user bấm (mousedown bắn ra TRƯỚC khi trình duyệt
+    // chuyển sang xử lý bên trong iframe của Google) — để nút custom vẫn
+    // đổi sang trạng thái "đang mở Google…" dù cú bấm thực chất trúng vùng
+    // overlay vô hình chứ không phải bản thân #gbtn.
+    var busy = false;
+    function setLoading(on) {
+      if (on === busy) return;
+      busy = on;
+      var logo = $('glogo'), spinner = $('spinner'), text = $('gtext');
+      if (logo) logo.classList.toggle('hidden', on);
+      if (spinner) spinner.classList.toggle('hidden', !on);
+      if (text) text.textContent = on ? 'Đang mở Google…' : 'Continue with Google';
+    }
+    function onPress() {
+      if (busy) return;
+      setLoading(true);
+      // An toàn: nếu user đóng popup Google mà không đăng nhập, focus quay
+      // lại cửa sổ chính — coi đó là tín hiệu để trả nút về bình thường,
+      // tránh kẹt spinner quay mãi. Chốt cứng thêm timeout 8s phòng hờ.
+      var back = function () { setTimeout(function () { setLoading(false); }, 400); };
+      window.addEventListener('focus', back, { once: true });
+      setTimeout(function () {
+        if (document.body.classList.contains('login-mode')) setLoading(false);
+      }, 8000);
+    }
+    overlay.addEventListener('mousedown', onPress);
+    overlay.addEventListener('touchstart', onPress, { passive: true });
+  })();
+
+  /* -------------------------------------------------------
      1. THU GỌN / MỞ RỘNG SIDEBAR
      ------------------------------------------------------- */
   var wrapper = $('appWrapper');
