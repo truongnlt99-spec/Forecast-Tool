@@ -831,8 +831,20 @@ html[data-theme="light"] .income-hero::after{
 .pf-fill.f-kpi{background:linear-gradient(90deg,var(--lav),color-mix(in srgb,var(--lav) 45%,transparent))}
 .pf-fill.f-under{background:linear-gradient(90deg,var(--risk),color-mix(in srgb,var(--risk) 45%,transparent))}
 .pf-tick{position:absolute; top:-5px; width:2px; height:20px; border-radius:2px; background:var(--tx-3); opacity:.55}
-.pf-tick::after{content:attr(title); position:absolute; top:21px; left:50%; transform:translateX(-50%);
-  font:600 9.5px Inter; letter-spacing:.04em; color:var(--tx-3); white-space:nowrap}
+/* Nhãn KPI/GOAL/OUT trước đây gắn vào ::after của từng .pf-tick (dễ đè lên
+   nhau khi 3 mốc quá sát nhau) — bỏ hẳn, thay bằng 1 hàng chú thích gọn bên
+   dưới track, xem .pf-legend + enhancePerfBar() trong ui.js. Vẫn tô màu theo
+   đúng mốc để biết cái nào là cái nào. */
+.pf-legend{order:3; flex:1 0 100%; margin-top:8px; display:flex; flex-wrap:wrap; gap:12px}
+.pf-legend-item{display:inline-flex; align-items:center; gap:5px; font:600 10.5px Inter; letter-spacing:.02em; color:var(--tx-3); white-space:nowrap}
+.pf-legend-dot{width:6px; height:6px; border-radius:50%; flex:0 0 6px}
+.pf-legend-item.t-kpi .pf-legend-dot{background:var(--lav)}
+.pf-legend-item.t-goal .pf-legend-dot{background:var(--healthy)}
+.pf-legend-item.t-out .pf-legend-dot{background:var(--strong)}
+/* Bớt rườm rà cho khối Performance: ẩn dòng "KPI ≥ x% · GOAL ≥ y% · OUT ≥ z%
+   — ..." vốn lặp lại thông tin đã có trên track + legend màu ở trên. Chỉ áp
+   dụng trong #perfGrid — không đụng .kpi-sub dùng ở Overview/Forecast. */
+#perfGrid .kpi-sub{display:none}
 .pf-tick.t-kpi{background:var(--lav)} .pf-tick.t-goal{background:var(--healthy)} .pf-tick.t-out{background:var(--strong)}
 /* Khi ui.js phóng to vùng 50–100% (3 mốc KPI/GOAL/OUT quá sát nhau, chữ đè
    lên nhau nếu để nguyên thang 0–100%), thêm 2 nhãn mốc đầu/cuối để không
@@ -955,12 +967,15 @@ html[data-theme="light"] .income-hero::after{
      tab (VD "Sức khỏe portfolio") vì tốn ngang mà không cần thiết trên mobile. */
   .topbar-mark{display:none}
   .user-box{order:1}
-  /* Dòng 2 trở đi: control riêng theo tab (ô tìm kiếm, toggle Năm 1/Năm 2++,
-     chọn tháng Scorecard) — luôn full-width, rớt xuống dòng dưới cho rộng rãi
-     thay vì bị ép chung dòng với profile. */
+  /* Dòng 2 trở đi: ô tìm kiếm (Overview/Forecast) & toggle Năm 1/Năm 2++
+     (Forecast) — luôn full-width, rớt xuống dòng dưới cho rộng rãi thay vì
+     bị ép chung dòng với profile. Riêng #hteScorecard (chọn tháng của
+     Scorecard) KHÔNG ép full-width — để nguyên margin-left:auto gốc (xem
+     style.css gốc + syncTitle() trong ui.js) nên nó tự nằm sát bên trái
+     profile, chung dòng 1, tận dụng khoảng trống còn lại thay vì rớt dòng. */
   .head-search{order:2; width:100%; margin-left:0}
   .head-tab-extra{order:3; width:100%}
-  #hteScorecard{order:3; width:100%; margin-left:0}
+  .fc-month{font-size:12px; padding:6px 26px 6px 10px}
   #userEmail{display:none}
   .profile-strip .ps-info,.profile-strip .ps-chips{display:none}
   .profile-strip{padding:4px; border:0; background:transparent}

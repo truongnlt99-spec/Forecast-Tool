@@ -688,6 +688,28 @@
     var tickVals = ticks.map(function (t) { return numFrom(t.getAttribute('title')); });
     var fillPct = numFrom(fill.getAttribute('style'));
     if (tickVals.indexOf(null) !== -1 || fillPct == null) return;
+
+    // Chú thích KPI/GOAL/OUT tách thành 1 hàng riêng bên dưới track (không
+    // đè lên nhau nữa), vẫn tô màu đúng theo từng mốc để phân biệt. Chạy
+    // trước điều kiện zoom bên dưới vì cần áp dụng cho mọi track có tick,
+    // không chỉ track bị zoom.
+    if (!track.parentNode.querySelector(':scope > .pf-legend')) {
+      var legend = document.createElement('div');
+      legend.className = 'pf-legend';
+      ticks.forEach(function (t) {
+        var title = t.getAttribute('title') || ''; // VD "KPI: 78%"
+        var sep = title.indexOf(':');
+        var lbl = sep === -1 ? title : title.slice(0, sep).trim();
+        var val = sep === -1 ? '' : title.slice(sep + 1).trim();
+        var tickClass = t.className.split(/\s+/).filter(function (c) { return c.indexOf('t-') === 0; })[0] || '';
+        var item = document.createElement('span');
+        item.className = 'pf-legend-item ' + tickClass;
+        item.innerHTML = '<i class="pf-legend-dot"></i>' + lbl + (val ? ' ' + val : '');
+        legend.appendChild(item);
+      });
+      track.parentNode.insertBefore(legend, track.nextSibling);
+    }
+
     if (Math.min.apply(null, tickVals) < 50) return; // số không lớn — giữ thang gốc
 
     ticks.forEach(function (t, i) { t.style.left = zoomPct(tickVals[i]) + '%'; });
@@ -710,6 +732,46 @@
   if (perfGridEl) {
     new MutationObserver(enhancePerfGrid).observe(perfGridEl, { childList: true });
     enhancePerfGrid();
+  }
+
+  // Rút gọn text trong dropdown "Tháng đánh giá" (#dbMonth) từ "07/2026 · hiện
+  // tại" thành "07/26" — gọn đủ để nằm chung dòng 1 với profile trên mobile.
+  // Đọc từ attribute value (app.js ghi "07/2026") thay vì parse textContent
+  // đang hiển thị, để không tự đè lên chính kết quả mình vừa rút gọn.
+  function shortenMonthOptions() {
+    var sel = $('dbMonth');
+    if (!sel) return;
+    Array.prototype.forEach.call(sel.querySelectorAll('option'), function (opt) {
+      if (opt.dataset.shortened) return;
+      var m = /^(\d{2})\/(\d{4})/.exec(opt.getAttribute('value') || '');
+      if (!m) return;
+      opt.textContent = m[1] + '/' + m[2].slice(2);
+      opt.dataset.shortened = '1';
+    });
+  }
+  var dbMonthEl = $('dbMonth');
+  if (dbMonthEl) {
+    new MutationObserver(shortenMonthOptions).observe(dbMonthEl, { childList: true });
+    shortenMonthOptions();
+  }
+
+  // Ẩn câu ghi chú mặc định (khi Performance đạt Strong/Healthy) trong
+  // #perfRating vì đã có badge màu + legend KPI/GOAL/OUT thể hiện đủ rồi.
+  // Chỉ ẩn ĐÚNG câu boilerplate này — giữ nguyên các câu note quan trọng khác
+  // (VD giải thích commission hỗ trợ khi Under KPI, hoặc khi chưa có dữ liệu)
+  // vì app.js vẫn ghi những câu đó vào cùng 1 chỗ (#perfRating .pr-note).
+  function hidePerfBoilerplateNote() {
+    var rating = $('perfRating');
+    if (!rating) return;
+    var note = rating.querySelector('.pr-note');
+    if (!note) return;
+    var isBoilerplate = note.textContent.indexOf('Xét đồng thời các chỉ số') === 0;
+    note.style.display = isBoilerplate ? 'none' : '';
+  }
+  var perfRatingEl = $('perfRating');
+  if (perfRatingEl) {
+    new MutationObserver(hidePerfBoilerplateNote).observe(perfRatingEl, { childList: true, subtree: true });
+    hidePerfBoilerplateNote();
   }
 
   // CHS score color gradient (low score = light blue, high score = dark blue)

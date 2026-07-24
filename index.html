@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=15">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -603,14 +603,14 @@
             <!-- PERFORMANCE + CẤU PHẦN THU NHẬP: hiện cùng hàng, mỗi cái nửa trang -->
             <div class="chart-row">
               <div class="chart-card dash-card">
-                <div class="chart-title">Performance tháng <span class="chart-note">— so với mốc KPI / GOAL / OUT của level (chính sách mục 6.2)</span></div>
+                <div class="chart-title">Performance tháng</div>
                 <div class="perf-grid" id="perfGrid"></div>
                 <div class="perf-rating" id="perfRating"></div>
               </div>
 
               <!-- Cấu phần thu nhập: ui.js dựng lại từ các dòng tổng trong #comTfoot -->
               <div class="chart-card dash-card" id="breakCard" style="display:none;">
-                <div class="chart-title">Cấu phần thu nhập tháng <span class="chart-note">— tách theo từng loại commission &amp; thưởng, chính sách mục 6.3 &amp; 6.5</span></div>
+                <div class="chart-title">Cấu phần thu nhập tháng</div>
                 <div class="brk" id="comBreak"></div>
               </div>
             </div>
@@ -618,7 +618,7 @@
             <!-- COMMISSION -->
             <div class="table-card dash-card">
               <div class="table-head">
-                <div class="chart-title">Commission trong tháng <span class="chart-note">— chính sách mục 6.3 &amp; 6.5</span></div>
+                <div class="chart-title">Commission trong tháng</div>
                 <div class="table-hint" id="comRateHint"></div>
               </div>
               <div class="table-scroll">
@@ -778,7 +778,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=13"></script>
+  <script src="ui.js?v=14"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 
