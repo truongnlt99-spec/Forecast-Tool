@@ -457,9 +457,13 @@
     // Khối điều khiển riêng theo tab trên header (toggle Năm 1/Năm 2++ của
     // Forecast, chọn Tháng đánh giá của Scorecard) — cùng cơ chế bật/tắt
     // như ô tìm kiếm ở trên, không đụng tới sự kiện app.js đã gắn.
-    var hteF = $('hteForecast'), hteS = $('hteScorecard');
+    var hteWrap = $('headTabExtra'), hteF = $('hteForecast'), hteS = $('hteScorecard');
     if (hteF) hteF.style.display = key === 'forecast' ? '' : 'none';
     if (hteS) hteS.style.display = key === 'dashboard' ? '' : 'none';
+    // Ẩn luôn cái khung bọc ngoài #headTabExtra khi không phải Forecast, để
+    // trên mobile nó không để lại 1 dòng flex trống (order:3;width:100%)
+    // giữa ô tìm kiếm và mép dưới header.
+    if (hteWrap) hteWrap.style.display = key === 'forecast' ? '' : 'none';
 
     // #userBox vốn có sẵn margin-left:auto (để tự đẩy sát phải khi không có
     // gì khác). Ở tab Scorecard, #hteScorecard CŨNG có margin-left:auto để

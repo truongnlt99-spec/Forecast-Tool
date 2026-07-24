@@ -950,6 +950,15 @@ html[data-theme="light"] .income-hero::after{
   .menu-btn{display:grid}
   .app-content{padding:16px 14px 50px}
   .topbar{padding:12px 14px; flex-wrap:wrap; row-gap:10px}
+  /* Dòng 1 CỐ ĐỊNH: hamburger + tên tab + profile (canh phải) — không cho
+     bất cứ control nào khác chen vào dòng này. Ẩn luôn subtitle dưới tên
+     tab (VD "Sức khỏe portfolio") vì tốn ngang mà không cần thiết trên mobile. */
+  .topbar-mark{display:none}
+  .user-box{order:1}
+  /* Dòng 2 trở đi: control riêng theo tab (ô tìm kiếm, toggle Năm 1/Năm 2++,
+     chọn tháng Scorecard) — luôn full-width, rớt xuống dòng dưới cho rộng rãi
+     thay vì bị ép chung dòng với profile. */
+  .head-search{order:2; width:100%; margin-left:0}
   .head-tab-extra{order:3; width:100%}
   #hteScorecard{order:3; width:100%; margin-left:0}
   #userEmail{display:none}
