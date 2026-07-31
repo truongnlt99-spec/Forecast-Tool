@@ -846,336 +846,58 @@
   }
 
   /* -------------------------------------------------------
-     11. FORECAST — KHỐI NHANH "Danh sách deal T1 / T4"
+     11. FORECAST — 2 NÚT "Gia hạn Go-live" / "Dừng triển khai"
      ---------------------------------------------------------
-     app.js đóng kín (đóng gói trong 1 IIFE), không expose fcDeals/fcState/
-     fcEdit ra ngoài, nên khối này KHÔNG thể gọi thẳng logic của app.js.
-     Cách làm:
-       (a) Tự "nghe" lại đúng response API mà app.js dùng để tải bảng
-           Forecast (sheet=Database — giống cách PHẦN 0 ở đầu file nghe
-           profile), tự dò cột + tính tối thiểu phần cần (tier, tháng đo
-           T1/T4, %Active/%Output, Go-live thực tế) — KHÔNG tính CHS, KHÔNG
-           đụng gì tới sheet.
-       (b) Khi user sửa số ở khối nhanh này, KHÔNG tự lưu riêng — tạm ẩn bộ
-           lọc/chip đang chọn của bảng "Danh sách deal" bên dưới (về đúng
-           "Tất cả"), gán giá trị vào ĐÚNG ô input thật trong #fcTbody rồi
-           bắn sự kiện 'change' y hệt user tự gõ, để app.js xử lý hoàn toàn
-           bằng chính fcEdit/fcState/fcSave của nó — rồi khôi phục lại bộ
-           lọc/chip user đang xem trước đó. Nhờ vậy chỉ có DUY NHẤT một
-           luồng lưu (nút "Lưu" gốc), không có nguy cơ lệch dữ liệu giữa 2
-           nơi sửa cùng 1 deal.
-     Giới hạn đã biết: nếu user đang ở chế độ "xem 1 deal" (nhảy từ
-     Overview/Scorecard) hoặc đang lọc theo "kỳ ghi nhận CR" (nút chi tiết
-     ở 2 card CR) khi sửa số ở khối nhanh, sau khi sửa xong sẽ về lại "Tất
-     cả" thay vì khôi phục đúng 2 chế độ hiếm gặp này.
+     app.js render bảng "Danh sách deal" (#fcTbody) nhưng KHÔNG tạo cột
+     này — index.html đã thêm sẵn <th class="fc-action-col">Hành động</th>
+     ở cuối hàng thead. Ở đây chỉ tự thêm đúng 1 <td> tương ứng vào CUỐI
+     mỗi hàng sau khi app.js render xong (fcRenderTable ghi đè innerHTML
+     của #fcTbody mỗi lần lọc/sửa/tìm kiếm, nên hàng nào cũng phải thêm
+     lại — MutationObserver lo việc đó). Đây mới chỉ là placeholder, CHƯA
+     có tính năng thật (bấm vào chỉ hiện toast) — sẽ bổ sung sau.
      ------------------------------------------------------- */
   (function () {
     var fcTbodyEl = $('fcTbody');
-    var quickWrap = $('fcQuickWrap');
-    if (!fcTbodyEl || !quickWrap) return;
-
-    var qDeals = null;     // cache deal thô (đã normalize tối thiểu), đọc từ response API
-    var qKeymap = null;    // dò tên cột 1 lần đầu, y hệt cách fcBuildKeymap của app.js làm
-    var qPending = {};     // { dealId: { field: value } } — giá trị vừa forward, để hiển
-                           // thị đúng ngay cả khi deal đó không còn nằm trong bộ lọc hiện tại
-    var qBusy = false;     // chặn vòng lặp khi tự thao tác DOM để forward edit
-
-    function qFindKey(keys, patterns) {
-      for (var i = 0; i < patterns.length; i++) {
-        var p = patterns[i].toLowerCase();
-        for (var j = 0; j < keys.length; j++) {
-          if (keys[j].toLowerCase().indexOf(p) !== -1) return keys[j];
-        }
-      }
-      return null;
-    }
-    function qBuildKeymap(sample) {
-      var keys = Object.keys(sample);
-      qKeymap = {
-        id:       qFindKey(keys, ['deal id']),
-        company:  qFindKey(keys, ['tên công ty', 'ten cong ty']),
-        name:     qFindKey(keys, ['tên khách hàng', 'khách hàng']),
-        sysId:    qFindKey(keys, ['system id', 'sys id', 'sysid']),
-        tier:     qFindKey(keys, ['tier']),
-        glActual: qFindKey(keys, ['go-live thực tế', 'golive thực tế']),
-        monthT1:  qFindKey(keys, ['tháng đo t1']),
-        monthT4:  qFindKey(keys, ['tháng đo t4']),
-        aT1:      qFindKey(keys, ['% active t1', 'active t1']),
-        oT1:      qFindKey(keys, ['% output t1', 'output t1']),
-        aT4:      qFindKey(keys, ['% active t4', 'active t4']),
-        oT4:      qFindKey(keys, ['% output t4', 'output t4']),
-      };
-    }
-    function qParseDate(v) {
-      if (v == null || v === '') return null;
-      if (v instanceof Date) return isNaN(v) ? null : v;
-      var s = String(v).trim();
-      var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
-      var d = new Date(s);
-      return isNaN(d) ? null : d;
-    }
-    function qParsePct(v) {
-      var n;
-      if (typeof v === 'number') { n = v; }
-      else {
-        if (v == null || String(v).trim() === '') return null;
-        n = Number(String(v).replace('%', '').replace(',', '.').trim());
-        if (isNaN(n)) return null;
-      }
-      if (n > 0 && n <= 1) n = n * 100;
-      return Math.round(n * 10) / 10;
-    }
-    function qMNorm(v) {
-      if (v == null) return '';
-      if (v instanceof Date && !isNaN(v)) return String(v.getMonth() + 1).padStart(2, '0') + '/' + v.getFullYear();
-      var s = String(v).trim();
-      var m = s.match(/(\d{1,2})\s*\/\s*(\d{4})/);
-      if (m) return String(+m[1]).padStart(2, '0') + '/' + m[2];
-      var d = qParseDate(s);
-      return d ? qMNorm(d) : '';
-    }
-    function qToInputDate(d) {
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    }
-    function qEsc(v) {
-      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-      });
-    }
-
-    function qNormalize(raw) {
-      if (!qKeymap) qBuildKeymap(raw);
-      var K = qKeymap, g = function (k) { return k ? raw[k] : null; };
-      var tm = String(g(K.tier) || '').match(/\d+/);
-      return {
-        id: String(g(K.id) || ''),
-        company: String(g(K.company) || g(K.name) || '—'),
-        sysId: String(g(K.sysId) || ''),
-        tierNum: tm ? +tm[0] : null,
-        glActual0: qParseDate(g(K.glActual)),
-        monthT1: qMNorm(g(K.monthT1)),
-        monthT4: qMNorm(g(K.monthT4)),
-        aT1_0: qParsePct(g(K.aT1)), oT1_0: qParsePct(g(K.oT1)),
-        aT4_0: qParsePct(g(K.aT4)), oT4_0: qParsePct(g(K.oT4)),
-      };
-    }
-
-    // ---- nghe response API sheet=Database (bọc thêm 1 lớp fetch nữa,
-    // nối tiếp lớp đã bọc ở PHẦN 0 phía trên — không xung đột) ----
-    var _fetchQ = window.fetch;
-    window.fetch = function (input, init) {
-      var p = _fetchQ.call(window, input, init);
-      try {
-        var CFGQ = window.CS_TOOL_CONFIG || {};
-        var url = typeof input === 'string' ? input : ((input && input.url) || '');
-        if (CFGQ.API_URL && url.indexOf(CFGQ.API_URL) === 0 && url.indexOf('sheet=Database') !== -1) {
-          p = p.then(function (res) {
-            try {
-              res.clone().json().then(function (d) {
-                if (d && d.ok && d.deals) {
-                  qDeals = d.deals.map(qNormalize).filter(function (x) { return x.id; });
-                  qRebuild();
-                }
-              }).catch(function () {});
-            } catch (e) {}
-            return res;
-          });
-        }
-      } catch (e) {}
-      return p;
-    };
-
-    function qCurrentMonth() {
-      var sel = $('fcFilterMonth');
-      if (sel && sel.value) return sel.value;
-      return qMNorm(new Date());
-    }
-
-    // Giá trị hiệu lực hiện tại của 1 ô: ưu tiên ô input THẬT đang nằm
-    // trong #fcTbody (phản ánh đúng cả những sửa đổi chưa lưu), sau đó tới
-    // giá trị vừa forward gần nhất (qPending — phòng khi deal đó không còn
-    // nằm trong bộ lọc hiện tại của bảng), cuối cùng mới tới số gốc từ sheet.
-    function qEffVal(id, field, fallback) {
-      var row = document.getElementById('fc-row-' + id);
-      if (row) {
-        var inp = row.querySelector('[data-f="' + field + '"]');
-        if (inp) return inp.value;
-      }
-      if (qPending[id] && qPending[id][field] !== undefined) return qPending[id][field];
-      return fallback;
-    }
-    function qEffPct(id, field, fallback0) {
-      var v = qEffVal(id, field, undefined);
-      if (v === undefined) return fallback0;
-      if (v === '') return null;
-      var n = Number(v);
-      return isNaN(n) ? null : n;
-    }
-    function qEffGoLive(d) {
-      var v = qEffVal(d.id, 'goLive', undefined);
-      if (v !== undefined) return v; // đã ở dạng yyyy-mm-dd (input type=date), hoặc '' nếu bị xoá
-      return d.glActual0 ? qToInputDate(d.glActual0) : '';
-    }
-    function qMissing(tierNum, a, o) {
-      // Tier 4 = 100% Output, không cần %Active — giống hệt missT() của app.js
-      return (tierNum === 4) ? (o == null) : (a == null || o == null);
-    }
-
-    function qBuildList(monthField, aField, oField) {
-      if (!qDeals) return { list: [], overflow: 0 };
-      var cur = qCurrentMonth();
-      var scored = [];
-      qDeals.forEach(function (d) {
-        var a = qEffPct(d.id, aField, d[aField + '_0']);
-        var o = qEffPct(d.id, oField, d[oField + '_0']);
-        var needNow = !!(d[monthField] && d[monthField] === cur);
-        var missing = qMissing(d.tierNum, a, o);
-        if (!needNow && !missing) return; // không liên quan tới khối T1/T4 này
-        // Ưu tiên: đang thiếu số + đúng kỳ tháng này (0) > thiếu số kỳ khác (1)
-        // > đúng kỳ tháng này nhưng đã có số, chỉ để rà lại (10).
-        var score = (missing ? 0 : 10) + (needNow ? 0 : 1);
-        scored.push({ d: d, a: a, o: o, score: score });
-      });
-      scored.sort(function (x, y) {
-        return (x.score - y.score) || String(x.d.company).localeCompare(String(y.d.company), 'vi');
-      });
-      return { list: scored.slice(0, 4), overflow: Math.max(0, scored.length - 4) };
-    }
+    if (!fcTbodyEl) return;
 
     var CLOCK_SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
     var X_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
-    function qRowHtml(item, aField, oField) {
-      var d = item.d, id = d.id;
-      var glReal = qEffGoLive(d);
-      var sub = (d.sysId ? 'Sys ' + qEsc(d.sysId) + ' · ' : '') + 'Deal ' + qEsc(id);
-      return '' +
-        '<div class="fc-quick-row">' +
-          '<div class="fc-quick-info">' +
-            '<div class="fc-quick-name">' + qEsc(d.company) + '</div>' +
-            '<div class="fc-quick-sub">' + sub + '</div>' +
-          '</div>' +
-          '<div class="fc-quick-fields">' +
-            '<div class="fc-quick-field"><label>Go-live</label>' +
-              '<input type="date" class="fc-in fc-date fc-quick-in" data-id="' + qEsc(id) + '" data-f="goLive" value="' + qEsc(glReal) + '"></div>' +
-            '<div class="fc-quick-field"><label>%Act</label>' +
-              '<input type="number" min="0" max="100" placeholder="0-100" class="fc-in fc-pct fc-quick-in" data-id="' + qEsc(id) + '" data-f="' + aField + '" value="' + qEsc(item.a == null ? '' : item.a) + '"></div>' +
-            '<div class="fc-quick-field"><label>%Out</label>' +
-              '<input type="number" min="0" max="100" placeholder="0-100" class="fc-in fc-pct fc-quick-in" data-id="' + qEsc(id) + '" data-f="' + oField + '" value="' + qEsc(item.o == null ? '' : item.o) + '"></div>' +
-          '</div>' +
-          '<div class="fc-quick-actions">' +
-            '<button type="button" class="fc-icon-btn fc-extend-btn" data-deal="' + qEsc(id) + '" data-name="' + qEsc(d.company) + '" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
-            '<button type="button" class="fc-icon-btn fc-stop-btn" data-deal="' + qEsc(id) + '" data-name="' + qEsc(d.company) + '" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
-          '</div>' +
-        '</div>';
-    }
-
-    function qRenderBlock(containerId, monthField, aField, oField, emptyMsg) {
-      var box = $(containerId);
-      if (!box) return;
-      if (!qDeals) { box.innerHTML = '<div class="fc-quick-empty">Đang tải dữ liệu…</div>'; return; }
-      var res = qBuildList(monthField, aField, oField);
-      if (!res.list.length) { box.innerHTML = '<div class="fc-quick-empty">' + emptyMsg + '</div>'; return; }
-      var html = res.list.map(function (item) { return qRowHtml(item, aField, oField); }).join('');
-      if (res.overflow > 0) html += '<div class="fc-quick-more">+' + res.overflow + ' deal khác — xem đầy đủ ở bảng bên dưới</div>';
-      box.innerHTML = html;
-    }
-
-    function qRebuild() {
-      if (qBusy || !qDeals) return;
-      quickWrap.style.display = '';
-      qRenderBlock('fcQuickT1', 'monthT1', 'aT1', 'oT1', 'Không có deal nào cần xử lý T1 tháng này 🎉');
-      qRenderBlock('fcQuickT4', 'monthT4', 'aT4', 'oT4', 'Không có deal nào cần xử lý T4 tháng này 🎉');
-    }
-    var qRebuildPending = false;
-    function qRebuildSoon() {
-      if (qRebuildPending) return;
-      qRebuildPending = true;
-      setTimeout(function () { qRebuildPending = false; qRebuild(); }, 0);
-    }
-
-    // Forward 1 lần sửa từ khối nhanh vào đúng ô input thật của bảng
-    // "Danh sách deal" — xem giải thích cơ chế ở đầu PHẦN 11.
-    function qForwardEdit(id, field, value) {
-      var chipsBox = $('fcChips');
-      var chsSel = $('fcChsFilter');
-      var searchEl = $('fcSearch');
-
-      var focusBtn = chipsBox ? chipsBox.querySelector('#fcClearFocusBtn') : null;
-      var activeChip = chipsBox ? chipsBox.querySelector('.fc-chip.active') : null;
-      var prevChipKey = activeChip ? activeChip.getAttribute('data-fck') : null;
-      var prevChs = chsSel ? chsSel.value : '';
-      var prevSearch = searchEl ? searchEl.value : '';
-
-      qBusy = true;
-      try {
-        if (focusBtn) focusBtn.click();
-        if (chsSel && chsSel.value !== '') { chsSel.value = ''; chsSel.dispatchEvent(new Event('change', { bubbles: true })); }
-        if (searchEl && searchEl.value !== '') { searchEl.value = ''; searchEl.dispatchEvent(new Event('input', { bubbles: true })); }
-        var allBtn = chipsBox ? chipsBox.querySelector('[data-fck="all"]') : null;
-        if (allBtn && !allBtn.classList.contains('active')) allBtn.click();
-
-        var row = document.getElementById('fc-row-' + id);
-        var real = row ? row.querySelector('[data-f="' + field + '"]') : null;
-        if (real) {
-          real.value = value;
-          real.dispatchEvent(new Event('change', { bubbles: true }));
-          if (!qPending[id]) qPending[id] = {};
-          qPending[id][field] = value;
-        }
-
-        if (prevChipKey && prevChipKey !== 'all' && chipsBox) {
-          var backBtn = chipsBox.querySelector('[data-fck="' + prevChipKey + '"]');
-          if (backBtn) backBtn.click();
-        }
-        if (chsSel && prevChs !== '') { chsSel.value = prevChs; chsSel.dispatchEvent(new Event('change', { bubbles: true })); }
-        if (searchEl && prevSearch !== '') { searchEl.value = prevSearch; searchEl.dispatchEvent(new Event('input', { bubbles: true })); }
-      } finally {
-        qBusy = false;
-      }
-      qRebuildSoon();
-    }
-
-    // ---- toast nhỏ dùng lại đúng #toast mà app.js đã dựng (showToast) ----
-    var qToastTimer = null;
-    function qToast(msg) {
+    // Toast nhỏ dùng lại đúng #toast mà app.js đã dựng (showToast trong app.js).
+    var toastTimer = null;
+    function toast(msg) {
       var el = $('toast');
       if (!el) return;
       el.textContent = msg;
       el.className = 'toast show';
-      clearTimeout(qToastTimer);
-      qToastTimer = setTimeout(function () { el.className = 'toast'; }, 3200);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { el.className = 'toast'; }, 3200);
     }
 
-    quickWrap.addEventListener('change', function (e) {
-      var inp = e.target.closest('.fc-quick-in');
-      if (!inp) return;
-      qForwardEdit(inp.getAttribute('data-id'), inp.getAttribute('data-f'), inp.value);
-    });
-    quickWrap.addEventListener('click', function (e) {
-      var extend = e.target.closest('.fc-extend-btn');
-      var stop = e.target.closest('.fc-stop-btn');
-      if (extend) { qToast('"Gia hạn Go-live" cho ' + (extend.getAttribute('data-name') || 'deal này') + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.'); return; }
-      if (stop) { qToast('"Dừng triển khai" cho ' + (stop.getAttribute('data-name') || 'deal này') + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.'); return; }
-    });
-    var quickSaveBtn = $('fcQuickSaveBtn');
-    if (quickSaveBtn) quickSaveBtn.addEventListener('click', function () {
-      var real = $('fcSaveBtn'); if (real) real.click();
-    });
-
-    var fcFilterMonthEl = $('fcFilterMonth');
-    if (fcFilterMonthEl) fcFilterMonthEl.addEventListener('change', qRebuildSoon);
-    fcTbodyEl.addEventListener('change', function () { if (!qBusy) qRebuildSoon(); });
-    new MutationObserver(function () { if (!qBusy) qRebuildSoon(); }).observe(fcTbodyEl, { childList: true });
-
-    // Mirror trạng thái "chưa lưu/đã lưu" (#fcFlag, app.js tự ghi) lên thanh
-    // trạng thái của khối nhanh, để không cần cuộn xuống bảng dưới mới thấy.
-    var fcFlagEl = $('fcFlag'), qFlagEl = $('fcQuickFlag');
-    function qSyncFlag() { if (fcFlagEl && qFlagEl) qFlagEl.textContent = fcFlagEl.textContent; }
-    if (fcFlagEl) {
-      new MutationObserver(qSyncFlag).observe(fcFlagEl, { childList: true, characterData: true, subtree: true });
-      qSyncFlag();
+    function addActionCell(tr) {
+      if (!tr.id || tr.querySelector('.fc-action-col')) return; // bỏ qua hàng lạ / đã có sẵn
+      var dealId = tr.id.replace(/^fc-row-/, '');
+      var nameEl = tr.querySelector('.deal-name');
+      var name = nameEl ? nameEl.textContent : 'deal này';
+      var td = document.createElement('td');
+      td.className = 'fc-action-col';
+      td.innerHTML =
+        '<div class="fc-action-btns">' +
+          '<button type="button" class="fc-icon-btn fc-extend-btn" data-deal="' + dealId + '" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
+          '<button type="button" class="fc-icon-btn fc-stop-btn" data-deal="' + dealId + '" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
+        '</div>';
+      td.querySelector('.fc-extend-btn').addEventListener('click', function () {
+        toast('"Gia hạn Go-live" cho ' + name + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.');
+      });
+      td.querySelector('.fc-stop-btn').addEventListener('click', function () {
+        toast('"Dừng triển khai" cho ' + name + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.');
+      });
+      tr.appendChild(td);
     }
+    function addAllActionCells() {
+      fcTbodyEl.querySelectorAll('tr').forEach(addActionCell);
+    }
+    addAllActionCells();
+    new MutationObserver(addAllActionCells).observe(fcTbodyEl, { childList: true });
   })();
 })();

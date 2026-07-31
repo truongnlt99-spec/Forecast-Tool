@@ -603,45 +603,23 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 .fc-focus-clear{margin-left:auto; padding:5px 12px; border-radius:var(--r-pill); border:1px solid var(--stroke); background:var(--glass-2); color:var(--tx-2); font:600 11.5px Inter; cursor:pointer}
 
 /* =========================================================
-   FORECAST — KHỐI NHANH (Danh sách deal T1 / T4)
-   Bento glass giống .table-card (dùng lại nguyên class .table-card cho
-   .fc-quick-col ở index.html) — CSS ở đây chỉ lo phần riêng: thanh trạng
-   thái/nút Lưu chung, lưới 2 cột T1|T4, và từng dòng deal bên trong.
+   FORECAST — cột "Hành động" (Gia hạn Go-live / Dừng triển khai)
+   ui.js tự thêm <td> này vào cuối mỗi hàng #fcTbody sau khi app.js render
+   (app.js không tạo cột này) — ở đây chỉ lo phần nhìn. Thu gọn ô %Act/%Out
+   (.fc-in.fc-pct) một chút để nhường chỗ, không đụng ô Go-live (.fc-date).
    ========================================================= */
-.fc-quick-bar{
-  display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px;
-  padding:12px 16px; border-radius:var(--r-lg); border:1px solid var(--stroke-soft);
-  background:var(--glass); box-shadow:var(--shadow);
-}
-.fc-quick-note{font-size:11.5px; color:var(--tx-3); flex:1 1 260px}
-.fc-quick-cols{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:14px}
-.fc-quick-col .table-head{margin-bottom:8px}
-.fc-quick-list{display:flex; flex-direction:column}
-.fc-quick-empty{padding:22px 6px; text-align:center; font-size:12.5px; color:var(--tx-3); line-height:1.6}
-.fc-quick-more{padding:8px 2px 2px; text-align:center; font-size:11.5px; color:var(--tx-3)}
-.fc-quick-row{
-  display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px;
-  padding:12px 2px; border-bottom:1px solid var(--stroke-soft);
-}
-.fc-quick-row:last-of-type{border-bottom:0}
-.fc-quick-info{flex:1 1 150px; min-width:0}
-.fc-quick-name{font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.fc-quick-sub{font-size:11px; color:var(--tx-3); margin-top:2px}
-.fc-quick-fields{display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap}
-.fc-quick-field{display:flex; flex-direction:column; gap:4px}
-.fc-quick-field label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx-3)}
-.fc-quick-in.fc-in{width:104px}
-.fc-quick-in.fc-in.fc-pct{width:64px}
-.fc-quick-actions{display:flex; align-items:center; gap:6px; margin-left:auto}
+.fc-in.fc-pct{width:56px}
+.fc-action-col{white-space:nowrap}
+.fc-action-btns{display:flex; align-items:center; gap:6px}
 .fc-icon-btn{
-  position:relative; width:30px; height:30px; flex:0 0 30px; border-radius:50%; display:grid; place-items:center; cursor:pointer;
-  background:var(--glass); border:1px solid var(--stroke); color:var(--tx-3); transition:transform .15s var(--ease), color .15s, border-color .15s;
+  position:relative; width:28px; height:28px; flex:0 0 28px; border-radius:50%; display:grid; place-items:center; cursor:pointer;
+  border:0; color:#fff; transition:transform .15s var(--ease), opacity .15s var(--ease);
 }
-.fc-icon-btn svg{width:15px; height:15px; stroke:currentColor; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round}
-.fc-icon-btn:hover{transform:translateY(-1px)}
+.fc-icon-btn svg{width:14px; height:14px; stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.fc-icon-btn:hover{transform:translateY(-1px); opacity:.88}
 .fc-icon-btn:active{transform:scale(.94)}
-.fc-extend-btn:hover{color:var(--amber); border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
-.fc-stop-btn:hover{color:var(--risk); border-color:color-mix(in srgb,var(--risk) 45%,transparent)}
+.fc-extend-btn{background:var(--amber)}
+.fc-stop-btn{background:var(--risk)}
 
 /* =========================================================
    TABLES
@@ -1026,7 +1004,6 @@ html[data-theme="light"] .income-hero::after{
   #userEmail{display:none}
   .profile-strip .ps-info,.profile-strip .ps-chips{display:none}
   .profile-strip{padding:4px; border:0; background:transparent}
-  .fc-quick-cols{grid-template-columns:1fr}
 }
 @media (max-width:640px){
   .kpi-row,.kpi-row-4,.fc-kpis{grid-template-columns:1fr}
@@ -1040,12 +1017,6 @@ html[data-theme="light"] .income-hero::after{
   /* Compact Forecast year selector buttons and Scorecard month selector */
   .fc-view-btn{font-size:11px; padding:6px 12px}
   .fc-month{font-size:12px; padding:6px 28px 6px 10px}
-  /* Khối nhanh T1/T4: mỗi dòng deal xuống dòng riêng cho đỡ chật, nút
-     Gia hạn/Dừng dồn về mép phải cùng hàng với 3 ô nhập. */
-  .fc-quick-bar{padding:10px 12px}
-  .fc-quick-row{padding:11px 0}
-  .fc-quick-info{flex-basis:100%}
-  .fc-quick-fields{flex:1 1 auto}
-  .fc-quick-in.fc-in{width:90px}
-  .fc-quick-in.fc-in.fc-pct{width:58px}
+  .fc-in.fc-pct{width:46px}
+  .fc-icon-btn{width:26px; height:26px; flex:0 0 26px}
 }

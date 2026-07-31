@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -488,31 +488,6 @@
 
           <div id="fcYear1Block">
           <div class="fc-block-body">
-
-            <!-- KHỐI NHANH — Danh sách deal T1 / T4 cần xử lý trong tháng làm
-                 việc đang chọn, tối đa 4 deal/khối, chỉ 3 trường cần gõ (Go-live
-                 thực tế, %Act, %Out). Toàn bộ logic + dữ liệu do ui.js tự đọc lại
-                 từ response API (không đụng app.js); khi sửa số ở đây, ui.js
-                 forward đúng sự kiện vào ô input thật của bảng "Danh sách deal"
-                 bên dưới nên vẫn dùng chung 1 luồng lưu/nút "Lưu" duy nhất. -->
-            <div class="fc-quick-wrap" id="fcQuickWrap" style="display:none;">
-              <div class="fc-quick-bar">
-                <span class="fc-quick-note">Danh sách nhanh · ưu tiên xử lý T1 &amp; T4 trong tháng — tối đa 4 deal/khối, xem đầy đủ ở bảng bên dưới</span>
-                <span class="fc-flag" id="fcQuickFlag"></span>
-                <button type="button" class="btn fc-save" id="fcQuickSaveBtn">Lưu</button>
-              </div>
-              <div class="fc-quick-cols">
-                <div class="table-card fc-quick-col">
-                  <div class="table-head"><div class="chart-title">Danh sách deal T1</div></div>
-                  <div class="fc-quick-list" id="fcQuickT1"></div>
-                </div>
-                <div class="table-card fc-quick-col">
-                  <div class="table-head"><div class="chart-title">Danh sách deal T4</div></div>
-                  <div class="fc-quick-list" id="fcQuickT4"></div>
-                </div>
-              </div>
-            </div>
-
             <div class="fc-filter fc-filter-slim" id="fcFilter">
               <div class="fc-filter-row">
                 <label class="fc-filter-lbl" for="fcFilterMonth">Tháng</label>
@@ -552,6 +527,7 @@
                       <th class="num">CHS T1</th><th class="num">CHS T4</th>
                       <th class="fc-extra">Tier</th><th class="fc-extra">Trạng thái</th>
                       <th class="fc-extra">Tháng CR</th><th class="num fc-extra">ACR</th>
+                      <th class="fc-action-col">Hành động</th>
                     </tr>
                   </thead>
                   <tbody id="fcTbody"></tbody>
@@ -810,7 +786,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=15"></script>
+  <script src="ui.js?v=16"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 
