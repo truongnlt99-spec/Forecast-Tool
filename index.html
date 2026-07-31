@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -252,18 +252,9 @@
           <span class="topbar-mark" id="pageSub">Sức khỏe portfolio</span>
         </div>
 
-        <!-- Khối điều khiển riêng theo tab, đặt lên header:
-             - Forecast: toggle Năm 1 / Năm 2++ (.fc-view-btn — hook có sẵn của app.js)
-             ui.js (syncTitle) chỉ bật đúng khối theo tab đang mở, giống cách làm với
-             #headSearch bên dưới. -->
-        <div class="head-tab-extra" id="headTabExtra">
-          <div class="hte-block" id="hteForecast" style="display:none;">
-            <div class="fc-view-toggle" id="fcViewToggle">
-              <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
-              <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
-            </div>
-          </div>
-        </div>
+        <!-- Toggle Năm 1 / Năm 2++ của Forecast KHÔNG còn đặt trên header nữa —
+             đã chuyển hẳn xuống sub-menu sidebar (#navForecastGroup .nav-sub),
+             luôn hiện sẵn khi đang mở tab Forecast (xem class .open + ui.js). -->
 
         <!-- Ô tìm kiếm dùng chung: app.js gắn sự kiện theo id, ui.js chỉ
              quyết định ô nào hiện ra tuỳ tab đang mở -->
@@ -492,10 +483,36 @@
             </div>
           </div>
 
-          <!-- Toggle Năm 1 / Năm 2++ đã chuyển lên header — xem #hteForecast -->
+          <!-- Toggle Năm 1 / Năm 2++ đã chuyển hẳn xuống sidebar (sub-menu
+               #navForecastGroup) — luôn hiện khi đang mở Forecast, xem ui.js. -->
 
           <div id="fcYear1Block">
           <div class="fc-block-body">
+
+            <!-- KHỐI NHANH — Danh sách deal T1 / T4 cần xử lý trong tháng làm
+                 việc đang chọn, tối đa 4 deal/khối, chỉ 3 trường cần gõ (Go-live
+                 thực tế, %Act, %Out). Toàn bộ logic + dữ liệu do ui.js tự đọc lại
+                 từ response API (không đụng app.js); khi sửa số ở đây, ui.js
+                 forward đúng sự kiện vào ô input thật của bảng "Danh sách deal"
+                 bên dưới nên vẫn dùng chung 1 luồng lưu/nút "Lưu" duy nhất. -->
+            <div class="fc-quick-wrap" id="fcQuickWrap" style="display:none;">
+              <div class="fc-quick-bar">
+                <span class="fc-quick-note">Danh sách nhanh · ưu tiên xử lý T1 &amp; T4 trong tháng — tối đa 4 deal/khối, xem đầy đủ ở bảng bên dưới</span>
+                <span class="fc-flag" id="fcQuickFlag"></span>
+                <button type="button" class="btn fc-save" id="fcQuickSaveBtn">Lưu</button>
+              </div>
+              <div class="fc-quick-cols">
+                <div class="table-card fc-quick-col">
+                  <div class="table-head"><div class="chart-title">Danh sách deal T1</div></div>
+                  <div class="fc-quick-list" id="fcQuickT1"></div>
+                </div>
+                <div class="table-card fc-quick-col">
+                  <div class="table-head"><div class="chart-title">Danh sách deal T4</div></div>
+                  <div class="fc-quick-list" id="fcQuickT4"></div>
+                </div>
+              </div>
+            </div>
+
             <div class="fc-filter fc-filter-slim" id="fcFilter">
               <div class="fc-filter-row">
                 <label class="fc-filter-lbl" for="fcFilterMonth">Tháng</label>
@@ -793,7 +810,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=14"></script>
+  <script src="ui.js?v=15"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 

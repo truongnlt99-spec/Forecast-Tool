@@ -532,9 +532,6 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 .head-search input{flex:1; min-width:0; border:0; background:transparent; padding:0; font:400 13px Inter; color:var(--tx)}
 .head-search input:focus{outline:0; box-shadow:none; border:0}
 .head-search.off{display:none}
-/* Khối điều khiển riêng theo tab trên header (Forecast: Năm1/Năm2++,
-   Scorecard: Tháng đánh giá) — xem #headTabExtra trong index.html */
-.head-tab-extra{display:flex; align-items:center}
 /* Scorecard: chọn Tháng đánh giá — đặt sát lề phải, ngay trước avatar */
 #hteScorecard{margin-left:auto; display:flex; align-items:center}
 .filter-count{margin-left:auto; font-size:12px; color:var(--tx-3)}
@@ -604,6 +601,47 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
   background:color-mix(in srgb,var(--lav) 16%,transparent); border:1px solid color-mix(in srgb,var(--lav) 34%,transparent);
 }
 .fc-focus-clear{margin-left:auto; padding:5px 12px; border-radius:var(--r-pill); border:1px solid var(--stroke); background:var(--glass-2); color:var(--tx-2); font:600 11.5px Inter; cursor:pointer}
+
+/* =========================================================
+   FORECAST — KHỐI NHANH (Danh sách deal T1 / T4)
+   Bento glass giống .table-card (dùng lại nguyên class .table-card cho
+   .fc-quick-col ở index.html) — CSS ở đây chỉ lo phần riêng: thanh trạng
+   thái/nút Lưu chung, lưới 2 cột T1|T4, và từng dòng deal bên trong.
+   ========================================================= */
+.fc-quick-bar{
+  display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px;
+  padding:12px 16px; border-radius:var(--r-lg); border:1px solid var(--stroke-soft);
+  background:var(--glass); box-shadow:var(--shadow);
+}
+.fc-quick-note{font-size:11.5px; color:var(--tx-3); flex:1 1 260px}
+.fc-quick-cols{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:14px}
+.fc-quick-col .table-head{margin-bottom:8px}
+.fc-quick-list{display:flex; flex-direction:column}
+.fc-quick-empty{padding:22px 6px; text-align:center; font-size:12.5px; color:var(--tx-3); line-height:1.6}
+.fc-quick-more{padding:8px 2px 2px; text-align:center; font-size:11.5px; color:var(--tx-3)}
+.fc-quick-row{
+  display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px;
+  padding:12px 2px; border-bottom:1px solid var(--stroke-soft);
+}
+.fc-quick-row:last-of-type{border-bottom:0}
+.fc-quick-info{flex:1 1 150px; min-width:0}
+.fc-quick-name{font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.fc-quick-sub{font-size:11px; color:var(--tx-3); margin-top:2px}
+.fc-quick-fields{display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap}
+.fc-quick-field{display:flex; flex-direction:column; gap:4px}
+.fc-quick-field label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx-3)}
+.fc-quick-in.fc-in{width:104px}
+.fc-quick-in.fc-in.fc-pct{width:64px}
+.fc-quick-actions{display:flex; align-items:center; gap:6px; margin-left:auto}
+.fc-icon-btn{
+  position:relative; width:30px; height:30px; flex:0 0 30px; border-radius:50%; display:grid; place-items:center; cursor:pointer;
+  background:var(--glass); border:1px solid var(--stroke); color:var(--tx-3); transition:transform .15s var(--ease), color .15s, border-color .15s;
+}
+.fc-icon-btn svg{width:15px; height:15px; stroke:currentColor; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.fc-icon-btn:hover{transform:translateY(-1px)}
+.fc-icon-btn:active{transform:scale(.94)}
+.fc-extend-btn:hover{color:var(--amber); border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.fc-stop-btn:hover{color:var(--risk); border-color:color-mix(in srgb,var(--risk) 45%,transparent)}
 
 /* =========================================================
    TABLES
@@ -977,18 +1015,18 @@ html[data-theme="light"] .income-hero::after{
      tab (VD "Sức khỏe portfolio") vì tốn ngang mà không cần thiết trên mobile. */
   .topbar-mark{display:none}
   .user-box{order:1}
-  /* Dòng 2 trở đi: ô tìm kiếm (Overview/Forecast) & toggle Năm 1/Năm 2++
-     (Forecast) — luôn full-width, rớt xuống dòng dưới cho rộng rãi thay vì
-     bị ép chung dòng với profile. Riêng #hteScorecard (chọn tháng của
-     Scorecard) KHÔNG ép full-width — để nguyên margin-left:auto gốc (xem
-     style.css gốc + syncTitle() trong ui.js) nên nó tự nằm sát bên trái
-     profile, chung dòng 1, tận dụng khoảng trống còn lại thay vì rớt dòng. */
+  /* Dòng 2 trở đi: ô tìm kiếm (Overview/Forecast) — luôn full-width, rớt
+     xuống dòng dưới cho rộng rãi thay vì bị ép chung dòng với profile.
+     Riêng #hteScorecard (chọn tháng của Scorecard) KHÔNG ép full-width —
+     để nguyên margin-left:auto gốc (xem style.css gốc + syncTitle() trong
+     ui.js) nên nó tự nằm sát bên trái profile, chung dòng 1, tận dụng
+     khoảng trống còn lại thay vì rớt dòng. */
   .head-search{order:2; width:100%; margin-left:0}
-  .head-tab-extra{order:3; width:100%}
   .fc-month{font-size:12px; padding:6px 26px 6px 10px}
   #userEmail{display:none}
   .profile-strip .ps-info,.profile-strip .ps-chips{display:none}
   .profile-strip{padding:4px; border:0; background:transparent}
+  .fc-quick-cols{grid-template-columns:1fr}
 }
 @media (max-width:640px){
   .kpi-row,.kpi-row-4,.fc-kpis{grid-template-columns:1fr}
@@ -1002,4 +1040,12 @@ html[data-theme="light"] .income-hero::after{
   /* Compact Forecast year selector buttons and Scorecard month selector */
   .fc-view-btn{font-size:11px; padding:6px 12px}
   .fc-month{font-size:12px; padding:6px 28px 6px 10px}
+  /* Khối nhanh T1/T4: mỗi dòng deal xuống dòng riêng cho đỡ chật, nút
+     Gia hạn/Dừng dồn về mép phải cùng hàng với 3 ô nhập. */
+  .fc-quick-bar{padding:10px 12px}
+  .fc-quick-row{padding:11px 0}
+  .fc-quick-info{flex-basis:100%}
+  .fc-quick-fields{flex:1 1 auto}
+  .fc-quick-in.fc-in{width:90px}
+  .fc-quick-in.fc-in.fc-pct{width:58px}
 }
