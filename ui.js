@@ -846,58 +846,627 @@
   }
 
   /* -------------------------------------------------------
-     11. FORECAST — 2 NÚT "Gia hạn Go-live" / "Dừng triển khai"
+     11. FORECAST — GIA HẠN GO-LIVE / DỪNG TRIỂN KHAI / MÀN REQUEST
      ---------------------------------------------------------
-     app.js render bảng "Danh sách deal" (#fcTbody) nhưng KHÔNG tạo cột
-     này — index.html đã thêm sẵn <th class="fc-action-col">Hành động</th>
-     ở cuối hàng thead. Ở đây chỉ tự thêm đúng 1 <td> tương ứng vào CUỐI
-     mỗi hàng sau khi app.js render xong (fcRenderTable ghi đè innerHTML
-     của #fcTbody mỗi lần lọc/sửa/tìm kiếm, nên hàng nào cũng phải thêm
-     lại — MutationObserver lo việc đó). Đây mới chỉ là placeholder, CHƯA
-     có tính năng thật (bấm vào chỉ hiện toast) — sẽ bổ sung sau.
+     app.js đóng kín (IIFE, không expose fcDeals/fcState), nên module này:
+       (a) Tự "nghe" lại response API sheet=Database (bọc fetch — cùng cơ chế
+           PHẦN 0 nghe profile) để có bản dữ liệu deal riêng, đọc thêm 3 cột
+           mà app.js không dùng: "Ngày Go-live gia hạn" (cột O), "Dừng triển
+           khai" (cột T) và "Link request" (nếu có).
+       (b) Ghi dữ liệu qua API action='saveRequest' (cần cập nhật Apps Script
+           — xem APPS_SCRIPT_UPDATE.md trong repo). Chỉ cập nhật giao diện
+           sau khi backend trả ok — không lưu "giả" phía client.
+       (c) Vẽ đè phần hiển thị lên bảng của app.js (nhãn Gia hạn/Dừng, hàng
+           mượn ở tháng gia hạn, 2 card CR đã điều chỉnh) bằng MutationObserver
+           idempotent — mỗi lượt chỉ bổ sung phần còn thiếu nên không lặp vô hạn.
+     Quy tắc CR (theo spec Gia hạn & Dừng):
+       - Deal DỪNG: loại khỏi tử & mẫu CR ở MỌI tháng.
+       - Deal GIA HẠN: loại khỏi tháng CR gốc, tính vào tháng của ngày
+         Go-live gia hạn (tháng hiển thị = tháng làm việc đang chọn).
      ------------------------------------------------------- */
   (function () {
     var fcTbodyEl = $('fcTbody');
     if (!fcTbodyEl) return;
 
-    var CLOCK_SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
-    var X_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    var CFGQ = window.CS_TOOL_CONFIG || {};
+    var qList = null;            // deals đã normalize (bản riêng của module)
+    var qById = {};              // id -> deal
+    var qKeymap = null;
 
-    // Toast nhỏ dùng lại đúng #toast mà app.js đã dựng (showToast trong app.js).
-    var toastTimer = null;
-    function toast(msg) {
+    /* ---------- helpers (bản thu nhỏ của app.js, không gọi được bản gốc) ---------- */
+    function qFindKey(keys, patterns) {
+      for (var i = 0; i < patterns.length; i++) {
+        var p = patterns[i].toLowerCase();
+        for (var j = 0; j < keys.length; j++) {
+          if (keys[j].toLowerCase().indexOf(p) !== -1) return keys[j];
+        }
+      }
+      return null;
+    }
+    function qParseDate(v) {
+      if (v == null || v === '') return null;
+      if (v instanceof Date) return isNaN(v) ? null : v;
+      var s = String(v).trim();
+      var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+      var d = new Date(s);
+      return isNaN(d) ? null : d;
+    }
+    function qParseMoney(v) {
+      if (v == null || v === '') return 0;
+      if (typeof v === 'number') return v;
+      var n = Number(String(v).replace(/[^\d.-]/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+    function qParseDays(v) {
+      if (v == null || v === '') return null;
+      var m = String(v).match(/\d+/);
+      return m ? +m[0] : null;
+    }
+    function qMNorm(v) {
+      if (v == null) return '';
+      if (v instanceof Date && !isNaN(v)) return String(v.getMonth() + 1).padStart(2, '0') + '/' + v.getFullYear();
+      var s = String(v).trim();
+      var m = s.match(/(\d{1,2})\s*\/\s*(\d{4})$/);
+      if (m && s.indexOf('/') === s.lastIndexOf('/')) return String(+m[1]).padStart(2, '0') + '/' + m[2];
+      var d = qParseDate(s);
+      return d ? qMNorm(d) : '';
+    }
+    function qFmtDate(d) {
+      if (!d) return '—';
+      return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    }
+    function qToInputDate(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function qFmtMoney(n) {
+      if (n == null) return '—';
+      return n.toLocaleString('vi-VN') + ' đ';
+    }
+    function qFmtMoneyShort(n) {
+      if (n == null) return '—';
+      if (n >= 1e9) return (Math.round(n / 1e7) / 100).toLocaleString('vi-VN') + ' tỷ';
+      if (n >= 1e6) return Math.round(n / 1e6).toLocaleString('vi-VN') + 'tr';
+      return n.toLocaleString('vi-VN') + ' đ';
+    }
+    function qEsc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    var qToastTimer = null;
+    function qToast(msg, kind) {
       var el = $('toast');
       if (!el) return;
       el.textContent = msg;
-      el.className = 'toast show';
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(function () { el.className = 'toast'; }, 3200);
+      el.className = 'toast show' + (kind ? ' ' + kind : '');
+      clearTimeout(qToastTimer);
+      qToastTimer = setTimeout(function () { el.className = 'toast'; }, 4200);
     }
 
-    function addActionCell(tr) {
-      if (!tr.id || tr.querySelector('.fc-action-col')) return; // bỏ qua hàng lạ / đã có sẵn
+    /* ---------- đọc dữ liệu: nghe response API sheet=Database ---------- */
+    function qBuildKeymap(sample) {
+      var keys = Object.keys(sample);
+      qKeymap = {
+        id:       qFindKey(keys, ['deal id']),
+        company:  qFindKey(keys, ['tên công ty', 'ten cong ty']),
+        name:     qFindKey(keys, ['tên khách hàng', 'khách hàng']),
+        sysId:    qFindKey(keys, ['system id', 'sys id']),
+        val:      qFindKey(keys, ['giá trị phần mềm']),
+        received: qFindKey(keys, ['ngày nhận']),
+        ttgl:     qFindKey(keys, ['ttgl']),
+        glPlan:   qFindKey(keys, ['go-live dự kiến', 'golive dự kiến']),
+        glActual: qFindKey(keys, ['go-live thực tế', 'golive thực tế']),
+        crMonth:  qFindKey(keys, ['tháng ghi nhận']),
+        dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
+        acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
+        // 3 cột riêng của tính năng này (app.js không đọc):
+        glExtend: qFindKey(keys, ['go-live gia hạn', 'golive gia hạn', 'gia hạn']),
+        stop:     qFindKey(keys, ['dừng triển khai', 'dung trien khai']),
+        reqLink:  qFindKey(keys, ['link request', 'link đề xuất', 'link de xuat']),
+      };
+    }
+    function qNormalize(raw) {
+      if (!qKeymap) qBuildKeymap(raw);
+      var K = qKeymap, g = function (k) { return k ? raw[k] : null; };
+      var stopRaw = g(K.stop);
+      var d = {
+        id: String(g(K.id) || ''),
+        company: String(g(K.company) || g(K.name) || '—'),
+        sysId: String(g(K.sysId) || ''),
+        val: qParseMoney(g(K.val)),
+        received: qParseDate(g(K.received)),
+        ttgl: qParseDays(g(K.ttgl)),
+        glPlan: qParseDate(g(K.glPlan)),
+        glActual: qParseDate(g(K.glActual)),
+        crMonth: qMNorm(g(K.crMonth)),
+        dtPhai: qParseMoney(g(K.dtPhai)),
+        acr: qParseMoney(g(K.acr)),
+        glExtend: qParseDate(g(K.glExtend)),
+        stopped: !!(stopRaw != null && String(stopRaw).trim() !== '' && String(stopRaw).trim().toLowerCase() !== 'false'),
+        reqLink: String(g(K.reqLink) || '').trim(),
+      };
+      // Ngày Go-live tối đa = ngày nhận + 200% TTGL (đúng công thức "quá 200%
+      // định mức TTGL" mà app.js dùng ở fcTags/fcCompute).
+      d.glMax = (d.received && d.ttgl != null) ? new Date(d.received.getTime() + 2 * d.ttgl * 86400000) : null;
+      return d;
+    }
+    function qSub(d) { return (d.sysId ? 'Sys ' + d.sysId + ' · ' : '') + 'Deal ' + d.id; }
+
+    var _fetchR = window.fetch;
+    window.fetch = function (input, init) {
+      var p = _fetchR.call(window, input, init);
+      try {
+        var url = typeof input === 'string' ? input : ((input && input.url) || '');
+        if (CFGQ.API_URL && url.indexOf(CFGQ.API_URL) === 0 && url.indexOf('sheet=Database') !== -1) {
+          p = p.then(function (res) {
+            try {
+              res.clone().json().then(function (d) {
+                if (d && d.ok && d.deals) {
+                  qKeymap = null;
+                  qList = d.deals.map(qNormalize).filter(function (x) { return x.id; });
+                  qById = {};
+                  qList.forEach(function (x) { qById[x.id] = x; });
+                  qDecorateSoon();
+                  qRenderReqList();
+                  qCrAdjustSoon();
+                }
+              }).catch(function () {});
+            } catch (e) {}
+            return res;
+          });
+        }
+      } catch (e) {}
+      return p;
+    };
+
+    /* ---------- ghi dữ liệu: API action=saveRequest ---------- */
+    // payload: { token, action:'saveRequest', dealId, reqType:'extend'|'stop',
+    //            glExtend:'dd/mm/yyyy'|'', requestLink:'', remove:true|false }
+    // Backend cần được cập nhật để xử lý action này — xem APPS_SCRIPT_UPDATE.md.
+    function qSaveRequest(payload, done) {
+      var token = localStorage.getItem('cs_tool_token');
+      payload.token = token;
+      payload.action = 'saveRequest';
+      fetch(CFGQ.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          var d; try { d = JSON.parse(text); } catch (e) { d = null; }
+          if (d && d.ok) { done(null); }
+          else { done((d && d.error) || 'Backend chưa hỗ trợ action saveRequest — cần cập nhật Apps Script (xem APPS_SCRIPT_UPDATE.md trong repo).'); }
+        })
+        .catch(function (err) { done(err.message || 'Lỗi mạng'); });
+    }
+    // Cập nhật bản dữ liệu local sau khi backend đã lưu ok
+    function qApplyLocal(payload) {
+      var d = qById[payload.dealId];
+      if (!d) return;
+      if (payload.remove) {
+        if (payload.reqType === 'extend') d.glExtend = null;
+        if (payload.reqType === 'stop') d.stopped = false;
+        d.reqLink = '';
+      } else if (payload.reqType === 'extend') {
+        d.glExtend = qParseDate(payload.glExtend);
+        d.reqLink = payload.requestLink || '';
+      } else if (payload.reqType === 'stop') {
+        d.stopped = true;
+        d.reqLink = payload.requestLink || '';
+      }
+      qStripDecorations();
+      qDecorateSoon();
+      qRenderReqList();
+      qCrAdjustSoon();
+    }
+
+    /* =========================================================
+       A. MODAL — Gia hạn / Dừng / Tạo mới / Sửa
+       ========================================================= */
+    var reqModal = $('reqModal'), reqModalTitle = $('reqModalTitle'), reqModalBody = $('reqModalBody');
+    var reqConfirmModal = $('reqConfirmModal'), reqConfirmTitle = $('reqConfirmTitle'), reqConfirmBody = $('reqConfirmBody');
+    function qOpenModal(m) { if (m) m.classList.add('open'); }
+    function qCloseModal(m) { if (m) m.classList.remove('open'); }
+    var closeBtn1 = $('reqModalClose'), closeBtn2 = $('reqConfirmClose');
+    if (closeBtn1) closeBtn1.addEventListener('click', function () { qCloseModal(reqModal); });
+    if (closeBtn2) closeBtn2.addEventListener('click', function () { qCloseModal(reqConfirmModal); });
+    [reqModal, reqConfirmModal].forEach(function (m) {
+      if (m) m.addEventListener('click', function (e) { if (e.target === m) qCloseModal(m); });
+    });
+
+    function qInfoGrid(d) {
+      return '<dl class="req-info-grid">' +
+        '<dt>Tên deal</dt><dd>' + qEsc(d.company) + '<div class="req-item-sub">' + qEsc(qSub(d)) + '</div></dd>' +
+        '<dt>Giá trị hợp đồng</dt><dd>' + qFmtMoney(d.val || null) + '</dd>' +
+        '<dt>Ngày Go-live dự kiến</dt><dd>' + qFmtDate(d.glPlan) + '</dd>' +
+        '<dt>Ngày Go-live tối đa <span class="req-item-sub">(200% TTGL)</span></dt><dd>' + qFmtDate(d.glMax) + '</dd>' +
+        '<dt>TTGL</dt><dd>' + (d.ttgl != null ? d.ttgl + ' ngày' : '—') + '</dd>' +
+      '</dl>';
+    }
+
+    // Mở modal đề xuất cho 1 deal cụ thể. type='extend'|'stop'. isEdit chỉ đổi câu chữ.
+    function qOpenDealModal(type, d, isEdit) {
+      if (!d) return;
+      reqModalTitle.textContent = (type === 'extend')
+        ? ((isEdit ? 'Sửa đề xuất — ' : '') + 'Gia hạn Go-live')
+        : ((isEdit ? 'Sửa đề xuất — ' : '') + 'Dừng triển khai');
+      var glExtVal = d.glExtend ? qToInputDate(d.glExtend) : '';
+      var maxAttr = d.glMax ? ' max="' + qToInputDate(d.glMax) + '"' : '';
+      var html = qInfoGrid(d);
+      if (type === 'extend') {
+        html +=
+          '<div class="req-form-field"><label>Ngày Go-live gia hạn <b>*</b></label>' +
+            '<input type="date" class="req-in" id="reqGlExtend" value="' + glExtVal + '"' + maxAttr + '></div>' +
+          '<div class="req-error" id="reqErr"></div>' +
+          '<div class="req-form-field"><label>Link Request (không bắt buộc — đề xuất trên hệ thống Base)</label>' +
+            '<input type="url" class="req-in" id="reqLink" placeholder="https://..." value="' + qEsc(d.reqLink) + '"></div>' +
+          '<div class="req-actions">' +
+            '<button type="button" class="req-btn-ghost" id="reqCancel">Huỷ</button>' +
+            '<button type="button" class="req-btn-primary" id="reqOk">Xác nhận gia hạn</button>' +
+          '</div>';
+      } else {
+        html +=
+          '<div class="req-warn">Deal dừng triển khai sẽ bị loại khỏi tử số &amp; mẫu số CR của tháng hiện tại và <b>tất cả các tháng tiếp theo</b> (bỏ ra khỏi danh sách deal cần Go-live).</div>' +
+          '<div class="req-form-field"><label>Link Request (không bắt buộc — đề xuất trên hệ thống Base)</label>' +
+            '<input type="url" class="req-in" id="reqLink" placeholder="https://..." value="' + qEsc(d.reqLink) + '"></div>' +
+          '<div class="req-error" id="reqErr"></div>' +
+          '<div class="req-actions">' +
+            '<button type="button" class="req-btn-ghost" id="reqCancel">Huỷ</button>' +
+            '<button type="button" class="req-btn-danger" id="reqOk">Dừng triển khai</button>' +
+          '</div>';
+      }
+      reqModalBody.innerHTML = html;
+      qOpenModal(reqModal);
+      $('reqCancel').addEventListener('click', function () { qCloseModal(reqModal); });
+      $('reqOk').addEventListener('click', function () {
+        var link = ($('reqLink') && $('reqLink').value.trim()) || '';
+        var errEl = $('reqErr');
+        if (type === 'extend') {
+          var v = $('reqGlExtend').value;
+          if (!v) { errEl.textContent = 'Cần chọn Ngày Go-live gia hạn.'; errEl.style.display = 'block'; return; }
+          var dt = qParseDate(v.split('-').reverse().join('/'));
+          if (d.glMax && dt && dt.getTime() > d.glMax.getTime()) {
+            errEl.textContent = 'Ngày gia hạn không được vượt quá Ngày Go-live tối đa (' + qFmtDate(d.glMax) + ' — mốc 200% TTGL).';
+            errEl.style.display = 'block'; return;
+          }
+          errEl.style.display = 'none';
+          var p = d.glExtend, pv = v.split('-');
+          qSubmit({ dealId: d.id, reqType: 'extend', glExtend: pv[2] + '/' + pv[1] + '/' + pv[0], requestLink: link, remove: false });
+        } else {
+          // Dừng triển khai: xác nhận thêm 1 lần nữa (popup nhỏ) theo spec
+          qMiniConfirm(
+            'Dừng triển khai deal?',
+            'Xác nhận dừng triển khai <b>' + qEsc(d.company) + '</b>?<br>Thao tác này sẽ loại deal khỏi CR của mọi tháng.',
+            'Xác nhận dừng', 'req-btn-danger',
+            function () { qSubmit({ dealId: d.id, reqType: 'stop', glExtend: '', requestLink: link, remove: false }); }
+          );
+        }
+      });
+    }
+
+    function qMiniConfirm(title, bodyHtml, okLabel, okClass, onOk) {
+      reqConfirmTitle.textContent = title;
+      reqConfirmBody.innerHTML =
+        '<p style="line-height:1.7">' + bodyHtml + '</p>' +
+        '<div class="req-actions">' +
+          '<button type="button" class="req-btn-ghost" id="reqCfCancel">Huỷ</button>' +
+          '<button type="button" class="' + okClass + '" id="reqCfOk">' + okLabel + '</button>' +
+        '</div>';
+      qOpenModal(reqConfirmModal);
+      $('reqCfCancel').addEventListener('click', function () { qCloseModal(reqConfirmModal); });
+      $('reqCfOk').addEventListener('click', function () { qCloseModal(reqConfirmModal); onOk(); });
+    }
+
+    var qSubmitting = false;
+    function qSubmit(payload) {
+      if (qSubmitting) return;
+      qSubmitting = true;
+      var flag = $('reqFlag'); if (flag) flag.textContent = 'đang lưu…';
+      qSaveRequest(payload, function (err) {
+        qSubmitting = false;
+        if (flag) flag.textContent = '';
+        if (err) { qToast('⚠ Không lưu được: ' + err, 'err'); return; }
+        qApplyLocal(payload);
+        qCloseModal(reqModal);
+        qCloseModal(reqConfirmModal);
+        qToast(payload.remove
+          ? '✓ Đã xoá đề xuất — nhớ bấm "Làm mới dữ liệu" nếu cần đồng bộ lại toàn trang.'
+          : (payload.reqType === 'extend' ? '✓ Đã lưu đề xuất Gia hạn Go-live về sheet Database (cột Ngày Go-live gia hạn).'
+                                          : '✓ Đã lưu Dừng triển khai về sheet Database (cột Dừng triển khai).'), 'ok');
+      });
+    }
+
+    /* ---- Tạo mới từ màn Request: chọn loại → tìm deal → form ---- */
+    var CLOCK_BIG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    var X_BIG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    function qOpenCreateModal() {
+      reqModalTitle.textContent = 'Tạo đề xuất mới';
+      reqModalBody.innerHTML =
+        '<p style="margin-bottom:14px; color:var(--tx-3); font-size:12.5px">Chọn loại request:</p>' +
+        '<div class="req-type-choice">' +
+          '<button type="button" class="req-type-card rt-extend" id="rtExtend">' + CLOCK_BIG + 'Gia hạn triển khai</button>' +
+          '<button type="button" class="req-type-card rt-stop" id="rtStop">' + X_BIG + 'Dừng triển khai</button>' +
+        '</div>';
+      qOpenModal(reqModal);
+      $('rtExtend').addEventListener('click', function () { qOpenSearchStep('extend'); });
+      $('rtStop').addEventListener('click', function () { qOpenSearchStep('stop'); });
+    }
+    function qOpenSearchStep(type) {
+      reqModalTitle.textContent = (type === 'extend') ? 'Gia hạn Go-live — chọn deal' : 'Dừng triển khai — chọn deal';
+      reqModalBody.innerHTML =
+        '<div class="req-form-field"><label>Tên deal</label>' +
+          '<div class="req-search-wrap">' +
+            '<input type="text" class="req-in" id="reqSearch" placeholder="Gõ tên công ty, Sys ID hoặc Deal ID…" autocomplete="off">' +
+            '<div class="req-suggest" id="reqSuggest"></div>' +
+          '</div></div>' +
+        '<div class="req-actions"><button type="button" class="req-btn-ghost" id="reqCancel">Huỷ</button></div>';
+      $('reqCancel').addEventListener('click', function () { qCloseModal(reqModal); });
+      var inp = $('reqSearch'), box = $('reqSuggest');
+      inp.focus();
+      inp.addEventListener('input', function () {
+        var q = inp.value.trim().toLowerCase();
+        if (!q || !qList) { box.classList.remove('open'); return; }
+        var hits = qList.filter(function (d) {
+          return (d.company + ' ' + d.sysId + ' ' + d.id).toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 8);
+        box.innerHTML = hits.length
+          ? hits.map(function (d) {
+              return '<div class="req-suggest-item" data-deal="' + qEsc(d.id) + '">' + qEsc(d.company) +
+                     '<div class="rs-sub">' + qEsc(qSub(d)) + '</div></div>';
+            }).join('')
+          : '<div class="req-suggest-empty">Không tìm thấy deal nào khớp.</div>';
+        box.classList.add('open');
+      });
+      box.addEventListener('click', function (e) {
+        var item = e.target.closest('.req-suggest-item');
+        if (!item) return;
+        var d = qById[item.getAttribute('data-deal')];
+        if (d) qOpenDealModal(type, d, false);
+      });
+    }
+
+    /* =========================================================
+       B. NÚT TRÊN BẢNG DANH SÁCH DEAL (thay placeholder toast cũ)
+       ========================================================= */
+    var CLOCK_SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    var X_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    var PEN_SVG = '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg>';
+    var TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>';
+
+    function qAddActionCell(tr) {
+      if (!tr.id || tr.querySelector('.fc-action-col')) return;
       var dealId = tr.id.replace(/^fc-row-/, '');
-      var nameEl = tr.querySelector('.deal-name');
-      var name = nameEl ? nameEl.textContent : 'deal này';
       var td = document.createElement('td');
       td.className = 'fc-action-col';
       td.innerHTML =
         '<div class="fc-action-btns">' +
-          '<button type="button" class="fc-icon-btn fc-extend-btn" data-deal="' + dealId + '" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
-          '<button type="button" class="fc-icon-btn fc-stop-btn" data-deal="' + dealId + '" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
+          '<button type="button" class="fc-icon-btn fc-extend-btn" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
+          '<button type="button" class="fc-icon-btn fc-stop-btn" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
         '</div>';
       td.querySelector('.fc-extend-btn').addEventListener('click', function () {
-        toast('"Gia hạn Go-live" cho ' + name + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.');
+        var d = qById[dealId];
+        if (!d) { qToast('Dữ liệu deal chưa tải xong — thử lại sau vài giây.', 'err'); return; }
+        qOpenDealModal('extend', d, !!d.glExtend);
       });
       td.querySelector('.fc-stop-btn').addEventListener('click', function () {
-        toast('"Dừng triển khai" cho ' + name + ' — tính năng đang phát triển, sẽ có trong bản cập nhật tới.');
+        var d = qById[dealId];
+        if (!d) { qToast('Dữ liệu deal chưa tải xong — thử lại sau vài giây.', 'err'); return; }
+        if (d.stopped) { qShowReqView(); return; } // đã dừng rồi → xem đề xuất
+        qOpenDealModal('stop', d, false);
       });
       tr.appendChild(td);
     }
-    function addAllActionCells() {
-      fcTbodyEl.querySelectorAll('tr').forEach(addActionCell);
+
+    /* ---- Nhãn Gia hạn / Dừng triển khai cạnh tên deal (bấm → màn Request) ---- */
+    function qAddBadge(tr) {
+      if (!tr.id) return;
+      var d = qById[tr.id.replace(/^fc-row-/, '')];
+      if (!d) return;
+      var nameRow = tr.querySelector('.deal-name-row');
+      if (!nameRow) return;
+      var existing = nameRow.querySelector('.fc-flag-badge');
+      var want = d.stopped ? 'stop' : (d.glExtend ? 'extend' : null);
+      var has = existing ? (existing.classList.contains('fb-stop') ? 'stop' : 'extend') : null;
+      if (want === has) {
+        tr.classList.toggle('fc-row-stopped', d.stopped);
+        return;
+      }
+      if (existing) existing.remove();
+      tr.classList.toggle('fc-row-stopped', d.stopped);
+      if (!want) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'fc-flag-badge ' + (want === 'stop' ? 'fb-stop' : 'fb-extend');
+      b.textContent = (want === 'stop') ? 'Dừng triển khai' : 'Gia hạn';
+      b.title = 'Xem đề xuất ở màn Request';
+      b.addEventListener('click', function () { qShowReqView(); });
+      nameRow.appendChild(b);
     }
-    addAllActionCells();
-    new MutationObserver(addAllActionCells).observe(fcTbodyEl, { childList: true });
+
+    /* ---- Hàng "mượn": deal gia hạn hiện thêm ở tháng của ngày Go-live gia hạn ---- */
+    function qInjectExtendedRows() {
+      var sel = $('fcFilterMonth');
+      var cur = (sel && sel.value) || qMNorm(new Date());
+      if (!qList) return;
+      qList.forEach(function (d) {
+        if (!d.glExtend || d.stopped) return;
+        if (qMNorm(d.glExtend) !== cur) return;
+        if (document.getElementById('fc-row-' + d.id)) return; // app.js đã render sẵn ở tháng này
+        var tr = document.createElement('tr');
+        tr.id = 'fc-row-' + d.id;
+        tr.className = 'fc-injected';
+        tr.innerHTML =
+          '<td><div class="deal-name-row"><span class="deal-name">' + qEsc(d.company) + '</span></div>' +
+            '<div class="deal-id">' + qEsc(qSub(d)) + '</div>' +
+            '<div class="fc-injected-note">Hiện ở tháng này theo ngày Go-live gia hạn</div></td>' +
+          '<td class="num fc-extra">' + qFmtMoneyShort(d.val || null) + '</td>' +
+          '<td class="fc-extra">' + qEsc(qFmtDate(d.glPlan)) + '</td>' +
+          '<td class="fc-y fc-yL">' + qEsc(d.glActual ? qFmtDate(d.glActual) : '—') + '</td>' +
+          '<td class="fc-y num">—</td><td class="fc-y num">—</td><td class="fc-y num">—</td><td class="fc-y num fc-yR">—</td>' +
+          '<td class="num">—</td><td class="num">—</td>' +
+          '<td class="fc-extra">—</td>' +
+          '<td class="fc-extra">Gia hạn → ' + qEsc(qFmtDate(d.glExtend)) + '</td>' +
+          '<td class="fc-extra">' + qEsc(qMNorm(d.glExtend)) + '</td>' +
+          '<td class="num fc-extra">' + qFmtMoneyShort(d.acr || null) + '</td>';
+        fcTbodyEl.appendChild(tr);
+      });
+    }
+
+    function qStripDecorations() {
+      // gỡ hàng mượn + badge cũ để pass kế tiếp vẽ lại theo dữ liệu mới
+      fcTbodyEl.querySelectorAll('tr.fc-injected').forEach(function (tr) { tr.remove(); });
+      fcTbodyEl.querySelectorAll('.fc-flag-badge').forEach(function (b) { b.remove(); });
+    }
+
+    // Pass trang trí idempotent: chỉ bổ sung phần còn thiếu nên MutationObserver
+    // có refire cũng tự dừng (không mutate gì thêm ở pass thứ hai).
+    function qDecorate() {
+      fcTbodyEl.querySelectorAll('tr').forEach(function (tr) {
+        qAddActionCell(tr);
+        qAddBadge(tr);
+      });
+      qInjectExtendedRows();
+    }
+    var qDecoPending = false;
+    function qDecorateSoon() {
+      if (qDecoPending) return;
+      qDecoPending = true;
+      setTimeout(function () { qDecoPending = false; qDecorate(); }, 0);
+    }
+    qDecorate();
+    new MutationObserver(qDecorateSoon).observe(fcTbodyEl, { childList: true });
+    var fcMonthSel = $('fcFilterMonth');
+    if (fcMonthSel) fcMonthSel.addEventListener('change', qDecorateSoon);
+
+    /* =========================================================
+       C. ĐIỀU CHỈNH 2 CARD CR (tử số / mẫu số)
+       ---------------------------------------------------------
+       app.js gom tử/mẫu theo d.crMonth (fcRenderKpis). Ở đây tính lại theo
+       quy tắc Gia hạn & Dừng rồi GHI ĐÈ nếu khác — guard bằng so sánh chuỗi
+       nên không lặp vô hạn với MutationObserver.
+       ========================================================= */
+    function qCrCompute(cur) {
+      var phai = 0, dat = 0, touched = false;
+      qList.forEach(function (d) {
+        if (d.stopped || d.glExtend) touched = true;
+        if (d.stopped) return;
+        var effM = d.glExtend ? qMNorm(d.glExtend) : d.crMonth;
+        if (effM !== cur) return;
+        phai += d.dtPhai || 0;
+        // tử số: deal đã có go-live (ưu tiên giá trị đang gõ trong ô input nếu hàng hiển thị)
+        var gl = d.glActual;
+        var row = document.getElementById('fc-row-' + d.id);
+        if (row && !row.classList.contains('fc-injected')) {
+          var inp = row.querySelector('[data-f="goLive"]');
+          if (inp) gl = inp.value ? new Date(inp.value) : null;
+        }
+        if (gl) dat += d.dtPhai || 0;
+      });
+      return { phai: phai, dat: dat, touched: touched };
+    }
+    function qCrAdjust() {
+      if (!qList) return;
+      var numEl = $('fcCrNum'), denEl = $('fcCrDen'), denSub = $('fcCrDenSub'), numSub = $('fcCrNumSub');
+      if (!numEl || !denEl) return;
+      var sel = $('fcFilterMonth');
+      var cur = (sel && sel.value) || qMNorm(new Date());
+      var r = qCrCompute(cur);
+      if (!r.touched) return; // không có deal gia hạn/dừng nào → giữ nguyên số của app.js
+      var wantNum = qFmtMoney(r.dat), wantDen = qFmtMoney(r.phai);
+      var crPct = (r.phai > 0) ? Math.round(r.dat / r.phai * 1000) / 10 : null;
+      var wantSub = 'CR = ' + (crPct == null ? '—' : String(crPct).replace('.', ',') + '%') + ' · đã trừ deal Gia hạn/Dừng';
+      if (numEl.textContent !== wantNum) numEl.textContent = wantNum;
+      if (denEl.textContent !== wantDen) denEl.textContent = wantDen;
+      if (denSub && denSub.textContent !== wantSub) denSub.textContent = wantSub;
+      if (numSub && numSub.textContent.indexOf('đã điều chỉnh') === -1) numSub.textContent += ' · đã điều chỉnh';
+    }
+    var qCrPending = false;
+    function qCrAdjustSoon() {
+      if (qCrPending) return;
+      qCrPending = true;
+      setTimeout(function () { qCrPending = false; qCrAdjust(); }, 0);
+    }
+    var crCard = $('fcCrNum');
+    if (crCard && crCard.parentElement) {
+      new MutationObserver(qCrAdjustSoon).observe(crCard.parentElement.parentElement || crCard.parentElement,
+        { childList: true, characterData: true, subtree: true });
+    }
+    if (fcMonthSel) fcMonthSel.addEventListener('change', qCrAdjustSoon);
+    fcTbodyEl.addEventListener('change', qCrAdjustSoon);
+
+    /* =========================================================
+       D. MÀN REQUEST — hiện/ẩn + danh sách + bộ lọc
+       ========================================================= */
+    var reqBlock = $('fcRequestBlock');
+    var reqFilter = 'all'; // all | extend | stop
+    function qShowReqView() {
+      var y1 = $('fcYear1Block'), mb = $('fcMultiBlock');
+      if (y1) y1.style.display = 'none';
+      if (mb) mb.style.display = 'none';
+      if (reqBlock) reqBlock.style.display = '';
+      document.querySelectorAll('.fc-view-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.classList.add('active'); });
+      qRenderReqList();
+    }
+    function qHideReqView() {
+      if (reqBlock) reqBlock.style.display = 'none';
+      document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.classList.remove('active'); });
+    }
+    document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.addEventListener('click', qShowReqView); });
+    // Bấm lại Năm 1 / Năm 2++ (app.js tự hiện block của nó) → chỉ cần ẩn màn Request
+    document.querySelectorAll('.fc-view-btn').forEach(function (b) { b.addEventListener('click', qHideReqView); });
+    window.addEventListener('hashchange', qHideReqView);
+
+    var reqCreateBtn = $('reqCreateBtn');
+    if (reqCreateBtn) reqCreateBtn.addEventListener('click', qOpenCreateModal);
+
+    function qRenderReqList() {
+      var listEl = $('reqList'), chipsEl = $('reqChips'), emptyEl = $('reqEmpty'), countEl = $('reqCount');
+      if (!listEl || !chipsEl) return;
+      var all = (qList || []).filter(function (d) { return d.stopped || d.glExtend; });
+      var ext = all.filter(function (d) { return !d.stopped && d.glExtend; });
+      var stp = all.filter(function (d) { return d.stopped; });
+      chipsEl.innerHTML =
+        '<button type="button" class="chip-btn' + (reqFilter === 'all' ? ' active' : '') + '" data-rf="all">Tất cả · ' + all.length + '</button>' +
+        '<button type="button" class="chip-btn' + (reqFilter === 'extend' ? ' active' : '') + '" data-rf="extend">Gia hạn · ' + ext.length + '</button>' +
+        '<button type="button" class="chip-btn' + (reqFilter === 'stop' ? ' active' : '') + '" data-rf="stop">Dừng triển khai · ' + stp.length + '</button>';
+      chipsEl.querySelectorAll('[data-rf]').forEach(function (b) {
+        b.addEventListener('click', function () { reqFilter = b.getAttribute('data-rf'); qRenderReqList(); });
+      });
+      var shown = (reqFilter === 'extend') ? ext : (reqFilter === 'stop') ? stp : all;
+      if (countEl) countEl.textContent = shown.length + ' đề xuất';
+      if (emptyEl) emptyEl.style.display = shown.length ? 'none' : 'block';
+      listEl.innerHTML = shown.map(function (d) {
+        var isStop = d.stopped;
+        var meta = [];
+        if (!isStop && d.glExtend) meta.push('Go-live gia hạn: <b>' + qEsc(qFmtDate(d.glExtend)) + '</b>');
+        if (d.reqLink) meta.push('<a href="' + qEsc(d.reqLink) + '" target="_blank" rel="noopener noreferrer">Link request ↗</a>');
+        return '<div class="req-item" data-deal="' + qEsc(d.id) + '" data-type="' + (isStop ? 'stop' : 'extend') + '">' +
+          '<div class="req-item-info">' +
+            '<div class="req-item-name">' + qEsc(d.company) + ' <span class="fc-flag-badge ' + (isStop ? 'fb-stop' : 'fb-extend') + '" style="cursor:default">' + (isStop ? 'Dừng triển khai' : 'Gia hạn') + '</span></div>' +
+            '<div class="req-item-sub">' + qEsc(qSub(d)) + '</div>' +
+          '</div>' +
+          '<div class="req-item-meta">' + meta.join(' · ') + '</div>' +
+          '<div class="req-item-actions">' +
+            '<button type="button" class="req-mini-btn req-edit" title="Sửa đề xuất">' + PEN_SVG + '</button>' +
+            '<button type="button" class="req-mini-btn req-del" title="Xoá đề xuất">' + TRASH_SVG + '</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      listEl.querySelectorAll('.req-item').forEach(function (item) {
+        var d = qById[item.getAttribute('data-deal')];
+        var type = item.getAttribute('data-type');
+        if (!d) return;
+        item.querySelector('.req-edit').addEventListener('click', function () { qOpenDealModal(type, d, true); });
+        item.querySelector('.req-del').addEventListener('click', function () {
+          qMiniConfirm('Xoá đề xuất?',
+            'Xoá đề xuất <b>' + (type === 'stop' ? 'Dừng triển khai' : 'Gia hạn') + '</b> của <b>' + qEsc(d.company) + '</b>?<br>Dữ liệu tương ứng trên sheet Database cũng sẽ được xoá.',
+            'Xoá đề xuất', 'req-btn-danger',
+            function () { qSubmit({ dealId: d.id, reqType: type, glExtend: '', requestLink: '', remove: true }); });
+        });
+      });
+    }
   })();
 })();

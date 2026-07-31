@@ -580,21 +580,21 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 
 /* Năm 1 / Năm 2++ */
 .fc-view-toggle{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
-.fc-view-btn{
+.fc-view-btn,.fc-req-btn{
   border:1px solid var(--stroke-soft); background:var(--glass); color:var(--tx-2);
   font:600 12.5px Inter; padding:8px 17px; border-radius:var(--r-pill); cursor:pointer;
   transition:all .18s var(--ease);
 }
-.fc-view-btn:hover{color:var(--tx)}
-.fc-view-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.30),rgba(109,91,238,.16)); color:var(--tx); border-color:transparent}
+.fc-view-btn:hover,.fc-req-btn:hover{color:var(--tx)}
+.fc-view-btn.active,.fc-req-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.30),rgba(109,91,238,.16)); color:var(--tx); border-color:transparent}
 .fc-search-input{margin-left:auto}
 /* bản trong sidebar */
-.nav-sub .fc-view-btn,.nav-group-fly .fc-view-btn{
+.nav-sub .fc-view-btn,.nav-group-fly .fc-view-btn,.nav-sub .fc-req-btn,.nav-group-fly .fc-req-btn{
   display:flex; align-items:center; gap:8px; width:100%; text-align:left; border-radius:10px; padding:7px 12px; font-size:12.5px;
 }
-.nav-sub .fc-view-btn:hover{transform:translateX(2px)}
-.nav-group-fly .fc-view-btn{background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.10); color:#C7CBE6}
-.nav-group-fly .fc-view-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.35),rgba(109,91,238,.16)); color:#fff}
+.nav-sub .fc-view-btn:hover,.nav-sub .fc-req-btn:hover{transform:translateX(2px)}
+.nav-group-fly .fc-view-btn,.nav-group-fly .fc-req-btn{background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.10); color:#C7CBE6}
+.nav-group-fly .fc-view-btn.active,.nav-group-fly .fc-req-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.35),rgba(109,91,238,.16)); color:#fff}
 
 .fc-focus-banner{
   display:flex; align-items:center; gap:12px; padding:11px 16px; border-radius:var(--r-md); font-size:12.5px;
@@ -620,6 +620,101 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 .fc-icon-btn:active{transform:scale(.94)}
 .fc-extend-btn{background:var(--amber)}
 .fc-stop-btn{background:var(--risk)}
+
+/* =========================================================
+   FORECAST — GIA HẠN / DỪNG TRIỂN KHAI / MÀN REQUEST
+   (toàn bộ do ui.js đảm nhiệm — app.js không biết các phần này)
+   ========================================================= */
+/* Nhãn gắn cạnh tên deal trong bảng Danh sách deal — bấm vào nhảy sang màn Request */
+.fc-flag-badge{
+  border:0; cursor:pointer; border-radius:var(--r-pill); padding:2.5px 9px;
+  font:700 10px Inter; letter-spacing:.03em; text-transform:uppercase; white-space:nowrap;
+  transition:transform .15s var(--ease), opacity .15s;
+}
+.fc-flag-badge:hover{transform:translateY(-1px); opacity:.85}
+.fb-extend{background:color-mix(in srgb,var(--amber) 22%,transparent); color:var(--amber)}
+.fb-stop{background:color-mix(in srgb,var(--risk) 22%,transparent); color:var(--risk)}
+/* Deal đã dừng triển khai: mờ cả hàng cho dễ phân biệt */
+tr.fc-row-stopped td{opacity:.55}
+tr.fc-row-stopped .fc-flag-badge{opacity:1}
+/* Hàng "mượn" — deal gia hạn hiện thêm ở tháng mới (ui.js tự chèn, chỉ đọc) */
+tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
+.fc-injected-note{font-size:11px; color:var(--tx-3)}
+
+/* --- Màn Request --- */
+.req-chips{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.req-count{font-size:11.5px; color:var(--tx-3)}
+.req-list{display:flex; flex-direction:column}
+.req-item{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:13px 2px; border-bottom:1px solid var(--stroke-soft)}
+.req-item:last-of-type{border-bottom:0}
+.req-item-info{flex:1 1 200px; min-width:0}
+.req-item-name{font-weight:600; font-size:13px}
+.req-item-sub{font-size:11px; color:var(--tx-3); margin-top:2px}
+.req-item-meta{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--tx-2)}
+.req-item-meta a{color:var(--lav); text-decoration:none}
+.req-item-meta a:hover{text-decoration:underline}
+.req-item-actions{display:flex; align-items:center; gap:6px; margin-left:auto}
+.req-mini-btn{
+  width:28px; height:28px; border-radius:50%; display:grid; place-items:center; cursor:pointer;
+  background:var(--glass); border:1px solid var(--stroke); color:var(--tx-3);
+  transition:transform .15s var(--ease), color .15s, border-color .15s;
+}
+.req-mini-btn svg{width:13px; height:13px; stroke:currentColor; stroke-width:1.9; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.req-mini-btn:hover{transform:translateY(-1px); color:var(--tx)}
+.req-mini-btn.req-del:hover{color:var(--risk); border-color:color-mix(in srgb,var(--risk) 45%,transparent)}
+
+/* --- Modal đề xuất --- */
+.req-panel{max-width:560px}
+.req-confirm-panel{max-width:420px}
+.req-info-grid{display:grid; grid-template-columns:auto 1fr; gap:7px 18px; padding:12px 14px; margin-bottom:16px;
+  border:1px solid var(--stroke-soft); border-radius:var(--r-md); background:var(--glass-2); font-size:12.5px}
+.req-info-grid dt{color:var(--tx-3)}
+.req-info-grid dd{color:var(--tx); font-weight:600; text-align:right}
+.req-form-field{display:flex; flex-direction:column; gap:5px; margin-bottom:13px}
+.req-form-field label{font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--tx-3)}
+.req-form-field label b{color:var(--risk)}
+.req-in{
+  width:100%; padding:9px 12px; border-radius:var(--r-md); border:1px solid var(--stroke);
+  background:var(--glass); color:var(--tx); font:500 13px Inter; outline:none;
+}
+.req-in:focus{border-color:color-mix(in srgb,var(--lav) 55%,transparent)}
+.req-error{font-size:12px; color:var(--risk); margin:-6px 0 12px; display:none}
+.req-warn{
+  font-size:12px; line-height:1.6; padding:10px 13px; border-radius:var(--r-md); margin-bottom:14px;
+  background:color-mix(in srgb,var(--risk) 10%,transparent); border:1px solid color-mix(in srgb,var(--risk) 30%,transparent);
+}
+.req-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:6px}
+.req-btn-ghost{padding:8px 16px; border-radius:var(--r-pill); border:1px solid var(--stroke); background:var(--glass); color:var(--tx-2); font:600 12.5px Inter; cursor:pointer}
+.req-btn-ghost:hover{color:var(--tx)}
+.req-btn-primary{padding:8px 18px; border-radius:var(--r-pill); border:0; cursor:pointer; font:600 12.5px Inter; color:#fff;
+  background:linear-gradient(120deg,#3D5CFF,#6D5BEE)}
+.req-btn-primary:hover{opacity:.9}
+.req-btn-danger{padding:8px 18px; border-radius:var(--r-pill); border:0; cursor:pointer; font:600 12.5px Inter; color:#fff; background:var(--risk)}
+.req-btn-danger:hover{opacity:.9}
+/* Bước chọn loại request (Tạo mới) */
+.req-type-choice{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.req-type-card{
+  display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px 12px; cursor:pointer; text-align:center;
+  border:1px solid var(--stroke); border-radius:var(--r-md); background:var(--glass); color:var(--tx-2); font:600 13px Inter;
+  transition:transform .15s var(--ease), border-color .15s;
+}
+.req-type-card:hover{transform:translateY(-2px)}
+.req-type-card svg{width:26px; height:26px; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.req-type-card.rt-extend svg{stroke:var(--amber)}
+.req-type-card.rt-extend:hover{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.req-type-card.rt-stop svg{stroke:var(--risk)}
+.req-type-card.rt-stop:hover{border-color:color-mix(in srgb,var(--risk) 45%,transparent)}
+/* Search deal (Tạo mới) */
+.req-search-wrap{position:relative; margin-bottom:14px}
+.req-suggest{
+  position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:30; max-height:240px; overflow:auto;
+  border:1px solid var(--stroke); border-radius:var(--r-md); background:var(--bg); box-shadow:var(--shadow); display:none;
+}
+.req-suggest.open{display:block}
+.req-suggest-item{padding:9px 13px; cursor:pointer; font-size:12.5px}
+.req-suggest-item:hover{background:color-mix(in srgb,var(--lav) 14%,transparent)}
+.req-suggest-item .rs-sub{font-size:10.5px; color:var(--tx-3); margin-top:1px}
+.req-suggest-empty{padding:11px 13px; font-size:12px; color:var(--tx-3)}
 
 /* =========================================================
    TABLES
