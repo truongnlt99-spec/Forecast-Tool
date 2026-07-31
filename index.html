@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -177,16 +177,20 @@
             <span class="nav-fly">Forecast</span>
           </button>
 
-          <!-- .fc-view-btn là hook có sẵn của app.js (fcSetView) -->
+          <!-- .fc-view-btn là hook có sẵn của app.js (fcSetView).
+               .fc-req-btn là nút riêng của ui.js (màn Request — Gia hạn & Dừng),
+               cố ý KHÔNG dùng class fc-view-btn để app.js không gắn nhầm sự kiện. -->
           <div class="nav-sub"><div><div class="nav-sub-inner">
             <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
             <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
+            <button type="button" class="fc-req-btn">Request</button>
           </div></div></div>
 
           <div class="nav-group-fly">
             <div class="nav-group-fly-title">Forecast</div>
             <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
             <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
+            <button type="button" class="fc-req-btn">Request</button>
           </div>
         </div>
 
@@ -571,6 +575,31 @@
           </div>
           </div>
 
+          <!-- REQUEST — Gia hạn & Dừng triển khai. Màn phụ thứ 3 của Forecast
+               (ngang hàng Năm 1 / Năm 2++, chọn từ sidebar). app.js KHÔNG biết
+               màn này — ui.js đảm nhiệm 100% (hiện/ẩn, render, tạo/sửa/xoá
+               đề xuất, gọi API action=saveRequest). -->
+          <div id="fcRequestBlock" style="display:none;">
+          <div class="fc-block-body">
+            <div class="fc-filter fc-filter-slim">
+              <div class="fc-filter-row">
+                <button type="button" class="btn fc-save" id="reqCreateBtn">＋ Tạo mới</button>
+                <div class="req-chips" id="reqChips"></div>
+                <div class="fc-bar-actions"><span class="fc-flag" id="reqFlag"></span></div>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-head">
+                <div class="chart-title">Danh sách đề xuất</div>
+                <div class="req-count" id="reqCount"></div>
+              </div>
+              <div class="req-list" id="reqList"></div>
+              <div class="empty" id="reqEmpty" style="display:none;">Chưa có đề xuất nào — bấm "＋ Tạo mới" hoặc dùng nút đồng hồ / X ngay trên Danh sách deal (màn Năm 1).</div>
+            </div>
+          </div>
+          </div>
+
         </div>
         </section>
 
@@ -739,6 +768,29 @@
     </div>
   </div>
 
+  <!-- =====================================================
+       MODAL: REQUEST (Gia hạn Go-live / Dừng triển khai)
+       ui.js đảm nhiệm 100% — app.js không biết 2 modal này.
+       ===================================================== -->
+  <div class="modal-overlay" id="reqModal">
+    <div class="modal-panel req-panel">
+      <div class="modal-head">
+        <h3 id="reqModalTitle">Đề xuất</h3>
+        <button class="modal-x" id="reqModalClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="reqModalBody"></div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="reqConfirmModal">
+    <div class="modal-panel req-confirm-panel">
+      <div class="modal-head">
+        <h3 id="reqConfirmTitle">Xác nhận</h3>
+        <button class="modal-x" id="reqConfirmClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="reqConfirmBody"></div>
+    </div>
+  </div>
+
   <!-- ===== Scripts ===== -->
   <script src="config.js"></script>
   <script>
@@ -786,7 +838,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=16"></script>
+  <script src="ui.js?v=17"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 
