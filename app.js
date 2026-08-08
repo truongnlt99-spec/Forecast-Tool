@@ -2534,14 +2534,18 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   (function () {
     var pBtn = $('playbookBtn'), pClose = $('playbookClose'), pModal = $('playbookModal');
     var cBtn = $('changelogBtn'), cClose = $('changelogClose'), cModal = $('changelogModal');
+    var dBtn = $('donationBtn'), dClose = $('donationClose'), dModal = $('donationModal');
     if (pBtn) pBtn.addEventListener('click', function () { renderPlaybook(); openModal('playbookModal'); });
     if (pClose) pClose.addEventListener('click', function () { closeModal('playbookModal'); });
     if (pModal) pModal.addEventListener('click', function (e) { if (e.target === pModal) closeModal('playbookModal'); });
     if (cBtn) cBtn.addEventListener('click', function () { renderChangelog(); openModal('changelogModal'); });
     if (cClose) cClose.addEventListener('click', function () { closeModal('changelogModal'); });
     if (cModal) cModal.addEventListener('click', function (e) { if (e.target === cModal) closeModal('changelogModal'); });
+    if (dBtn) dBtn.addEventListener('click', function () { openModal('donationModal'); });
+    if (dClose) dClose.addEventListener('click', function () { closeModal('donationModal'); });
+    if (dModal) dModal.addEventListener('click', function (e) { if (e.target === dModal) closeModal('donationModal'); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeModal('playbookModal'); closeModal('changelogModal'); }
+      if (e.key === 'Escape') { closeModal('playbookModal'); closeModal('changelogModal'); closeModal('donationModal'); }
     });
   })();
 
