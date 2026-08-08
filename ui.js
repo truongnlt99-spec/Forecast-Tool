@@ -1469,4 +1469,69 @@
       });
     }
   })();
+
+  /* -------------------------------------------------------
+     CHANGELOG — chèn thêm 1 entry mới vào #changelogBody mà
+     KHÔNG đụng app.js. renderChangelog() trong app.js ghi đè
+     toàn bộ innerHTML mỗi lần bấm nút Changelog, nên dùng
+     MutationObserver để tự chèn lại entry này lên đầu mỗi lần
+     app.js vừa render xong (idempotent, không lặp vô hạn: khi
+     tự chèn xong đã có marker data-extra-cl nên lần observer
+     gọi lại sẽ tự bỏ qua).
+     ------------------------------------------------------- */
+  (function () {
+    var clBody = $('changelogBody');
+    if (!clBody) return;
+
+    function clEsc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    // Thêm entry mới lên ĐẦU mảng này mỗi lần cập nhật tool
+    // (tương tự cách app.js quản lý mảng CHANGELOG của nó).
+    var EXTRA_CHANGELOG = [
+      {
+        date: '08/08/2026',
+        title: 'Gia hạn & Dừng triển khai deal',
+        body:
+          '<h5>Gia hạn triển khai (Go-live Extension)</h5>' +
+          '<ul>' +
+            '<li>Popup xử lý gia hạn ngay trên từng deal, không cần sửa tay dữ liệu.</li>' +
+            '<li>Tự động validate ngày gia hạn tối đa = ngày nhận deal + 200% TTGL, tránh nhập sai mốc thời gian.</li>' +
+            '<li>Deal đã gia hạn được gắn nhãn riêng trên bảng deal để dễ nhận diện.</li>' +
+            '<li>Số liệu forecast tự động điều chỉnh theo đúng tháng gia hạn, khớp với thực tế.</li>' +
+            '<li>Tử số/mẫu số CR được điều chỉnh tự động theo gia hạn, không lệch số như trước.</li>' +
+          '</ul>' +
+          '<h5>Dừng triển khai (Stop Deployment)</h5>' +
+          '<ul>' +
+            '<li>Popup dừng triển khai cho từng deal, có bước double-confirm để tránh bấm nhầm.</li>' +
+            '<li>Deal đã dừng được gắn nhãn cảnh báo riêng trên bảng deal.</li>' +
+            '<li>Toàn bộ tính toán liên quan tự động ngưng cập nhật cho deal đã dừng.</li>' +
+            '<li>Deal dừng triển khai được loại khỏi cách tính CR cho đúng bản chất (không tính vào các mốc go-live nữa).</li>' +
+          '</ul>' +
+          '<h5>Màn hình quản lý Request</h5>' +
+          '<ul>' +
+            '<li>Màn hình riêng để xem toàn bộ request gia hạn/dừng triển khai đã tạo.</li>' +
+            '<li>Tạo mới, chỉnh sửa, xóa và lọc request ngay trên màn hình này — không cần vào từng deal để thao tác lại.</li>' +
+          '</ul>',
+      },
+    ];
+
+    function clInjectExtra() {
+      if (clBody.querySelector('[data-extra-cl]')) return;
+      var html = EXTRA_CHANGELOG.map(function (rel) {
+        return '<div class="cl-entry" data-extra-cl="1">' +
+          '<div class="cl-date">' + clEsc(rel.date) + '</div>' +
+          '<div class="cl-title">' + clEsc(rel.title) + '</div>' +
+          '<div class="cl-body">' + rel.body + '</div>' +
+          '</div>';
+      }).join('');
+      clBody.insertAdjacentHTML('afterbegin', html);
+    }
+
+    new MutationObserver(clInjectExtra).observe(clBody, { childList: true });
+    clInjectExtra();
+  })();
 })();
