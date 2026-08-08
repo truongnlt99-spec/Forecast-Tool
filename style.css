@@ -548,6 +548,8 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 .btn-ico{font-size:14px; line-height:1}
 .fc-save,.btn.fc-save{border-color:transparent; color:#FFFFFF; background:linear-gradient(100deg,var(--lav),var(--cyan)); box-shadow:0 8px 24px rgba(61,92,255,.32)}
 .fc-save:hover{opacity:.94; background:linear-gradient(100deg,var(--lav),var(--cyan))}
+.fc-save[disabled]{opacity:.72; cursor:wait; transform:none}
+.fc-save .spinner{width:15px; height:15px}
 .fc-cols-toggle{padding:8px 14px; border-radius:var(--r-sm); border:1px solid var(--stroke); background:var(--glass); color:var(--tx-2); font:600 12px Inter; cursor:pointer}
 .fc-cols-toggle:hover{color:var(--tx)}
 

@@ -29,6 +29,10 @@
         app.js gọi API và response có d.profile thì đọc luôn
         avatar từ đó — không tốn thêm request nào.
      ------------------------------------------------------- */
+  // Bộ điều khiển trạng thái nút đăng nhập Google (gán ở PHẦN 0b bên dưới).
+  // Khai báo sớm ở scope ngoài để wrapper fetch (chạy runtime) dùng được.
+  var loginBtnCtl = null;
+
   var _fetch = window.fetch;
   window.fetch = function (input, init) {
     var p = _fetch.call(window, input, init);
@@ -36,13 +40,23 @@
       var CFG = window.CS_TOOL_CONFIG || {};
       var url = typeof input === 'string' ? input : ((input && input.url) || '');
       if (CFG.API_URL && url.indexOf(CFG.API_URL) === 0) {
+        // Có request API bay đi trong lúc còn ở màn đăng nhập = credential Google
+        // đã nhận xong và app.js đang tải dữ liệu (loadDeals). Khoá nút vào trạng
+        // thái "Đang đăng nhập…" cho tới khi vào app (đổi mode) hoặc lỗi — tránh
+        // khoảng trống nút trông nhàn rỗi khiến user tưởng hụt rồi bấm lại nhiều lần.
+        var isLoginLoad = document.body.classList.contains('login-mode');
+        if (isLoginLoad && loginBtnCtl) loginBtnCtl.authenticating();
         p = p.then(function (res) {
           try {
             res.clone().json().then(function (d) {
               if (d && d.profile) onProfileFromApi(d.profile);
             }).catch(function () {});
           } catch (e) {}
+          if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
           return res;
+        }, function (err) {
+          if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
+          throw err;
         });
       }
     } catch (e) {}
@@ -77,9 +91,9 @@
      Google chèn nút vào bất đồng bộ với kích thước cố định (~280px)
      nên phải co giãn (scale) nó cho khớp bề rộng #gbtn thực tế.
      ------------------------------------------------------- */
-  (function () {
+  loginBtnCtl = (function () {
     var wrap = $('gbtnWrap'), overlay = $('gRealButton');
-    if (!wrap || !overlay) return;
+    if (!wrap || !overlay) return null;
 
     function fitOverlay() {
       var inner = overlay.firstElementChild;
@@ -94,33 +108,123 @@
     fitOverlay();
     window.addEventListener('resize', fitOverlay);
 
-    // Phản hồi UI ngay lúc user bấm (mousedown bắn ra TRƯỚC khi trình duyệt
-    // chuyển sang xử lý bên trong iframe của Google) — để nút custom vẫn
-    // đổi sang trạng thái "đang mở Google…" dù cú bấm thực chất trúng vùng
-    // overlay vô hình chứ không phải bản thân #gbtn.
-    var busy = false;
-    function setLoading(on) {
-      if (on === busy) return;
-      busy = on;
-      var logo = $('glogo'), spinner = $('spinner'), text = $('gtext');
-      if (logo) logo.classList.toggle('hidden', on);
-      if (spinner) spinner.classList.toggle('hidden', !on);
-      if (text) text.textContent = on ? 'Đang mở Google…' : 'Continue with Google';
+    // ---- Trạng thái nút: 'idle' | 'opening' | 'auth' ----
+    //   idle    : "Continue with Google" (bình thường)
+    //   opening : "Đang mở Google…"  — vừa bấm, popup Google đang mở, CHƯA có credential
+    //   auth    : "Đang đăng nhập…"   — đã nhận credential, đang tải dữ liệu; KHOÁ nút,
+    //             không cho focus/timeout reset về idle (đây là lúc trước kia bị hụt).
+    var phase = 'idle';
+    var openTimeout = null;
+
+    function paint() {
+      var logo = $('glogo'), spinner = $('spinner'), text = $('gtext'), btn = $('gbtn');
+      var loading = phase !== 'idle';
+      if (logo) logo.classList.toggle('hidden', loading);
+      if (spinner) spinner.classList.toggle('hidden', !loading);
+      if (text) text.textContent =
+        phase === 'auth' ? 'Đang đăng nhập…' :
+        phase === 'opening' ? 'Đang mở Google…' : 'Continue with Google';
+      if (btn) {
+        if (phase === 'auth') { btn.setAttribute('disabled', ''); btn.style.cursor = 'wait'; btn.style.opacity = '0.75'; }
+        else if (phase === 'opening') { btn.removeAttribute('disabled'); btn.style.cursor = 'wait'; btn.style.opacity = '0.85'; }
+        else { btn.removeAttribute('disabled'); btn.style.cursor = ''; btn.style.opacity = ''; }
+      }
+      // Khi đang 'auth' thì chặn luôn lớp overlay nút Google thật để không bấm chồng.
+      overlay.style.pointerEvents = phase === 'auth' ? 'none' : '';
     }
-    function onPress() {
-      if (busy) return;
-      setLoading(true);
-      // An toàn: nếu user đóng popup Google mà không đăng nhập, focus quay
-      // lại cửa sổ chính — coi đó là tín hiệu để trả nút về bình thường,
-      // tránh kẹt spinner quay mãi. Chốt cứng thêm timeout 8s phòng hờ.
-      var back = function () { setTimeout(function () { setLoading(false); }, 400); };
-      window.addEventListener('focus', back, { once: true });
-      setTimeout(function () {
-        if (document.body.classList.contains('login-mode')) setLoading(false);
-      }, 8000);
-    }
+    function set(p) { phase = p; paint(); }
+    function clearOpenTimeout() { if (openTimeout) { clearTimeout(openTimeout); openTimeout = null; } }
+
+    var ctl = {
+      isBusy: function () { return phase !== 'idle'; },
+      // Vừa bấm → đang mở popup Google (chưa có credential).
+      opening: function () {
+        if (phase === 'auth') return;               // đã nhận credential thì đừng lùi trạng thái
+        set('opening');
+        clearOpenTimeout();
+        // Nếu user đóng popup mà KHÔNG đăng nhập: focus quay lại cửa sổ chính →
+        // trả nút về bình thường. Nhưng chỉ reset khi vẫn còn 'opening' — nếu đã
+        // sang 'auth' (credential về, đang tải) thì giữ nguyên "Đang đăng nhập…".
+        var back = function () {
+          setTimeout(function () { if (phase === 'opening') set('idle'); }, 500);
+        };
+        window.addEventListener('focus', back, { once: true });
+        // Phòng hờ: kẹt 'opening' quá lâu mà chẳng có gì xảy ra.
+        openTimeout = setTimeout(function () {
+          if (phase === 'opening' && document.body.classList.contains('login-mode')) set('idle');
+        }, 10000);
+      },
+      // Đã nhận credential, app.js đang gọi API tải dữ liệu → khoá nút.
+      authenticating: function () { clearOpenTimeout(); set('auth'); },
+      // Request tải dữ liệu đã xong: nếu thành công thì body đã đổi mode (observer
+      // bên dưới lo); nếu vẫn còn ở login-mode sau 1 nhịp = thất bại → mở khoá để thử lại.
+      settle: function () {
+        setTimeout(function () {
+          if (document.body.classList.contains('login-mode')) set('idle');
+        }, 600);
+      },
+      reset: function () { clearOpenTimeout(); set('idle'); }
+    };
+
+    // Phản hồi UI ngay lúc user bấm (mousedown bắn ra TRƯỚC khi trình duyệt chuyển
+    // sang xử lý iframe Google) — dù cú bấm thực chất trúng overlay vô hình, không
+    // phải bản thân #gbtn.
+    function onPress() { ctl.opening(); }
     overlay.addEventListener('mousedown', onPress);
     overlay.addEventListener('touchstart', onPress, { passive: true });
+
+    // Rời khỏi login-mode (vào app / reg / boot) → nút không còn ý nghĩa, gỡ khoá thầm lặng.
+    new MutationObserver(function () {
+      if (!document.body.classList.contains('login-mode')) ctl.reset();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    return ctl;
+  })();
+
+  /* -------------------------------------------------------
+     0c. NÚT "LƯU" FORECAST — trạng thái ngay TRONG nút
+     ---------------------------------------------------------
+     Trước đây app.js báo tiến trình lưu bằng dòng chữ cạnh nút
+     (#fcFlag / #mcFlag: "đang lưu 3 deal…", "✓ đã lưu…", "⚠ lưu lỗi") —
+     nhìn rời rạc/"ngố". Ở đây KHÔNG đụng app.js: vẫn để nó ghi vào 2 span
+     đó, nhưng (1) ẩn 2 span, (2) MutationObserver nghe text chúng đổi rồi
+     phản chiếu trạng thái vào chính nút Lưu (spinner + "Đang lưu…" / "✓ Đã
+     lưu" / "⚠ Lưu lỗi"). Nút và span là HTML tĩnh nên wire được ngay.
+     ------------------------------------------------------- */
+  (function () {
+    var SPIN = '<svg class="spinner hidden" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle></svg>';
+    function wire(btnId, flagId) {
+      var btn = $(btnId), flag = $(flagId);
+      if (!btn || !flag) return;
+      flag.style.display = 'none'; // giấu dòng chữ trạng thái cạnh nút
+      var label = (btn.textContent || 'Lưu').trim() || 'Lưu';
+      btn.innerHTML = SPIN + '<span class="fc-save-lbl">' + label + '</span>';
+      var sp = btn.querySelector('.spinner');
+      var lb = btn.querySelector('.fc-save-lbl');
+      var revertT = null;
+      function show(spinning, text, disabled) {
+        if (sp) sp.classList.toggle('hidden', !spinning);
+        if (lb) lb.textContent = text;
+        if (disabled) btn.setAttribute('disabled', ''); else btn.removeAttribute('disabled');
+      }
+      function idleSoon(ms) {
+        if (revertT) clearTimeout(revertT);
+        revertT = setTimeout(function () { revertT = null; show(false, 'Lưu', false); }, ms);
+      }
+      new MutationObserver(function () {
+        var t = (flag.textContent || '').trim();
+        if (!t) return;
+        if (revertT) { clearTimeout(revertT); revertT = null; }
+        var low = t.toLowerCase();
+        if (low.indexOf('đang lưu') !== -1) { show(true, 'Đang lưu…', true); }
+        else if (t.charAt(0) === '✓') { show(false, '✓ Đã lưu', false); idleSoon(1800); }      // ✓
+        else if (t.charAt(0) === '⚠') { show(false, '⚠ Lưu lỗi — thử lại', false); idleSoon(3500); } // ⚠
+        else if (low.indexOf('không có gì') !== -1) { show(false, 'Không có gì để lưu', false); idleSoon(1600); }
+        else { show(false, 'Lưu', false); } // "• chưa lưu…" hoặc trạng thái khác
+      }).observe(flag, { childList: true, characterData: true, subtree: true });
+    }
+    wire('fcSaveBtn', 'fcFlag');
+    wire('mcSaveBtn', 'mcFlag');
   })();
 
   /* -------------------------------------------------------
@@ -824,23 +928,14 @@
     colorizeOverviewChsScore();
   }
 
-  // Google login UX - show loading state
+  // Google login UX — trạng thái loading khi kích hoạt qua #gbtn (bàn phím / nút
+  // "Thử lại" gọi window.signInWithGoogle). Dùng chung controller ở PHẦN 0b để
+  // đồng nhất với đường bấm thẳng vào overlay nút Google thật.
   var gbtn = $('gbtn');
   if (gbtn) {
     var originalSignIn = window.signInWithGoogle;
-    window.signInWithGoogle = function() {
-      // Disable button, fade out, show loading
-      gbtn.disabled = true;
-      gbtn.style.opacity = '0.6';
-      gbtn.style.cursor = 'wait';
-      // Show spinner, hide text
-      var spinner = $('spinner');
-      var gtext = $('gtext');
-      var glogo = $('glogo');
-      if (spinner) spinner.classList.remove('hidden');
-      if (glogo) glogo.classList.add('hidden');
-      if (gtext) gtext.textContent = 'Đang xác nhận...';
-      // Call original Google sign-in
+    window.signInWithGoogle = function () {
+      if (loginBtnCtl) loginBtnCtl.opening();
       if (originalSignIn) originalSignIn();
     };
   }
@@ -1401,10 +1496,14 @@
        ========================================================= */
     var reqBlock = $('fcRequestBlock');
     var reqFilter = 'all'; // all | extend | stop
+    // Dải 10 KPI card (CHS/ACR + Tử/Mẫu số CR) nằm ngoài các block Năm 1/Năm 2++/
+    // Request nên mặc định vẫn hiện ở màn Request — ẩn đi cho gọn, hiện lại khi rời.
+    var kpiStrip = document.querySelector('.fc-kpis-10');
     function qShowReqView() {
       var y1 = $('fcYear1Block'), mb = $('fcMultiBlock');
       if (y1) y1.style.display = 'none';
       if (mb) mb.style.display = 'none';
+      if (kpiStrip) kpiStrip.style.display = 'none';
       if (reqBlock) reqBlock.style.display = '';
       document.querySelectorAll('.fc-view-btn').forEach(function (b) { b.classList.remove('active'); });
       document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.classList.add('active'); });
@@ -1412,6 +1511,7 @@
     }
     function qHideReqView() {
       if (reqBlock) reqBlock.style.display = 'none';
+      if (kpiStrip) kpiStrip.style.display = '';
       document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.classList.remove('active'); });
     }
     document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.addEventListener('click', qShowReqView); });
