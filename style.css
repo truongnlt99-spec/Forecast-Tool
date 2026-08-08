@@ -701,6 +701,57 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 /* Trạng thái "đang xử lý" ngay trong nút xác nhận Request (spinner + chữ). */
 .req-btn-busy{display:inline-flex; align-items:center; justify-content:center; gap:8px; opacity:.85; cursor:wait}
 .req-btn-busy .spinner{width:15px; height:15px}
+
+/* =========================================================
+   PRODUCT FEEDBACK (PF) MODAL
+   ========================================================= */
+.pf-panel{width:min(940px,100%)}
+.pf-wrap{display:flex; gap:22px; align-items:flex-start}
+.pf-col{flex:1 1 0; min-width:0}
+.pf-list-col{border-left:1px solid var(--stroke-soft); padding-left:22px}
+.pf-h{font:600 13.5px "Space Grotesk"; color:var(--tx); margin:0 0 14px}
+.pf-field{display:flex; flex-direction:column; gap:6px; margin-bottom:13px}
+.pf-field label{font:600 11px Inter; letter-spacing:.06em; color:var(--tx-3)}
+.pf-field label b{color:var(--risk)}
+.pf-hint{font-weight:400; letter-spacing:0; color:var(--tx-3)}
+.pf-field input,.pf-field select,.pf-field textarea{
+  width:100%; padding:9px 12px; border-radius:var(--r-md); border:1px solid var(--stroke);
+  background:var(--glass); color:var(--tx); font:500 13px Inter; outline:none; resize:vertical;
+}
+.pf-field input:focus,.pf-field select:focus,.pf-field textarea:focus{border-color:color-mix(in srgb,var(--lav) 55%,transparent)}
+.pf-file-list{display:flex; flex-direction:column; gap:6px; margin-top:2px}
+.pf-file{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:var(--tx-2);
+  padding:6px 10px; border-radius:var(--r-sm); background:var(--glass); border:1px solid var(--stroke-soft)}
+.pf-file span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pf-file-x{border:0; background:transparent; color:var(--tx-3); cursor:pointer; font-size:13px; line-height:1; flex:none}
+.pf-file-x:hover{color:var(--risk)}
+.pf-error{font-size:12px; color:var(--risk); margin:2px 0 10px; display:none}
+.pf-submit{margin-top:4px}
+
+.pf-filters{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px}
+.pf-list{display:flex; flex-direction:column; gap:10px; max-height:56vh; overflow:auto; padding-right:4px}
+.pf-loading,.pf-empty{font-size:12.5px; color:var(--tx-3); padding:14px 4px}
+.pf-item{padding:12px 14px; border-radius:var(--r-md); background:var(--glass); border:1px solid var(--stroke-soft)}
+.pf-item-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+.pf-item-title{font:600 13px Inter; color:var(--tx); line-height:1.4}
+.pf-item-meta{font-size:11.5px; color:var(--tx-3); margin-top:3px}
+.pf-item-desc{font-size:12.5px; color:var(--tx-2); line-height:1.6; margin-top:8px; white-space:pre-wrap}
+.pf-item-atts{font-size:12px; margin-top:8px}
+.pf-item-atts a{color:var(--lav); text-decoration:none}
+.pf-item-atts a:hover{text-decoration:underline}
+.pf-item-resp{font-size:12.5px; color:var(--tx-2); line-height:1.6; margin-top:9px; padding:8px 11px;
+  border-radius:var(--r-sm); background:var(--glass-2); border:1px solid var(--stroke-soft)}
+.pf-item-resp b{color:var(--tx)}
+.pf-chip{flex:none; font:600 10.5px Inter; letter-spacing:.02em; padding:3px 9px; border-radius:var(--r-pill); white-space:nowrap}
+.pfs-received{background:color-mix(in srgb,var(--strong) 18%,transparent); color:var(--strong)}
+.pfs-progress{background:color-mix(in srgb,var(--amber) 20%,transparent); color:var(--amber)}
+.pfs-wontdo{background:color-mix(in srgb,var(--risk) 16%,transparent); color:var(--risk)}
+.pfs-done{background:color-mix(in srgb,var(--healthy) 18%,transparent); color:var(--healthy)}
+@media (max-width:760px){
+  .pf-wrap{flex-direction:column}
+  .pf-list-col{border-left:0; border-top:1px solid var(--stroke-soft); padding-left:0; padding-top:18px}
+  .pf-list{max-height:none}
+}
 /* Bước chọn loại request (Tạo mới) */
 .req-type-choice{display:grid; grid-template-columns:1fr 1fr; gap:12px}
 .req-type-card{

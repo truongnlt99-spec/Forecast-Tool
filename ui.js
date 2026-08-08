@@ -1691,6 +1691,208 @@
   })();
 
   /* -------------------------------------------------------
+     12. PRODUCT FEEDBACK (PF) — modal "gửi feedback" + "danh sách của mình"
+     ---------------------------------------------------------
+     Toàn bộ ở ui.js (app.js không biết). Gọi backend qua 2 action POST:
+       - action='submitFeedback' { title, category, description, expectedDate,
+         attachments:[{name, mime, data(base64)}] } → ghi sheet "Product Feedback",
+         upload file lên Drive, email admin. Trả { ok, id }.
+       - action='listFeedback' → { ok, items:[{ id, ts, title, category,
+         description, attachments:[url], expected, status, response }] } (của
+         chính user đang đăng nhập).
+     Trạng thái (khớp giá trị lưu trong sheet): Received / In Progress / Won't Do
+     / Completed — do bạn tự cập nhật trong sheet (có dropdown data validation).
+     ------------------------------------------------------- */
+  (function () {
+    var pfBtn = $('pfBtn'), pfModal = $('pfModal'), pfBody = $('pfBody'), pfCloseBtn = $('pfClose');
+    if (!pfBtn || !pfModal || !pfBody) return;
+    var CFG = window.CS_TOOL_CONFIG || {};
+
+    var PF_STATUS = {
+      'Received':    { label: 'Received',    cls: 'pfs-received' },
+      'In Progress': { label: 'In Progress', cls: 'pfs-progress' },
+      "Won't Do":    { label: "Won't Do",    cls: 'pfs-wontdo' },
+      'Completed':   { label: 'Completed',   cls: 'pfs-done' }
+    };
+    var PF_CATEGORIES = ['Tính năng mới', 'Cải tiến', 'Lỗi', 'Khác'];
+    var MAX_FILES = 5, MAX_FILE_MB = 8;
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' KB';
+      return (b / 1024 / 1024).toFixed(1) + ' MB';
+    }
+    var pfToastTimer;
+    function pfToast(msg, kind) {
+      var el = $('toast'); if (!el) return;
+      el.textContent = msg;
+      el.className = 'toast show' + (kind ? ' ' + kind : '');
+      clearTimeout(pfToastTimer);
+      pfToastTimer = setTimeout(function () { el.className = 'toast'; }, 4200);
+    }
+
+    var attachFiles = [];   // {name, mime, data(base64), size}
+    var filterStatus = 'all';
+    var pfItems = [];
+
+    function openModal() { pfModal.classList.add('open'); renderShell(); loadList(); }
+    function closeModal() { pfModal.classList.remove('open'); }
+    pfBtn.addEventListener('click', openModal);
+    if (pfCloseBtn) pfCloseBtn.addEventListener('click', closeModal);
+    pfModal.addEventListener('click', function (e) { if (e.target === pfModal) closeModal(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+
+    function renderShell() {
+      attachFiles = [];
+      pfBody.innerHTML =
+        '<div class="pf-wrap">' +
+          '<div class="pf-col pf-form-col">' +
+            '<h4 class="pf-h">Gửi feedback mới</h4>' +
+            '<div class="pf-field"><label>Tên <b>*</b></label>' +
+              '<input type="text" id="pfTitle" maxlength="140" placeholder="Tên ngắn gọn cho đề xuất/lỗi"></div>' +
+            '<div class="pf-field"><label>Loại</label><select id="pfCategory">' +
+              PF_CATEGORIES.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
+            '<div class="pf-field"><label>Mô tả <b>*</b></label>' +
+              '<textarea id="pfDesc" rows="4" placeholder="Mô tả chi tiết đề xuất/lỗi, bối cảnh, mong muốn…"></textarea></div>' +
+            '<div class="pf-field"><label>Ngày kỳ vọng có tính năng <span class="pf-hint">(mong muốn, không phải cam kết)</span></label>' +
+              '<input type="date" id="pfExpected"></div>' +
+            '<div class="pf-field"><label>File đính kèm <span class="pf-hint">(tối đa ' + MAX_FILES + ' file, mỗi file ≤ ' + MAX_FILE_MB + 'MB)</span></label>' +
+              '<input type="file" id="pfFiles" multiple>' +
+              '<div class="pf-file-list" id="pfFileList"></div></div>' +
+            '<div class="pf-error" id="pfErr"></div>' +
+            '<button class="gbtn pf-submit" id="pfSubmit">' +
+              '<svg class="spinner hidden" id="pfSpin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle></svg>' +
+              '<span id="pfSubmitTxt">Gửi feedback</span></button>' +
+          '</div>' +
+          '<div class="pf-col pf-list-col">' +
+            '<h4 class="pf-h">Feedback của bạn</h4>' +
+            '<div class="pf-filters" id="pfFilters"></div>' +
+            '<div class="pf-list" id="pfList"><div class="pf-loading">Đang tải…</div></div>' +
+          '</div>' +
+        '</div>';
+      $('pfFiles').addEventListener('change', onFilesPicked);
+      $('pfSubmit').addEventListener('click', onSubmit);
+    }
+
+    function onFilesPicked(e) {
+      var files = Array.prototype.slice.call(e.target.files || []);
+      e.target.value = ''; // cho phép chọn lại cùng 1 file sau khi gỡ
+      files.forEach(function (f) {
+        if (attachFiles.length >= MAX_FILES) { pfToast('Tối đa ' + MAX_FILES + ' file.', 'err'); return; }
+        if (f.size > MAX_FILE_MB * 1024 * 1024) { pfToast('"' + f.name + '" vượt ' + MAX_FILE_MB + 'MB — bỏ qua.', 'err'); return; }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var b64 = String(reader.result).split(',')[1] || '';
+          attachFiles.push({ name: f.name, mime: f.type || 'application/octet-stream', data: b64, size: f.size });
+          renderFileList();
+        };
+        reader.readAsDataURL(f);
+      });
+    }
+    function renderFileList() {
+      var el = $('pfFileList'); if (!el) return;
+      el.innerHTML = attachFiles.map(function (f, i) {
+        return '<div class="pf-file"><span>' + esc(f.name) + ' · ' + fmtSize(f.size) + '</span>' +
+          '<button type="button" class="pf-file-x" data-i="' + i + '" aria-label="Gỡ">✕</button></div>';
+      }).join('');
+      el.querySelectorAll('.pf-file-x').forEach(function (b) {
+        b.addEventListener('click', function () { attachFiles.splice(+b.getAttribute('data-i'), 1); renderFileList(); });
+      });
+    }
+
+    function onSubmit() {
+      var title = ($('pfTitle').value || '').trim();
+      var desc = ($('pfDesc').value || '').trim();
+      var errEl = $('pfErr'); errEl.style.display = 'none'; errEl.textContent = '';
+      if (!title || !desc) { errEl.textContent = 'Cần nhập Tên và Mô tả.'; errEl.style.display = 'block'; return; }
+      var payload = {
+        action: 'submitFeedback',
+        title: title,
+        category: $('pfCategory').value,
+        description: desc,
+        expectedDate: $('pfExpected').value || '',
+        attachments: attachFiles.map(function (f) { return { name: f.name, mime: f.mime, data: f.data }; })
+      };
+      var btn = $('pfSubmit'), spin = $('pfSpin'), txt = $('pfSubmitTxt');
+      btn.disabled = true; spin.classList.remove('hidden'); txt.textContent = 'Đang gửi…';
+      pfPost(payload, function (err) {
+        if (err) {
+          btn.disabled = false; spin.classList.add('hidden'); txt.textContent = 'Gửi feedback';
+          errEl.textContent = '⚠ Gửi không được: ' + err; errEl.style.display = 'block';
+          return;
+        }
+        spin.classList.add('hidden'); txt.textContent = '✓ Đã gửi';
+        pfToast('✓ Đã gửi feedback — cảm ơn bạn!', 'ok');
+        setTimeout(function () { renderShell(); loadList(); }, 800);
+      });
+    }
+
+    function pfPost(payload, done) {
+      payload.token = localStorage.getItem('cs_tool_token');
+      fetch(CFG.API_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = null; }
+          if (d && d.ok) done(null, d);
+          else done((d && d.error) || 'Backend chưa hỗ trợ Product Feedback — cần cập nhật Apps Script.', null); })
+        .catch(function (e) { done(e.message || 'Lỗi mạng', null); });
+    }
+
+    function loadList() {
+      var listEl = $('pfList'); if (listEl) listEl.innerHTML = '<div class="pf-loading">Đang tải…</div>';
+      pfPost({ action: 'listFeedback' }, function (err, d) {
+        if (err) { if (listEl) listEl.innerHTML = '<div class="pf-empty">Không tải được danh sách: ' + esc(err) + '</div>'; return; }
+        pfItems = d.items || [];
+        renderFilters(); renderList();
+      });
+    }
+    function renderFilters() {
+      var el = $('pfFilters'); if (!el) return;
+      var counts = { all: pfItems.length };
+      Object.keys(PF_STATUS).forEach(function (k) { counts[k] = pfItems.filter(function (x) { return x.status === k; }).length; });
+      var chips = [['all', 'Tất cả']].concat(Object.keys(PF_STATUS).map(function (k) { return [k, PF_STATUS[k].label]; }));
+      el.innerHTML = chips.map(function (c) {
+        return '<button type="button" class="chip-btn' + (filterStatus === c[0] ? ' active' : '') + '" data-f="' + esc(c[0]) + '">' +
+          esc(c[1]) + ' · ' + (counts[c[0]] || 0) + '</button>';
+      }).join('');
+      el.querySelectorAll('[data-f]').forEach(function (b) {
+        b.addEventListener('click', function () { filterStatus = b.getAttribute('data-f'); renderFilters(); renderList(); });
+      });
+    }
+    function renderList() {
+      var el = $('pfList'); if (!el) return;
+      var items = filterStatus === 'all' ? pfItems : pfItems.filter(function (x) { return x.status === filterStatus; });
+      if (!items.length) {
+        el.innerHTML = '<div class="pf-empty">' + (pfItems.length ? 'Không có feedback ở trạng thái này.' : 'Bạn chưa gửi feedback nào.') + '</div>';
+        return;
+      }
+      el.innerHTML = items.map(function (it) {
+        var st = PF_STATUS[it.status] || { label: it.status || '—', cls: 'pfs-received' };
+        var atts = (it.attachments || []).filter(Boolean);
+        return '<div class="pf-item">' +
+          '<div class="pf-item-top"><span class="pf-item-title">' + esc(it.title) + '</span>' +
+            '<span class="pf-chip ' + st.cls + '">' + esc(st.label) + '</span></div>' +
+          '<div class="pf-item-meta">' + esc(it.category || '') +
+            (it.expected ? ' · Kỳ vọng: ' + esc(it.expected) : '') +
+            (it.ts ? ' · ' + esc(it.ts) : '') + '</div>' +
+          (it.description ? '<div class="pf-item-desc">' + esc(it.description) + '</div>' : '') +
+          (atts.length ? '<div class="pf-item-atts">' + atts.map(function (a, i) {
+            return '<a href="' + esc(a) + '" target="_blank" rel="noopener noreferrer">📎 File ' + (i + 1) + '</a>';
+          }).join(' · ') + '</div>' : '') +
+          (it.response ? '<div class="pf-item-resp"><b>Phản hồi từ team:</b> ' + esc(it.response) + '</div>' : '') +
+        '</div>';
+      }).join('');
+    }
+  })();
+
+  /* -------------------------------------------------------
      CHANGELOG — chèn thêm 1 entry mới vào #changelogBody mà
      KHÔNG đụng app.js. renderChangelog() trong app.js ghi đè
      toàn bộ innerHTML mỗi lần bấm nút Changelog, nên dùng

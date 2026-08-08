@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -218,19 +218,15 @@
         <span class="nav-label">Làm mới dữ liệu</span>
         <span class="nav-fly">Làm mới dữ liệu</span>
       </button>
+      <button class="nav-item" id="pfBtn" title="Product Feedback" aria-label="Product Feedback">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span class="nav-label">Product Feedback</span>
+        <span class="nav-fly">Product Feedback</span>
+      </button>
       <button class="nav-item" id="donationBtn" title="Donation" aria-label="Donation">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
         <span class="nav-label">Donation</span>
         <span class="nav-fly">Donation</span>
-      </button>
-
-      <div class="nav-cap">Sắp ra mắt</div>
-
-      <button class="nav-item soon" type="button" disabled title="Product Feedback — sắp ra mắt" aria-label="Product Feedback — sắp ra mắt">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        <span class="nav-label">Product Feedback</span>
-        <span class="soon-badge">Sắp ra mắt</span>
-        <span class="nav-fly">Product Feedback · Sắp ra mắt</span>
       </button>
 
       <div class="side-spacer"></div>
@@ -768,6 +764,19 @@
   </div>
 
   <!-- =====================================================
+       MODAL: PRODUCT FEEDBACK (ui.js điều khiển 100%)
+       ===================================================== -->
+  <div class="modal-overlay" id="pfModal">
+    <div class="modal-panel pf-panel">
+      <div class="modal-head">
+        <h3>💡 Product Feedback</h3>
+        <button class="modal-x" id="pfClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="pfBody"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================
        MODAL: DONATION
        ===================================================== -->
   <div class="modal-overlay" id="donationModal">
@@ -852,7 +861,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=22"></script>
+  <script src="ui.js?v=23"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 
