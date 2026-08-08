@@ -291,6 +291,34 @@
   })();
 
   /* -------------------------------------------------------
+     0e. SCORECARD — bớt chữ dư (theo yêu cầu người dùng)
+     ---------------------------------------------------------
+     Bỏ đuôi giải thích trong nhãn Performance do app.js render:
+       "CR — tỷ lệ DT go-live"      → "CR"
+       "SRR_1 — thành công sau 1 tháng" → "SRR_1"
+       "SRR_4 — thành công sau 4 tháng" → "SRR_4"
+     Chỉ cắt phần sau dấu " — " (gạch dài có khoảng trắng 2 bên) nên các nhãn
+     kiểu "DT go-live (New/Up/Cross)" (gạch trong "go-live" không có khoảng
+     trắng) không bị đụng. Các phần chữ khác (ghi chú Xếp loại, hướng dẫn Radar,
+     ghi chú trong ngoặc) xử lý bằng CSS / sửa HTML tĩnh — không đụng app.js.
+     ------------------------------------------------------- */
+  (function () {
+    var grid = $('perfGrid');
+    if (!grid) return;
+    function trimLabels() {
+      grid.querySelectorAll('.kpi-label').forEach(function (el) {
+        var parts = el.textContent.split(/\s+[—–-]\s+/);
+        if (parts.length > 1) el.textContent = parts[0].trim();
+      });
+    }
+    // childList (không subtree): app.js gán grid.innerHTML = ... → 1 mutation ở
+    // cấp con trực tiếp của grid; sửa textContent của .kpi-label (cháu) không
+    // subtree nên không tự kích hoạt lại observer (khỏi lo lặp vô hạn).
+    new MutationObserver(trimLabels).observe(grid, { childList: true });
+    trimLabels();
+  })();
+
+  /* -------------------------------------------------------
      1. THU GỌN / MỞ RỘNG SIDEBAR
      ------------------------------------------------------- */
   var wrapper = $('appWrapper');

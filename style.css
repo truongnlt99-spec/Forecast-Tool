@@ -550,6 +550,11 @@ html[data-theme="dark"] input[type="date"],html[data-theme="dark"] select{color-
 .fc-save:hover{opacity:.94; background:linear-gradient(100deg,var(--lav),var(--cyan))}
 .fc-save[disabled]{opacity:.72; cursor:wait; transform:none}
 .fc-save .spinner{width:15px; height:15px}
+
+/* Scorecard — bớt chữ dư (theo yêu cầu): ẩn câu giải thích dưới badge "Xếp loại
+   tháng" và câu hướng dẫn dưới Radar. 2 class này chỉ xuất hiện ở tab Scorecard. */
+#perfRating .pr-note{display:none}
+.radar-hint{display:none}
 .fc-cols-toggle{padding:8px 14px; border-radius:var(--r-sm); border:1px solid var(--stroke); background:var(--glass); color:var(--tx-2); font:600 12px Inter; cursor:pointer}
 .fc-cols-toggle:hover{color:var(--tx)}
 
