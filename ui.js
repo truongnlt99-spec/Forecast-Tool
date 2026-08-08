@@ -193,7 +193,10 @@
      ------------------------------------------------------- */
   (function () {
     var SPIN = '<svg class="spinner hidden" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle></svg>';
-    function wire(btnId, flagId) {
+    // optSel: selector các ô đang tô "chưa lưu". Nếu có → optimistic commit: bấm
+    // Lưu là bỏ tô ngay (cảm giác tức thì), lưu LỖI thì tô lại. Nút vẫn báo trạng
+    // thái thật (spinner → ✓/⚠), không "giả vờ đã lưu".
+    function wire(btnId, flagId, optSel) {
       var btn = $(btnId), flag = $(flagId);
       if (!btn || !flag) return;
       flag.style.display = 'none'; // giấu dòng chữ trạng thái cạnh nút
@@ -202,6 +205,7 @@
       var sp = btn.querySelector('.spinner');
       var lb = btn.querySelector('.fc-save-lbl');
       var revertT = null;
+      var pendingRestore = null; // các ô đã bỏ tô lạc quan, chờ biết lưu ok/lỗi
       function show(spinning, text, disabled) {
         if (sp) sp.classList.toggle('hidden', !spinning);
         if (lb) lb.textContent = text;
@@ -211,20 +215,79 @@
         if (revertT) clearTimeout(revertT);
         revertT = setTimeout(function () { revertT = null; show(false, 'Lưu', false); }, ms);
       }
+      // Optimistic: snapshot + bỏ tô ngay lúc bấm (listener này chạy trước handler
+      // của app.js vì ui.js nạp trước; app.js dựng `edited` từ state riêng, không
+      // phụ thuộc class tô nên an toàn).
+      if (optSel) {
+        btn.addEventListener('click', function () {
+          var els = Array.prototype.slice.call(document.querySelectorAll(optSel));
+          if (!els.length) return;
+          pendingRestore = els;
+          els.forEach(function (el) { el.classList.remove('fc-edited'); });
+        });
+      }
       new MutationObserver(function () {
         var t = (flag.textContent || '').trim();
         if (!t) return;
         if (revertT) { clearTimeout(revertT); revertT = null; }
         var low = t.toLowerCase();
         if (low.indexOf('đang lưu') !== -1) { show(true, 'Đang lưu…', true); }
-        else if (t.charAt(0) === '✓') { show(false, '✓ Đã lưu', false); idleSoon(1800); }      // ✓
-        else if (t.charAt(0) === '⚠') { show(false, '⚠ Lưu lỗi — thử lại', false); idleSoon(3500); } // ⚠
-        else if (low.indexOf('không có gì') !== -1) { show(false, 'Không có gì để lưu', false); idleSoon(1600); }
+        else if (t.charAt(0) === '✓') {                        // ✓ thành công
+          show(false, '✓ Đã lưu', false); idleSoon(1800);
+          pendingRestore = null; // xác nhận đã lưu → khỏi tô lại
+        }
+        else if (t.charAt(0) === '⚠') {                        // ⚠ lỗi
+          show(false, '⚠ Lưu lỗi — thử lại', false); idleSoon(3500);
+          if (pendingRestore) { // rollback: tô lại vì lưu thất bại
+            pendingRestore.forEach(function (el) { el.classList.add('fc-edited'); });
+            pendingRestore = null;
+          }
+        }
+        else if (low.indexOf('không có gì') !== -1) { show(false, 'Không có gì để lưu', false); idleSoon(1600); pendingRestore = null; }
         else { show(false, 'Lưu', false); } // "• chưa lưu…" hoặc trạng thái khác
       }).observe(flag, { childList: true, characterData: true, subtree: true });
     }
-    wire('fcSaveBtn', 'fcFlag');
-    wire('mcSaveBtn', 'mcFlag');
+    wire('fcSaveBtn', 'fcFlag', '.fc-in.fc-edited');
+    wire('mcSaveBtn', 'mcFlag'); // multi-year: giữ đơn giản, không optimistic
+  })();
+
+  /* -------------------------------------------------------
+     0d. WARM-UP PING — "đánh thức" Apps Script trước khi Lưu
+     ---------------------------------------------------------
+     Backend Apps Script có cold-start (~1s lần đầu sau khi rảnh) + 1 redirect
+     bắt buộc. Bắn 1 GET rẻ (KHÔNG token → backend trả invalid_token ngay, không
+     đọc sheet) khi user mở tab Forecast hoặc bắt đầu gõ sửa → lúc bấm Lưu server
+     đã "ấm". Tối đa 1 lần / 60s. Không chạy ở màn đăng nhập để khỏi đụng trạng
+     thái nút Google (xem PHẦN 0/0b).
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    if (!CFG.API_URL) return;
+    var lastWarm = 0;
+    function warmUp() {
+      if (document.body.classList.contains('login-mode')) return;
+      var now = Date.now();
+      if (now - lastWarm < 60000) return;
+      lastWarm = now;
+      try {
+        window.fetch(CFG.API_URL + '?warm=1', { method: 'GET' })
+          .then(function (r) { return r && r.text && r.text(); })
+          .catch(function () {});
+      } catch (e) {}
+    }
+    var fcTabBtn = document.querySelector('.tab[data-tab="forecast"]');
+    if (fcTabBtn) fcTabBtn.addEventListener('click', warmUp);
+    document.querySelectorAll('.fc-view-btn, .fc-req-btn').forEach(function (b) {
+      b.addEventListener('click', warmUp);
+    });
+    window.addEventListener('hashchange', function () {
+      if ((location.hash || '').indexOf('forecast') !== -1) warmUp();
+    });
+    var fcTbody = $('fcTbody');
+    if (fcTbody) {
+      fcTbody.addEventListener('focusin', warmUp);
+      fcTbody.addEventListener('input', warmUp);
+    }
   })();
 
   /* -------------------------------------------------------
