@@ -698,6 +698,9 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 .req-btn-primary:hover{opacity:.9}
 .req-btn-danger{padding:8px 18px; border-radius:var(--r-pill); border:0; cursor:pointer; font:600 12.5px Inter; color:#fff; background:var(--risk)}
 .req-btn-danger:hover{opacity:.9}
+/* Trạng thái "đang xử lý" ngay trong nút xác nhận Request (spinner + chữ). */
+.req-btn-busy{display:inline-flex; align-items:center; justify-content:center; gap:8px; opacity:.85; cursor:wait}
+.req-btn-busy .spinner{width:15px; height:15px}
 /* Bước chọn loại request (Tạo mới) */
 .req-type-choice{display:grid; grid-template-columns:1fr 1fr; gap:12px}
 .req-type-card{

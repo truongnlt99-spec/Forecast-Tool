@@ -1319,14 +1319,14 @@
           }
           errEl.style.display = 'none';
           var p = d.glExtend, pv = v.split('-');
-          qSubmit({ dealId: d.id, reqType: 'extend', glExtend: pv[2] + '/' + pv[1] + '/' + pv[0], requestLink: link, remove: false });
+          qSubmit({ dealId: d.id, reqType: 'extend', glExtend: pv[2] + '/' + pv[1] + '/' + pv[0], requestLink: link, remove: false }, $('reqOk'));
         } else {
           // Dừng triển khai: xác nhận thêm 1 lần nữa (popup nhỏ) theo spec
           qMiniConfirm(
             'Dừng triển khai deal?',
             'Xác nhận dừng triển khai <b>' + qEsc(d.company) + '</b>?<br>Thao tác này sẽ loại deal khỏi CR của mọi tháng.',
             'Xác nhận dừng', 'req-btn-danger',
-            function () { qSubmit({ dealId: d.id, reqType: 'stop', glExtend: '', requestLink: link, remove: false }); }
+            function (cfBtn) { qSubmit({ dealId: d.id, reqType: 'stop', glExtend: '', requestLink: link, remove: false }, cfBtn); }
           );
         }
       });
@@ -1336,31 +1336,60 @@
       reqConfirmTitle.textContent = title;
       reqConfirmBody.innerHTML =
         '<p style="line-height:1.7">' + bodyHtml + '</p>' +
+        '<div class="req-error" id="reqCfErr"></div>' +
         '<div class="req-actions">' +
           '<button type="button" class="req-btn-ghost" id="reqCfCancel">Huỷ</button>' +
           '<button type="button" class="' + okClass + '" id="reqCfOk">' + okLabel + '</button>' +
         '</div>';
       qOpenModal(reqConfirmModal);
       $('reqCfCancel').addEventListener('click', function () { qCloseModal(reqConfirmModal); });
-      $('reqCfOk').addEventListener('click', function () { qCloseModal(reqConfirmModal); onOk(); });
+      // KHÔNG đóng modal ngay ở đây — để qSubmit hiện trạng thái ("Đang…") ngay
+      // trên nút này rồi tự đóng khi backend trả về ok (lỗi thì giữ modal để thử lại).
+      $('reqCfOk').addEventListener('click', function () { onOk($('reqCfOk')); });
+    }
+
+    // Gắn trạng thái "đang xử lý" ngay TRONG nút vừa bấm (spinner + chữ), khoá nút;
+    // trả về hàm khôi phục lại nhãn/độ mở khoá ban đầu (dùng khi lưu lỗi).
+    var REQ_SPIN = '<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle></svg>';
+    function qBtnLoading(btn, busyText) {
+      if (!btn) return function () {};
+      var orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('req-btn-busy');
+      btn.innerHTML = REQ_SPIN + '<span>' + busyText + '</span>';
+      return function restore() {
+        btn.disabled = false;
+        btn.classList.remove('req-btn-busy');
+        btn.innerHTML = orig;
+      };
     }
 
     var qSubmitting = false;
-    function qSubmit(payload) {
+    function qSubmit(payload, btn) {
       if (qSubmitting) return;
       qSubmitting = true;
-      var flag = $('reqFlag'); if (flag) flag.textContent = 'đang lưu…';
+      var isDel = !!payload.remove;
+      var restore = qBtnLoading(btn, isDel ? 'Đang xoá…' : 'Đang lưu…');
       qSaveRequest(payload, function (err) {
         qSubmitting = false;
-        if (flag) flag.textContent = '';
-        if (err) { qToast('⚠ Không lưu được: ' + err, 'err'); return; }
+        if (err) {
+          restore(); // trả nút về trạng thái bấm được, GIỮ modal để thử lại
+          var errEl = $('reqCfErr') || $('reqErr');
+          if (errEl) { errEl.textContent = '⚠ Không lưu được: ' + err; errEl.style.display = 'block'; }
+          qToast('⚠ Không lưu được: ' + err, 'err');
+          return;
+        }
+        // thành công: cập nhật dữ liệu + nháy "✓ Đã lưu/Đã xoá" trên nút rồi đóng modal
         qApplyLocal(payload);
-        qCloseModal(reqModal);
-        qCloseModal(reqConfirmModal);
-        qToast(payload.remove
-          ? '✓ Đã xoá đề xuất — nhớ bấm "Làm mới dữ liệu" nếu cần đồng bộ lại toàn trang.'
-          : (payload.reqType === 'extend' ? '✓ Đã lưu đề xuất Gia hạn Go-live về sheet Database (cột Ngày Go-live gia hạn).'
-                                          : '✓ Đã lưu Dừng triển khai về sheet Database (cột Dừng triển khai).'), 'ok');
+        if (btn) btn.innerHTML = '✓ ' + (isDel ? 'Đã xoá' : 'Đã lưu');
+        setTimeout(function () {
+          qCloseModal(reqModal);
+          qCloseModal(reqConfirmModal);
+          qToast(isDel
+            ? '✓ Đã xoá đề xuất — nhớ bấm "Làm mới dữ liệu" nếu cần đồng bộ lại toàn trang.'
+            : (payload.reqType === 'extend' ? '✓ Đã lưu đề xuất Gia hạn Go-live về sheet Database (cột Ngày Go-live gia hạn).'
+                                            : '✓ Đã lưu Dừng triển khai về sheet Database (cột Dừng triển khai).'), 'ok');
+        }, 400);
       });
     }
 
@@ -1655,7 +1684,7 @@
           qMiniConfirm('Xoá đề xuất?',
             'Xoá đề xuất <b>' + (type === 'stop' ? 'Dừng triển khai' : 'Gia hạn') + '</b> của <b>' + qEsc(d.company) + '</b>?<br>Dữ liệu tương ứng trên sheet Database cũng sẽ được xoá.',
             'Xoá đề xuất', 'req-btn-danger',
-            function () { qSubmit({ dealId: d.id, reqType: type, glExtend: '', requestLink: '', remove: true }); });
+            function (cfBtn) { qSubmit({ dealId: d.id, reqType: type, glExtend: '', requestLink: '', remove: true }, cfBtn); });
         });
       });
     }
