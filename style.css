@@ -705,7 +705,7 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 /* =========================================================
    PRODUCT FEEDBACK (PF) MODAL
    ========================================================= */
-.pf-panel{width:min(940px,100%)}
+.pf-panel{width:min(1080px,100%); max-height:88vh}
 .pf-wrap{display:flex; gap:22px; align-items:flex-start}
 .pf-col{flex:1 1 0; min-width:0}
 .pf-list-col{border-left:1px solid var(--stroke-soft); padding-left:22px}
@@ -729,7 +729,7 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 .pf-submit{margin-top:4px}
 
 .pf-filters{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px}
-.pf-list{display:flex; flex-direction:column; gap:10px; max-height:56vh; overflow:auto; padding-right:4px}
+.pf-list{display:flex; flex-direction:column; gap:10px; max-height:64vh; overflow:auto; padding-right:4px}
 .pf-loading,.pf-empty{font-size:12.5px; color:var(--tx-3); padding:14px 4px}
 .pf-item{padding:12px 14px; border-radius:var(--r-md); background:var(--glass); border:1px solid var(--stroke-soft)}
 .pf-item-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
@@ -751,6 +751,53 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
   .pf-wrap{flex-direction:column}
   .pf-list-col{border-left:0; border-top:1px solid var(--stroke-soft); padding-left:0; padding-top:18px}
   .pf-list{max-height:none}
+}
+
+/* =========================================================
+   SUB-BUTTON "CAREER PATH" (Overview) — sắp ra mắt
+   ========================================================= */
+.nav-sub .nav-sub-btn{
+  display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:1px solid transparent;
+  border-radius:10px; padding:7px 12px; font:600 12.5px Inter; color:#8E97B8; background:transparent; cursor:default;
+}
+.nav-sub-badge{margin-left:auto; font:700 8.5px Inter; letter-spacing:.06em; text-transform:uppercase;
+  padding:2px 7px; border-radius:var(--r-pill); background:rgba(255,255,255,.08); color:#9AA3C4}
+.nav-group-fly .nav-sub-btn{display:block; width:100%; text-align:left; border-radius:10px; padding:7px 10px;
+  font:600 12px Inter; color:#9AA3C4; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10); cursor:default}
+
+/* =========================================================
+   CHANGELOG — accordion collapse/expand + popup rộng hơn
+   ========================================================= */
+#changelogModal .modal-panel{width:min(760px,100%); max-height:88vh}
+.cl-collapsible{padding-left:0; border-left:0; border:1px solid var(--stroke-soft); border-radius:var(--r-md);
+  background:var(--glass); overflow:hidden}
+.cl-head{display:flex; align-items:center; gap:12px; padding:12px 15px; cursor:pointer; user-select:none}
+.cl-head:hover{background:var(--glass-2)}
+.cl-head-meta{display:flex; flex-direction:column; gap:2px; flex:1; min-width:0}
+.cl-collapsible .cl-title{margin:0}
+.cl-chev{flex:none; color:var(--tx-3); font-size:12px; transition:transform .2s var(--ease)}
+.cl-entry.cl-open .cl-chev{transform:rotate(90deg)}
+.cl-content{display:grid; grid-template-rows:0fr; transition:grid-template-rows .26s var(--ease)}
+.cl-content > *{overflow:hidden; min-height:0; margin:0; padding:0 15px}
+.cl-entry.cl-open .cl-content{grid-template-rows:1fr}
+.cl-entry.cl-open .cl-content > *{padding-top:2px; padding-bottom:14px}
+
+/* =========================================================
+   DONATION — 2 cột: QR trái + quote & nút phải
+   ========================================================= */
+.don-panel{width:min(720px,100%)}
+.don-wrap{display:flex; gap:24px; align-items:center}
+.don-qr{flex:none; width:210px; height:210px; border-radius:var(--r-md); overflow:hidden; background:#fff;
+  display:flex; align-items:center; justify-content:center; border:1px solid var(--stroke-soft)}
+.don-qr img{width:100%; height:100%; object-fit:contain; display:block}
+.don-qr-ph{color:#8A90A6; font:600 12px Inter; text-align:center; line-height:1.5}
+.don-right{flex:1; min-width:0; display:flex; flex-direction:column; gap:18px}
+.don-quote{margin:0; font:italic 500 15px/1.7 "Space Grotesk"; color:var(--tx);
+  border-left:3px solid var(--lav); padding-left:14px}
+.don-quote cite{display:block; margin-top:8px; font:500 12.5px Inter; font-style:normal; color:var(--tx-3)}
+@media (max-width:600px){
+  .don-wrap{flex-direction:column}
+  .don-qr{width:180px; height:180px}
 }
 /* Bước chọn loại request (Tạo mới) */
 .req-type-choice{display:grid; grid-template-columns:1fr 1fr; gap:12px}

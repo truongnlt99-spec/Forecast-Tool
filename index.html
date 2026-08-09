@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -163,11 +163,24 @@
       <!-- QUAN TRỌNG: .tab[data-tab] là hook app.js dùng để chuyển màn.
            Giữ nguyên id tabNav + class tab + data-tab. -->
       <nav class="tabs" id="tabNav">
-        <button class="tab active" data-tab="overview">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
-          <span class="nav-label">Overview</span>
-          <span class="nav-fly">Overview</span>
-        </button>
+        <div class="nav-group" id="navOverviewGroup">
+          <button class="tab active" data-tab="overview">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+            <span class="nav-label">Overview</span>
+            <span class="nav-fly">Overview</span>
+          </button>
+
+          <!-- Sub-button "Career path" — sắp ra mắt. Dùng class nav-sub-btn (KHÔNG
+               phải fc-view-btn) để app.js không gắn nhầm sự kiện. -->
+          <div class="nav-sub"><div><div class="nav-sub-inner">
+            <button type="button" class="nav-sub-btn nav-sub-soon" disabled>Career path<span class="nav-sub-badge">Sắp ra mắt</span></button>
+          </div></div></div>
+
+          <div class="nav-group-fly">
+            <div class="nav-group-fly-title">Overview</div>
+            <button type="button" class="nav-sub-btn nav-sub-soon" disabled>Career path · Sắp ra mắt</button>
+          </div>
+        </div>
 
         <div class="nav-group" id="navForecastGroup">
           <button class="tab" data-tab="forecast">
@@ -780,13 +793,21 @@
        MODAL: DONATION
        ===================================================== -->
   <div class="modal-overlay" id="donationModal">
-    <div class="modal-panel">
+    <div class="modal-panel don-panel">
       <div class="modal-head">
         <h3>💝 Donation</h3>
         <button class="modal-x" id="donationClose" aria-label="Đóng">✕</button>
       </div>
       <div class="modal-body">
-        <a class="gbtn" id="donationLink" href="https://script.google.com/a/macros/base.vn/s/AKfycbyCR41vDZu_-HpzdmxepOQlTQX4bZut-8kdrF8FebW3flKa97ZmppsmkzGKztLS7pze/exec" target="_blank" rel="noopener noreferrer">Ghi nhận nỗ lực của team tại đây</a>
+        <div class="don-wrap">
+          <div class="don-qr" id="donationQr">
+            <div class="don-qr-ph">Mã QR<br>sắp cập nhật</div>
+          </div>
+          <div class="don-right">
+            <blockquote class="don-quote">“No act of kindness, no matter how small, is ever wasted.”<cite>— Aesop</cite></blockquote>
+            <a class="gbtn" id="donationLink" href="https://script.google.com/a/macros/base.vn/s/AKfycbyCR41vDZu_-HpzdmxepOQlTQX4bZut-8kdrF8FebW3flKa97ZmppsmkzGKztLS7pze/exec" target="_blank" rel="noopener noreferrer">Ghi nhận Innovation</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -861,7 +882,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=23"></script>
+  <script src="ui.js?v=24"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=7"></script>
 

@@ -662,6 +662,8 @@
     // thay thế hẳn cho toggle từng đặt trên header.
     var fcNavGroup = $('navForecastGroup');
     if (fcNavGroup) fcNavGroup.classList.toggle('open', key === 'forecast');
+    var ovNavGroup = $('navOverviewGroup');
+    if (ovNavGroup) ovNavGroup.classList.toggle('open', key === 'overview');
 
     // #userBox vốn có sẵn margin-left:auto (để tự đẩy sát phải khi không có
     // gì khác). Ở tab Scorecard, #hteScorecard CŨNG có margin-left:auto để
@@ -1942,15 +1944,52 @@
     ];
 
     function clInjectExtra() {
-      if (clBody.querySelector('[data-extra-cl]')) return;
-      var html = EXTRA_CHANGELOG.map(function (rel) {
-        return '<div class="cl-entry" data-extra-cl="1">' +
-          '<div class="cl-date">' + clEsc(rel.date) + '</div>' +
-          '<div class="cl-title">' + clEsc(rel.title) + '</div>' +
-          '<div class="cl-body">' + rel.body + '</div>' +
-          '</div>';
-      }).join('');
-      clBody.insertAdjacentHTML('afterbegin', html);
+      if (!clBody.querySelector('[data-extra-cl]')) {
+        var html = EXTRA_CHANGELOG.map(function (rel) {
+          return '<div class="cl-entry" data-extra-cl="1">' +
+            '<div class="cl-date">' + clEsc(rel.date) + '</div>' +
+            '<div class="cl-title">' + clEsc(rel.title) + '</div>' +
+            '<div class="cl-body">' + rel.body + '</div>' +
+            '</div>';
+        }).join('');
+        clBody.insertAdjacentHTML('afterbegin', html);
+      }
+      clMakeCollapsible();
+    }
+
+    // Biến mỗi .cl-entry (do app.js/observer render) thành 1 accordion có nút
+    // collapse/expand — dễ tìm changelog cũ hơn là kéo dài. Idempotent qua
+    // data-cl-done; chỉ đụng bên trong từng .cl-entry nên không kích lại observer.
+    function clMakeCollapsible() {
+      var entries = clBody.querySelectorAll('.cl-entry');
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e.getAttribute('data-cl-done')) continue;
+        e.setAttribute('data-cl-done', '1');
+        e.classList.add('cl-collapsible');
+        var date = e.querySelector('.cl-date');
+        var title = e.querySelector('.cl-title');
+        var content = e.querySelector('.cl-body, .cl-list');
+        var head = document.createElement('div');
+        head.className = 'cl-head';
+        var meta = document.createElement('div');
+        meta.className = 'cl-head-meta';
+        if (date) meta.appendChild(date);
+        if (title) meta.appendChild(title);
+        head.appendChild(meta);
+        var chev = document.createElement('span');
+        chev.className = 'cl-chev'; chev.textContent = '▸';
+        head.appendChild(chev);
+        var wrap = document.createElement('div');
+        wrap.className = 'cl-content';
+        if (content) wrap.appendChild(content);
+        e.textContent = '';
+        e.appendChild(head); e.appendChild(wrap);
+        (function (entry) { head.addEventListener('click', function () { entry.classList.toggle('cl-open'); }); })(e);
+      }
+      // Mặc định mở entry đầu tiên (mới nhất) cho dễ thấy.
+      var first = clBody.querySelector('.cl-entry');
+      if (first && !first.classList.contains('cl-open')) first.classList.add('cl-open');
     }
 
     new MutationObserver(clInjectExtra).observe(clBody, { childList: true });
