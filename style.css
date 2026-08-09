@@ -319,10 +319,10 @@ body.app-mode .app-wrapper{display:grid}
 
 /* Mở rộng: nếu nội dung sidebar cao hơn màn hình (VD mở sub-menu Forecast),
    cho phép cuộn để nút "Thu gọn menu" và các mục dưới luôn bấm được. */
-.app-wrapper:not(.collapsed) .side{overflow-y:auto; overflow-x:hidden; scrollbar-width:thin}
-.app-wrapper:not(.collapsed) .side::-webkit-scrollbar{width:8px}
-.app-wrapper:not(.collapsed) .side::-webkit-scrollbar-thumb{background:var(--stroke); border-radius:8px}
-.app-wrapper:not(.collapsed) .side::-webkit-scrollbar-track{background:transparent}
+.app-wrapper:not(.collapsed) .side{overflow-y:auto; overflow-x:hidden}
+/* Ẩn thanh cuộn của menu (vẫn lăn/kéo được, chỉ giấu cái thanh cho gọn). */
+.side{scrollbar-width:none; -ms-overflow-style:none}
+.side::-webkit-scrollbar{width:0; height:0; display:none}
 
 /* Tạm ẩn nút Playbook */
 #playbookBtn{display:none}
