@@ -705,7 +705,7 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 /* =========================================================
    PRODUCT FEEDBACK (PF) MODAL
    ========================================================= */
-.pf-panel{width:min(1080px,100%); max-height:88vh}
+.pf-panel{width:min(1580px,96vw); max-height:90vh}
 .pf-wrap{display:flex; gap:22px; align-items:flex-start}
 .pf-col{flex:1 1 0; min-width:0}
 .pf-list-col{border-left:1px solid var(--stroke-soft); padding-left:22px}
