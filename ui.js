@@ -1621,7 +1621,19 @@
     // Dải 10 KPI card (CHS/ACR + Tử/Mẫu số CR) nằm ngoài các block Năm 1/Năm 2++/
     // Request nên mặc định vẫn hiện ở màn Request — ẩn đi cho gọn, hiện lại khi rời.
     var kpiStrip = document.querySelector('.fc-kpis-10');
+    var switchingToReq = false; // chặn qHideReqView do hashchange khi ta chủ động chuyển tab
     function qShowReqView() {
+      // Bấm thẳng "Request" khi đang ở tab khác (Overview/Scorecard): panel
+      // Forecast đang ẩn nên sẽ không thấy gì. Chuyển sang tab Forecast trước.
+      var fcPanel = document.getElementById('panel-forecast');
+      if (fcPanel && getComputedStyle(fcPanel).display === 'none') {
+        var fcTab = document.querySelector('.tab[data-tab="forecast"]');
+        if (fcTab) {
+          switchingToReq = true;
+          fcTab.click(); // app.js chuyển tab (đồng bộ). hashchange sau đó bị cờ trên chặn.
+          setTimeout(function () { switchingToReq = false; }, 0);
+        }
+      }
       var y1 = $('fcYear1Block'), mb = $('fcMultiBlock');
       if (y1) y1.style.display = 'none';
       if (mb) mb.style.display = 'none';
@@ -1632,6 +1644,7 @@
       qRenderReqList();
     }
     function qHideReqView() {
+      if (switchingToReq) return; // đang chủ động vào màn Request → bỏ qua
       if (reqBlock) reqBlock.style.display = 'none';
       if (kpiStrip) kpiStrip.style.display = '';
       document.querySelectorAll('.fc-req-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -1916,6 +1929,22 @@
     // Thêm entry mới lên ĐẦU mảng này mỗi lần cập nhật tool
     // (tương tự cách app.js quản lý mảng CHANGELOG của nó).
     var EXTRA_CHANGELOG = [
+      {
+        date: '09/08/2026',
+        title: 'Product Feedback — góp ý & theo dõi tính năng',
+        body:
+          '<h5>Gửi góp ý trực tiếp trong tool</h5>' +
+          '<ul>' +
+            '<li>Mở mục <b>Product Feedback</b> ở menu bên trái để gửi đề xuất tính năng mới, báo lỗi hoặc góp ý cải tiến.</li>' +
+            '<li>Điền Tên, Loại (Tính năng mới / Cải tiến / Lỗi / Khác), Mô tả, ngày bạn mong có tính năng, và đính kèm ảnh/tệp nếu cần.</li>' +
+          '</ul>' +
+          '<h5>Theo dõi trạng thái góp ý của bạn</h5>' +
+          '<ul>' +
+            '<li>Ngay trong popup có danh sách các góp ý bạn từng gửi, kèm trạng thái: <b>Received</b> (đã tiếp nhận), <b>In Progress</b> (đang làm), <b>Won\'t Do</b> (chưa/không thực hiện), <b>Completed</b> (hoàn thành).</li>' +
+            '<li>Khi đội phát triển đổi trạng thái, bạn sẽ nhận email báo — khỏi phải vào kiểm tra thủ công.</li>' +
+            '<li>Có thể lọc danh sách theo từng trạng thái để dễ theo dõi.</li>' +
+          '</ul>',
+      },
       {
         date: '08/08/2026',
         title: 'Gia hạn & Dừng triển khai deal',
