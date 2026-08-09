@@ -302,23 +302,24 @@ body.app-mode .app-wrapper{display:grid}
   border-radius:50%; background:var(--risk); box-shadow:0 0 0 2px var(--bg);
 }
 
-/* Thu gọn: mỗi icon là 1 "tile" nền gradient logo, hình bên trong màu trắng —
-   nhìn rõ & đồng bộ với logo hơn là icon xám trên nền trong suốt. */
+/* Thu gọn: mỗi icon là tile NỀN TRẮNG, hình icon tô màu thương hiệu — gọn,
+   không quá nổi.
+   gap:0 để icon nằm ĐÚNG GIỮA tile: trước đây nút vẫn giữ gap:11px của .tab,
+   cộng thêm .nav-label rộng 0 nằm sau icon → flex canh giữa cả cụm khiến icon
+   bị lệch sang trái ~nửa gap. Bỏ gap là hết lệch. */
 .app-wrapper.collapsed .tab,
 .app-wrapper.collapsed .nav-item{
-  background:linear-gradient(140deg,var(--cyan),var(--lav) 55%,var(--magenta));
-  color:#fff; box-shadow:0 5px 15px rgba(61,92,255,.30);
+  gap:0; background:#fff;
+  box-shadow:0 2px 8px rgba(20,24,60,.14), inset 0 0 0 1px rgba(20,24,60,.06);
 }
 .app-wrapper.collapsed .tab svg,
-.app-wrapper.collapsed .nav-item svg{stroke:#fff}
+.app-wrapper.collapsed .nav-item svg{stroke:var(--lav)}
 .app-wrapper.collapsed .tab:hover,
-.app-wrapper.collapsed .nav-item:hover{
-  background:linear-gradient(140deg,var(--cyan),var(--lav) 55%,var(--magenta));
-  color:#fff; opacity:.92;
-}
+.app-wrapper.collapsed .nav-item:hover{background:#fff; opacity:.9}
 .app-wrapper.collapsed .tab.active{
-  box-shadow:inset 0 0 0 2px #fff, 0 6px 18px color-mix(in srgb,var(--cyan) 55%,transparent);
+  background:#fff; box-shadow:inset 0 0 0 2px var(--lav), 0 4px 14px color-mix(in srgb,var(--lav) 40%,transparent);
 }
+.app-wrapper.collapsed .tab.active svg{stroke:var(--cyan)}
 .app-wrapper.collapsed .tab.active::before{display:none} /* bỏ thanh dọc trái, không hợp với tile vuông */
 
 /* Mở rộng: nếu nội dung sidebar cao hơn màn hình (VD mở sub-menu Forecast),
