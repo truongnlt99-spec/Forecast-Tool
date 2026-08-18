@@ -1704,7 +1704,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       byM[m].dat += r.dtDat;
     });
     var cd = byM[cur] || { phai: 0, dat: 0 };
-    var crPct = (cd.phai > 0) ? Math.round(cd.dat / cd.phai * 1000) / 10 : null;
+    var crPct = (cd.phai > 0) ? Math.round(cd.dat / cd.phai * 10000) / 100 : null;
 
     var numEl = $('fcCrNum'), numSub = $('fcCrNumSub');
     if (numEl) numEl.textContent = fmtMoney(cd.dat);
@@ -1712,7 +1712,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
     var denEl = $('fcCrDen'), denSub = $('fcCrDenSub');
     if (denEl) denEl.textContent = fmtMoney(cd.phai);
-    if (denSub) denSub.textContent = 'CR = ' + (crPct == null ? '—' : String(crPct).replace('.', ',') + '%');
+    if (denSub) denSub.textContent = 'CR = ' + (crPct == null ? '—' : Number(crPct).toFixed(2).replace('.', ',') + '%');
   }
 
   function fcRenderTable() {
@@ -2088,7 +2088,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       sumPhai += d.dtPhai || 0;
       sumDat += r.dtDat;
     });
-    var cr = (crDeals.length && sumPhai > 0) ? Math.round(sumDat / sumPhai * 1000) / 10 : null;
+    var cr = (crDeals.length && sumPhai > 0) ? Math.round(sumDat / sumPhai * 10000) / 100 : null;
 
     // SRR theo policy: Σ DT phần mềm có CHS_CS ≥ 50 ÷ Σ DT phần mềm cần tính tại tháng đo
     function srr(list, ky) {
@@ -2101,7 +2101,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
         sumAll += v;
         if (c != null && c >= 50) { sumOk += v; nOk++; }
       });
-      return { v: sumAll > 0 ? Math.round(sumOk / sumAll * 1000) / 10 : null, nOk: nOk, n: list.length, sumOk: sumOk, sumAll: sumAll };
+      return { v: sumAll > 0 ? Math.round(sumOk / sumAll * 10000) / 100 : null, nOk: nOk, n: list.length, sumOk: sumOk, sumAll: sumAll };
     }
     var s1 = srr(t1Deals, 'T1'), s4 = srr(t4Deals, 'T4');
 
@@ -2157,7 +2157,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   function dashRenderPerf(def, p, rating) {
     var grid = $('perfGrid');
     var cards = [];
-    var pctTxt = function (v) { return v == null ? '—' : String(v).replace('.', ',') + '%'; };
+    var pctTxt = function (v) { return v == null ? '—' : Number(v).toFixed(2).replace('.', ',') + '%'; };
 
     if (def.group === 'CSA') {
       var pctOfOut = p.rev && def.rev.out ? Math.min(100, Math.round(p.rev / def.rev.out * 100)) : 0;

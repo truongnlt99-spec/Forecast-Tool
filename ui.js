@@ -319,6 +319,17 @@
   })();
 
   /* -------------------------------------------------------
+     0e. NÚT ⤵ Ở CARD "MẪU SỐ TÍNH CR" — trỏ tới cùng danh sách
+        deal như nút Tử số. app.js chỉ gắn sự kiện cho #fcCrNumDetail,
+        nên ở đây cho nút mẫu số (#fcCrDenDetail) bấm ké nút tử số →
+        cùng lọc "deal thuộc kỳ ghi nhận CR" mà không phải đụng app.js.
+     ------------------------------------------------------- */
+  (function () {
+    var denBtn = $('fcCrDenDetail'), numBtn = $('fcCrNumDetail');
+    if (denBtn && numBtn) denBtn.addEventListener('click', function () { numBtn.click(); });
+  })();
+
+  /* -------------------------------------------------------
      1. THU GỌN / MỞ RỘNG SIDEBAR
      ------------------------------------------------------- */
   var wrapper = $('appWrapper');
