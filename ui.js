@@ -52,7 +52,9 @@
     if (method === 'POST') {
       try { var b = JSON.parse((init && init.body) || '{}'); if (b && b.action === 'submitFeedback') canRetry = false; } catch (e) {}
     }
-    var MAX = canRetry ? 3 : 1; // tối đa 3 lần (1 chính + 2 thử lại)
+    // GET: tối đa 3 lần (1 chính + 2 thử lại). POST idempotent: chỉ 2 lần (1 thử
+    // lại) để lỡ save chậm cũng không nhân thời gian quay lên nhiều. submitFeedback: 1.
+    var MAX = canRetry ? (method === 'POST' ? 2 : 3) : 1;
 
     var isLoginLoad = document.body.classList.contains('login-mode');
     if (isLoginLoad && loginBtnCtl) loginBtnCtl.authenticating();
