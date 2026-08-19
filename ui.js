@@ -358,6 +358,28 @@
   })();
 
   /* -------------------------------------------------------
+     0f. NHÃN "Dừng triển khai" (Overview) — đổi màu cho khác
+        "Đang triển khai". app.js (glBadge) gộp cả hai vào class
+        gl-doing (cùng màu tím). Ở đây quan sát bảng deal, badge
+        nào chữ "Dừng triển khai" thì đổi sang gl-stopped (xám).
+        Chỉ đổi class (không đụng childList) nên không lặp observer.
+     ------------------------------------------------------- */
+  (function () {
+    var tb = $('dealTbody');
+    if (!tb) return;
+    function recolor() {
+      tb.querySelectorAll('.badge.gl-doing').forEach(function (b) {
+        if ((b.textContent || '').toLowerCase().indexOf('dừng') !== -1) {
+          b.classList.remove('gl-doing');
+          b.classList.add('gl-stopped');
+        }
+      });
+    }
+    new MutationObserver(recolor).observe(tb, { childList: true, subtree: true });
+    recolor();
+  })();
+
+  /* -------------------------------------------------------
      1. THU GỌN / MỞ RỘNG SIDEBAR
      ------------------------------------------------------- */
   var wrapper = $('appWrapper');

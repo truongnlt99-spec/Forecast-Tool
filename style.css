@@ -904,6 +904,8 @@ tr.detail-row td{background:var(--glass-2); padding:0}
 .badge.gl-done,.badge.st-ok{background:color-mix(in srgb,var(--healthy) 16%,transparent); color:var(--healthy)}
 .badge.gl-doing,.badge.st-wip{background:color-mix(in srgb,var(--lav) 20%,transparent); color:var(--lav)}
 .badge.gl-overdue,.badge.st-late{background:color-mix(in srgb,var(--risk) 16%,transparent); color:var(--risk)}
+/* "Dừng triển khai": màu xám (đã ngưng) — khác hẳn tím "Đang triển khai" */
+.badge.gl-stopped{background:color-mix(in srgb,var(--tx-3) 22%,transparent); color:var(--tx-3)}
 .badge.st-over{background:color-mix(in srgb,var(--amber) 20%,transparent); color:var(--amber)}
 .badge.ky-t1{background:var(--strong-bg); color:var(--strong-tx)}
 .badge.ky-t4{background:var(--healthy-bg); color:var(--healthy-tx)}
