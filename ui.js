@@ -33,34 +33,60 @@
   // Khai báo sớm ở scope ngoài để wrapper fetch (chạy runtime) dùng được.
   var loginBtnCtl = null;
 
+  // AUTO-RETRY khi Apps Script quá tải trả về trang HTML (thay vì JSON) hoặc
+  // lỗi mạng thoáng qua → tool tự thử lại vài lần thay vì rớt ra màn đăng nhập /
+  // "lưu lỗi". An toàn: GET luôn retry; POST ghi theo Deal ID (saveRows/saveRequest/
+  // multiYearRows/register) là idempotent nên retry vô hại; RIÊNG submitFeedback
+  // (thêm dòng mới) KHÔNG retry để tránh gửi trùng.
+  // Lưu ý: đây là "băng cứu thương" giảm tần suất lỗi, KHÔNG chữa gốc (trần chịu
+  // tải của Apps Script) — gốc cần chuyển sang Firebase/BigQuery.
   var _fetch = window.fetch;
   window.fetch = function (input, init) {
-    var p = _fetch.call(window, input, init);
-    try {
-      var CFG = window.CS_TOOL_CONFIG || {};
-      var url = typeof input === 'string' ? input : ((input && input.url) || '');
-      if (CFG.API_URL && url.indexOf(CFG.API_URL) === 0) {
-        // Có request API bay đi trong lúc còn ở màn đăng nhập = credential Google
-        // đã nhận xong và app.js đang tải dữ liệu (loadDeals). Khoá nút vào trạng
-        // thái "Đang đăng nhập…" cho tới khi vào app (đổi mode) hoặc lỗi — tránh
-        // khoảng trống nút trông nhàn rỗi khiến user tưởng hụt rồi bấm lại nhiều lần.
-        var isLoginLoad = document.body.classList.contains('login-mode');
-        if (isLoginLoad && loginBtnCtl) loginBtnCtl.authenticating();
-        p = p.then(function (res) {
-          try {
-            res.clone().json().then(function (d) {
-              if (d && d.profile) onProfileFromApi(d.profile);
-            }).catch(function () {});
-          } catch (e) {}
-          if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
-          return res;
-        }, function (err) {
-          if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
-          throw err;
-        });
-      }
-    } catch (e) {}
-    return p;
+    var CFG = window.CS_TOOL_CONFIG || {};
+    var url = typeof input === 'string' ? input : ((input && input.url) || '');
+    var isApi = !!(CFG.API_URL && url.indexOf(CFG.API_URL) === 0);
+    if (!isApi) return _fetch.call(window, input, init);
+
+    var method = ((init && init.method) || 'GET').toUpperCase();
+    var canRetry = true;
+    if (method === 'POST') {
+      try { var b = JSON.parse((init && init.body) || '{}'); if (b && b.action === 'submitFeedback') canRetry = false; } catch (e) {}
+    }
+    var MAX = canRetry ? 3 : 1; // tối đa 3 lần (1 chính + 2 thử lại)
+
+    var isLoginLoad = document.body.classList.contains('login-mode');
+    if (isLoginLoad && loginBtnCtl) loginBtnCtl.authenticating();
+
+    function looksHtml(res, txt) {
+      var ct = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+      return ct.indexOf('html') !== -1 || /^\s*</.test(txt || '');
+    }
+    function wait(n) {
+      var ms = 500 * n + Math.floor(Math.random() * 400); // backoff + jitter
+      return new Promise(function (r) { setTimeout(r, ms); });
+    }
+    function attempt(n) {
+      return _fetch.call(window, input, init).then(function (res) {
+        return res.clone().text().then(function (txt) {
+          if (looksHtml(res, txt) && n < MAX) {
+            return wait(n).then(function () { return attempt(n + 1); });
+          }
+          try { var d = JSON.parse(txt); if (d && d.profile) onProfileFromApi(d.profile); } catch (e) {}
+          return res; // res gốc chưa bị đọc → app.js đọc bình thường
+        }, function () { return res; });
+      }, function (err) {
+        if (n < MAX) return wait(n).then(function () { return attempt(n + 1); });
+        throw err;
+      });
+    }
+
+    return attempt(1).then(function (res) {
+      if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
+      return res;
+    }, function (err) {
+      if (isLoginLoad && loginBtnCtl) loginBtnCtl.settle();
+      throw err;
+    });
   };
 
   function onProfileFromApi(profile) {
