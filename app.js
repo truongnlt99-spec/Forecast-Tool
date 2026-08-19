@@ -1849,7 +1849,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     })
       .then(function (r) { return r.text(); })
       .then(function (text) {
-        var d; try { d = JSON.parse(text); } catch (e) { d = { ok: true }; }
+        var d; try { d = JSON.parse(text); } catch (e) { d = { ok: false, error: 'phản hồi không hợp lệ (có thể do quá tải) — thử lại' }; }
         saveSessionToken_(d);
         if (d.ok) {
           document.querySelectorAll('.fc-in.fc-edited').forEach(function(el) { el.classList.remove('fc-edited'); });
@@ -2007,7 +2007,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     })
       .then(function (r) { return r.text(); })
       .then(function (text) {
-        var d; try { d = JSON.parse(text); } catch (e) { d = { ok: true }; }
+        var d; try { d = JSON.parse(text); } catch (e) { d = { ok: false, error: 'phản hồi không hợp lệ (có thể do quá tải) — thử lại' }; }
         saveSessionToken_(d);
         if (d.ok) {
           // QUAN TRỌNG: cập nhật thẳng vào fcDeals (bộ nhớ) đúng số vừa lưu, để
