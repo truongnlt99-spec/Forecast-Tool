@@ -72,3 +72,18 @@ từng dòng khớp 100% với sheet.
 
 Khi các nhóm "Cần chốt" đã quyết, chỉ cần sửa view trong `supabase/01_tao_bang.sql` / `02_api.sql`,
 không phải nạp lại dữ liệu.
+
+## 6. Đồng bộ BigQuery → Supabase (tự chạy mỗi giờ)
+
+Script `supabase/apps-script/DongBoSupabase.gs` chạy bằng tài khoản Google của bạn (đã có quyền
+BigQuery `base-data-analyst`). Mỗi lượt: đọc query của tab "Bigquery" (Connected Sheets) → chạy thẳng
+trên BigQuery → đẩy vào `deals_raw` qua hàm `sync_deals_raw` theo Deal ID. Chỉ ghi `deals_raw`;
+số CS nhập (`deal_inputs`) không bị đụng. Deal rớt khỏi query → `is_active = false` (ẩn, không xoá).
+Có chốt an toàn: lượt nào thấy < 50% số deal đang active thì dừng, không ẩn hàng loạt.
+
+1. https://script.google.com → **Dự án mới** → đặt tên `Dong bo Supabase` → xoá code mẫu → dán toàn bộ file.
+2. Cột trái **Services (+)** → **BigQuery API** → Add.
+3. **Project Settings** (bánh răng) → **Script Properties** → Add: `SUPABASE_SERVICE_KEY` = key *secret*
+   (Supabase → Project Settings → API Keys → Secret keys). Không dán key vào code hay chat.
+4. Chọn hàm `dongBoDeals` → **Run** → Allow quyền → xem Execution log (`Xong: cập nhật N deal...`).
+5. Ổn thì chọn `caiDatTrigger` → **Run** (cài lịch mỗi giờ). Lỗi sẽ được Google gửi email.

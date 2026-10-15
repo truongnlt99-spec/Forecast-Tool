@@ -15,20 +15,21 @@
  *  3. Project Settings (bánh răng) → Script Properties → Add script property:
  *       SUPABASE_SERVICE_KEY = key "secret"/"service_role" ở Supabase
  *       (Project Settings → API Keys). KHÔNG dán key vào code hay chat.
- *  4. Điền BQ_PROJECT_ID và BQ_QUERY bên dưới. Không nhớ query? Chạy hàm
- *     xemNguonBigQuery() → xem Execution log (nếu tab Bigquery là
- *     Connected Sheets thì log in sẵn project + query).
- *  5. Chạy dongBoDeals() 1 lần, xem log. Ổn thì chạy caiDatTrigger()
- *     để tự đồng bộ mỗi giờ.
+ *  4. Không cần dán query: script tự đọc query + project BigQuery từ nguồn
+ *     Connected Sheets của tab "Bigquery" (sheet SHEET_ID). Ai sửa query ở
+ *     đó thì lượt đồng bộ sau tự theo. Muốn cố định query thì điền BQ_QUERY.
+ *  5. Chạy dongBoDeals() 1 lần (lần đầu Google hỏi quyền → Allow), xem log.
+ *     Ổn thì chạy caiDatTrigger() để tự đồng bộ mỗi giờ.
  * =====================================================================
  */
 
 var SYNC = {
   SUPABASE_URL: 'https://lheaoklvumzapmwuhysr.supabase.co',
-  BQ_PROJECT_ID: '',   // vd 'base-data-123456'
-  BQ_QUERY: '',        // dán nguyên query Standard SQL đang dùng cho tab Bigquery
+  BQ_PROJECT_ID: 'base-data-analyst',
+  BQ_QUERY: '',        // để trống = đọc query từ tab "Bigquery" (Connected Sheets)
+  TIMEZONE: 'Asia/Ho_Chi_Minh',
   BATCH_SIZE: 500,
-  // Chỉ dùng cho xemNguonBigQuery() khi script nằm ở project riêng (không gắn sheet)
+  // Sheet chứa tab "Bigquery" (Connected Sheets) — nơi lấy query
   SHEET_ID: '1r_5F56Rs59205KTOG9HA49VUonlDwIKxlR3ld_MnVmA'
 };
 
@@ -36,10 +37,8 @@ function dongBoDeals() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { Logger.log('Lượt trước chưa chạy xong, bỏ qua.'); return; }
   try {
-    if (!SYNC.BQ_PROJECT_ID || !SYNC.BQ_QUERY) {
-      throw new Error('Chưa điền BQ_PROJECT_ID / BQ_QUERY trong SYNC.');
-    }
-    var rows = queryBigQuery_(SYNC.BQ_PROJECT_ID, SYNC.BQ_QUERY);
+    var src = layQuery_();
+    var rows = queryBigQuery_(src.projectId, src.query);
     Logger.log('BigQuery trả về %s dòng', rows.length);
     if (!rows.length) throw new Error('BigQuery trả về 0 dòng — dừng, không đồng bộ.');
 
@@ -60,6 +59,18 @@ function dongBoDeals() {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Query + project: ưu tiên SYNC.BQ_QUERY, không có thì đọc từ nguồn Connected Sheets
+function layQuery_() {
+  if (SYNC.BQ_QUERY) return { projectId: SYNC.BQ_PROJECT_ID, query: SYNC.BQ_QUERY };
+  var sources = SpreadsheetApp.openById(SYNC.SHEET_ID).getDataSources();
+  for (var i = 0; i < sources.length; i++) {
+    var bq = sources[i].getSpec().asBigQuery();
+    var q = bq.getRawQuery();
+    if (q && q.indexOf('Deal_ID') !== -1) return { projectId: bq.getProjectId() || SYNC.BQ_PROJECT_ID, query: q };
+  }
+  throw new Error('Không tìm thấy query BigQuery trong sheet ' + SYNC.SHEET_ID + ' — điền SYNC.BQ_QUERY.');
 }
 
 // Chạy query, trả về mảng object {tên cột: giá trị}
@@ -90,7 +101,8 @@ function rowToObj_(fields, row) {
   for (var i = 0; i < fields.length; i++) {
     var f = fields[i], v = row.f[i].v;
     if (v === null || v === undefined) { o[f.name] = null; continue; }
-    if (f.type === 'TIMESTAMP') v = new Date(Number(v) * 1000).toISOString();
+    // TIMESTAMP → giờ Việt Nam (để cột ngày không lùi 1 ngày do UTC)
+    if (f.type === 'TIMESTAMP') v = Utilities.formatDate(new Date(Number(v) * 1000), SYNC.TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX");
     else if (typeof v === 'object') v = JSON.stringify(v);   // RECORD/REPEATED
     o[f.name] = v;   // số giữ dạng chuỗi để không mất chính xác; Supabase tự ép kiểu
   }
