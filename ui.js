@@ -1623,7 +1623,7 @@
     }
 
     /* ---- % Active/Output T1/T4 lấy từ BigQuery khi deal đã kéo đánh giá trên CRM ----
-       Cột "U/O từ BigQuery" liệt kê ô nào đã có số BigQuery (vd "aT1,oT1") → khoá ô đó + nhãn "BQ".
+       Cột "U/O từ BigQuery" liệt kê ô nào đã có số BigQuery (vd "aT1,oT1") → khoá ô đó + nhãn "CRM".
        Cột "Thiếu U/O BigQuery" (vd "U T1, O T1"): đã kéo, đã tới tháng đánh giá mà BigQuery chưa có số
        → tô đỏ ô thiếu (ô vẫn mở để CS nhập tạm). */
     var qUOFields = { aT1: 'U T1', oT1: 'O T1', aT4: 'U T4', oT4: 'O T4' };
@@ -1644,7 +1644,7 @@
           if (!badge) {
             badge = document.createElement('span');
             badge.className = 'fc-uo-bq-badge';
-            badge.textContent = 'BQ';
+            badge.textContent = 'CRM';
             badge.title = inp.title;
             badge.style.cssText = 'display:inline-block;margin-left:4px;padding:0 4px;border-radius:999px;' +
               'font-size:10px;font-weight:600;background:#e7f6ec;color:#1a7f37;border:1px solid #a6dcb5;';
