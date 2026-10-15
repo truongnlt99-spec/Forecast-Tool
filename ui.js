@@ -19,13 +19,14 @@
   'use strict';
 
   /* -------------------------------------------------------
-     BANNER "BẢN TEST" — chỉ hiện khi config.js trỏ API_URL tới
-     Supabase (nhánh supabase-test). Bản thật dùng Apps Script nên
-     khối này tự bỏ qua, không đổi gì giao diện của team.
+     BANNER "BẢN TEST" — chỉ hiện khi API_URL trỏ Supabase VÀ đang mở
+     ngoài tên miền bản thật (link test csconsole-test, preview Vercel,
+     localhost). Bản thật csconsole.vercel.app không hiện banner.
      ------------------------------------------------------- */
   (function () {
     var CFG = window.CS_TOOL_CONFIG || {};
     if (String(CFG.API_URL || '').indexOf('.supabase.co/') === -1) return;
+    if (location.hostname === 'csconsole.vercel.app') return;
     var bar = document.createElement('div');
     bar.id = 'testEnvBanner';
     bar.textContent = 'BẢN TEST – dữ liệu Supabase (không phải bản thật, sửa ở đây không ghi về Google Sheet)';
