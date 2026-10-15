@@ -288,12 +288,15 @@ begin
                           avatar_url = coalesce(p_avatar, '')
     where lower(trim(email)) = em;
   else
+    -- Username đã thuộc email KHÁC (vd an.nguyen vs annguyen) → không ghi đè,
+    -- nếu không người đăng ký sau sẽ "chiếm" luôn các deal của người kia.
+    if exists (select 1 from cs_members where username = uname) then
+      raise exception 'Username % đã thuộc email khác — liên hệ admin để thêm thủ công', uname;
+    end if;
     insert into cs_members (username, email, ho_ten, level, salary, avatar_url)
-    values (uname, em, p_ho_ten, p_level, sal, coalesce(p_avatar, ''))
-    on conflict (username) do update
-      set email = excluded.email, ho_ten = excluded.ho_ten, level = excluded.level,
-          salary = excluded.salary, avatar_url = excluded.avatar_url;
+    values (uname, em, p_ho_ten, p_level, sal, coalesce(p_avatar, ''));
   end if;
+  select username into uname from cs_members where lower(trim(email)) = em limit 1;
   return jsonb_build_object('username', uname, 'email', em, 'hoTen', p_ho_ten,
                             'level', p_level, 'salary', p_salary, 'avatar', coalesce(p_avatar, ''));
 end $$;
@@ -344,11 +347,9 @@ begin
   return new;
 end $$;
 
-drop trigger if exists trg_log_deal_inputs on deal_inputs;
-create trigger trg_log_deal_inputs after insert or update on deal_inputs
+create or replace trigger trg_log_deal_inputs after insert or update on deal_inputs
   for each row execute function log_input_change();
-drop trigger if exists trg_log_multiyear on deal_multiyear_inputs;
-create trigger trg_log_multiyear after insert or update on deal_multiyear_inputs
+create or replace trigger trg_log_multiyear after insert or update on deal_multiyear_inputs
   for each row execute function log_input_change();
 
 -- ---------- Chỉ service_role (Edge Function) được gọi các hàm api_* ----------
@@ -361,6 +362,18 @@ begin
     if exists (select 1 from pg_roles where rolname = 'service_role') then
       execute format('grant execute on function %s to service_role', f);
     end if;
+  end loop;
+end $$;
+
+-- ---------- Cố định search_path cho mọi hàm trong file này ----------
+do $$
+declare f text;
+begin
+  for f in select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'public'
+             and (p.proname like 'api\_%' or p.proname like 'fmt\_%'
+                  or p.proname in ('pct_in', 'date_in', 'log_input_change')) loop
+    execute format('alter function %s set search_path = public', f);
   end loop;
 end $$;
 
