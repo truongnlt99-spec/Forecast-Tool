@@ -2,14 +2,15 @@
  * =====================================================================
  * ĐỒNG BỘ BIGQUERY → SUPABASE (bảng deals_raw) — bước 4 plan migration
  *
- * Chạy query BigQuery (đúng query đang đổ vào tab "Bigquery" của sheet),
+ * Chạy query THẲNG trên BigQuery (không đọc tab "Bigquery" của sheet),
  * gửi kết quả sang Supabase theo lô 500 dòng qua hàm sync_deals_raw.
  * Cập nhật theo Deal ID → không bao giờ lệch dòng. Deal rớt khỏi query
  * chỉ bị đánh dấu is_active = false, không xoá.
  *
  * CÀI ĐẶT (1 lần):
- *  1. Mở Apps Script của sheet → bấm "+" cạnh Files → Script → đặt tên
- *     DongBoSupabase → dán toàn bộ file này.
+ *  1. Vào https://script.google.com → Dự án mới (project RIÊNG, không gắn
+ *     sheet — sau này bỏ sheet thì đồng bộ vẫn chạy) → đặt tên
+ *     "Dong bo Supabase" → xoá code mặc định → dán toàn bộ file này.
  *  2. Menu trái "Services" (+) → chọn "BigQuery API" → Add.
  *  3. Project Settings (bánh răng) → Script Properties → Add script property:
  *       SUPABASE_SERVICE_KEY = key "secret"/"service_role" ở Supabase
@@ -26,7 +27,9 @@ var SYNC = {
   SUPABASE_URL: 'https://lheaoklvumzapmwuhysr.supabase.co',
   BQ_PROJECT_ID: '',   // vd 'base-data-123456'
   BQ_QUERY: '',        // dán nguyên query Standard SQL đang dùng cho tab Bigquery
-  BATCH_SIZE: 500
+  BATCH_SIZE: 500,
+  // Chỉ dùng cho xemNguonBigQuery() khi script nằm ở project riêng (không gắn sheet)
+  SHEET_ID: '1r_5F56Rs59205KTOG9HA49VUonlDwIKxlR3ld_MnVmA'
 };
 
 function dongBoDeals() {
@@ -124,7 +127,7 @@ function caiDatTrigger() {
 
 // In ra nguồn BigQuery của các tab Connected Sheets để copy vào SYNC
 function xemNguonBigQuery() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SYNC.SHEET_ID);
   var sources = ss.getDataSources();
   if (!sources.length) {
     Logger.log('Sheet không có nguồn Connected Sheets. Lấy query ở nơi đang đổ dữ liệu vào tab "Bigquery".');
