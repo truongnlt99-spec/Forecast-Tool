@@ -87,7 +87,7 @@ Scorecard (`app.js`), lớp vá Gia hạn/Dừng (`ui.js`). Dữ liệu kiểm t
 |---|---|---|---|
 | 1 | Loại HĐ tính chỉ số | Doanh thu go-live, CR, SRR_1, SRR_4 tính: New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày | Sửa bộ lọc (app.js + ui.js) |
 | 2 | Mốc TTGL | Ngày xác thực (giữ như BigQuery) | Không |
-| 3 | Giá trị tra TTGL | Hỏi chị Chi cách tính `Tong_gia_tri_sizing` | Gửi câu hỏi |
+| 3 | Giá trị tra TTGL | Tra bảng TTGL theo **Tổng giá trị sizing, KHÔNG gồm doanh thu PS/PaS** | Sửa ở BigQuery (chị Chi) — dữ liệu Supabase không tách được phần PS/PaS trong sizing |
 | 4 | Phân khúc | Theo ARR (giá trị/số năm): SA < 20tr, MA 20–200tr, KA ≥ 200tr | Sửa view |
 | 5–6 | CR khi chưa go-live | Deal nằm trong MẪU số CR mọi tháng từ tháng hạn cho tới tháng go-live; tháng go-live tính cả tử + mẫu; tháng sau đó không tính nữa (trừ khi gia hạn/dừng) | Sửa cách gom CR (app.js + ui.js) |
 | 7 | Chưa nhập % tới kỳ đo | Tính không đạt (giữ) | Không |
