@@ -1389,8 +1389,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     var status;
     if (gl) {
       status = (d.glPlan && gl <= d.glPlan) ? 'Đúng hạn' : 'Go-live trễ';
-    } else if (d.received && d.ttgl != null &&
-               Date.now() > d.received.getTime() + 2 * d.ttgl * 86400000) {
+    } else if ((d.glPlan || d.received) && d.ttgl != null &&
+               Date.now() > (d.glPlan ? d.glPlan.getTime() + d.ttgl * 86400000 : d.received.getTime() + 2 * d.ttgl * 86400000)) {
       status = 'Quá 200% → dồn CR1';
     } else if (d.glPlan && new Date() > d.glPlan) {
       status = 'Trễ - chưa go-live';
@@ -1448,8 +1448,8 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       else if (planKey && planKey === cur) tags.dueSoon = true;                  // sắp trễ hạn (dự kiến tháng này)
       else tags.notYet = true;                                                   // chưa tới hạn
       // 4) Quá 200% định mức TTGL → dồn CR1 (chính sách mục 5)
-      if (d.received && d.ttgl != null &&
-          today.getTime() > d.received.getTime() + 2 * d.ttgl * 86400000) tags.over200 = true;
+      if ((d.glPlan || d.received) && d.ttgl != null &&
+          today.getTime() > (d.glPlan ? d.glPlan.getTime() + d.ttgl * 86400000 : d.received.getTime() + 2 * d.ttgl * 86400000)) tags.over200 = true;
     }
     return tags;
   }
@@ -2108,7 +2108,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     // Doanh thu go-live trong tháng — chỉ tính hợp đồng New / Upsale / Cross sale (mục 6.2)
     var rev = 0;
     crDeals.forEach(function (d) {
-      if (/new|upsale|cross/i.test(d.contract)) rev += fcCompute(d).dtDat;
+      if (/(^|[^a-z])new|upsale|cross/i.test(d.contract)) rev += fcCompute(d).dtDat;  // không bắt nhầm "Renew"
     });
     return { m: m, crDeals: crDeals, t1Deals: t1Deals, t4Deals: t4Deals, cr: cr, sumPhai: sumPhai, sumDat: sumDat, s1: s1, s4: s4, rev: rev };
   }
