@@ -230,6 +230,9 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
     coalesce(i.stopped, false) as stopped, i.link_request,
     case when r.job_id is null then null
          else sum(r.deal_value) over (partition by r.job_id) end as x_tong_gt,
+    -- ARR gộp theo Job (giá trị/số năm, số năm 0/trống = 1) — dùng xếp Phân khúc (policy mục 2)
+    case when r.job_id is null then null
+         else sum(r.deal_value::numeric / greatest(coalesce(r.so_nam, 1), 1)) over (partition by r.job_id) end as x_arr,
     case when r.job_id is null then null
          else count(*)          over (partition by r.job_id) end as y_so_bo
   from deals_raw r
@@ -240,8 +243,8 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
 s2 as (   -- Z, AA, AB, AC
   select s1.*,
     case when not has_job then null
-         when x_tong_gt < 20000000  then 'SA'
-         when x_tong_gt < 200000000 then 'MA' else 'KA' end           as z_phan_khuc,
+         when x_arr < 20000000  then 'SA'
+         when x_arr < 200000000 then 'MA' else 'KA' end                as z_phan_khuc,
     case when not has_job then null
          when bo_giai_phap = 'Other' then 4
          when bo_giai_phap = 'Work Ops'
@@ -289,8 +292,8 @@ s6 as (
     case when tier_num = 4 then null else u_point(tier_num, q_) end   as an_u_t4,
     r_ * 100                                                          as ao_o_t4,
     case when not has_job then null else chs(tier_num, q_, r_) end    as ap_chs_t4,
-    case when not has_job or so_nam is null then null
-         else deal_value::numeric / case when so_nam = 0 then 1 else so_nam end end as ar_acr,
+    case when not has_job then null   -- số năm 0 hoặc trống = 1 năm (quyết định 15/10/2026)
+         else deal_value::numeric / case when coalesce(so_nam, 0) = 0 then 1 else so_nam end end as ar_acr,
     case when not has_job or stopped or m_ is null then null
          else (m_ + make_interval(years => greatest(coalesce(so_nam, 0), 1)))::date end as au_het_han_com,
     case when has_job then greatest(coalesce(so_nam, 0), 1) end       as av_so_nam_com
@@ -387,7 +390,12 @@ select
   x_tong_gt              as "Tổng giá trị HĐ",
   y_so_bo                as "Số bộ trong deal",
   z_phan_khuc            as "Phân khúc",
-  case when not has_job then null when tier_num is null then '?' else 'Tier ' || tier_num end as "Tier",
+  case when not has_job then null
+       when tier_num is null then
+            case when bo_giai_phap is null then 'Thiếu bộ giải pháp'
+                 when upper(bo_giai_phap) in ('PS', 'PAS') then 'PS/PaS (không tính SRR/Com)'
+                 else '?' end
+       else 'Tier ' || tier_num end as "Tier",
   ab_ttgl                as "TTGL (ngày)",
   ac_gl_plan             as "Ngày go-live dự kiến",
   ad_trang_thai          as "Trạng thái go-live",

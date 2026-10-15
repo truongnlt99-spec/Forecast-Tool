@@ -1227,6 +1227,7 @@
         glPlan:   qFindKey(keys, ['go-live dự kiến', 'golive dự kiến']),
         glActual: qFindKey(keys, ['go-live thực tế', 'golive thực tế']),
         crMonth:  qFindKey(keys, ['tháng ghi nhận']),
+        contract: qFindKey(keys, ['loại hợp đồng']),
         dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
         acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
         // 3 cột riêng của tính năng này (app.js không đọc):
@@ -1249,6 +1250,7 @@
         glPlan: qParseDate(g(K.glPlan)),
         glActual: qParseDate(g(K.glActual)),
         crMonth: qMNorm(g(K.crMonth)),
+        contract: String(g(K.contract) || ''),
         dtPhai: qParseMoney(g(K.dtPhai)),
         acr: qParseMoney(g(K.acr)),
         glExtend: qParseDate(g(K.glExtend)),
@@ -1648,22 +1650,42 @@
        quy tắc Gia hạn & Dừng rồi GHI ĐÈ nếu khác — guard bằng so sánh chuỗi
        nên không lặp vô hạn với MutationObserver.
        ========================================================= */
+    // Quy tắc CR (quyết định 15/10/2026 — giống crIn() trong app.js):
+    //  - chỉ loại HĐ: New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày,
+    //    Renew triển khai lại (không tính "Renew" thuần)
+    //  - deal nằm trong MẪU số từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế;
+    //    tháng go-live tính cả TỬ số; go-live trước hạn → tính 1 lần ở tháng hạn; deal dừng: loại.
+    function qContractCounted(c) {
+      var s = String(c || '').toLowerCase().trim();
+      if (!s || s === 'renew' || s === '—') return false;
+      return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
+    }
+    function qMCmp(a, b) {
+      var p = a.split('/'), q = b.split('/');
+      return (p[1] - q[1]) || (p[0] - q[0]);
+    }
     function qCrCompute(cur) {
       var phai = 0, dat = 0, touched = false;
       qList.forEach(function (d) {
         if (d.stopped || d.glExtend) touched = true;
-        if (d.stopped) return;
-        var effM = d.glExtend ? qMNorm(d.glExtend) : d.crMonth;
-        if (effM !== cur) return;
-        phai += d.dtPhai || 0;
-        // tử số: deal đã có go-live (ưu tiên giá trị đang gõ trong ô input nếu hàng hiển thị)
+        if (d.stopped || !qContractCounted(d.contract)) return;
+        var start = d.glExtend ? qMNorm(d.glExtend) : d.crMonth;
+        if (!start || qMCmp(cur, start) < 0) return;
+        // go-live: ưu tiên giá trị đang gõ trong ô input nếu hàng hiển thị
         var gl = d.glActual;
         var row = document.getElementById('fc-row-' + d.id);
         if (row && !row.classList.contains('fc-injected')) {
           var inp = row.querySelector('[data-f="goLive"]');
           if (inp) gl = inp.value ? new Date(inp.value) : null;
         }
-        if (gl) dat += d.dtPhai || 0;
+        var isDat = false;
+        if (gl) {
+          var g = qMNorm(gl);
+          if (qMCmp(g, start) <= 0) { if (cur !== start) return; isDat = true; }
+          else { if (qMCmp(cur, g) > 0) return; isDat = (cur === g); }
+        }
+        phai += d.dtPhai || 0;
+        if (isDat) dat += d.dtPhai || 0;
       });
       return { phai: phai, dat: dat, touched: touched };
     }

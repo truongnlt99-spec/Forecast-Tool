@@ -69,6 +69,39 @@
     if (base < 150e6) return 4;
     return 5;
   }
+  // ---- Quyết định chính sách 15/10/2026 (xem supabase/RA-SOAT-CHINH-SACH.md mục D) ----
+  // Loại HĐ được tính vào Doanh thu go-live, CR, SRR_1, SRR_4 và Commission T1/T4:
+  // New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày, Renew triển khai lại.
+  // KHÔNG tính: "Renew" (thuần) và loại trống.
+  function contractCounted(c) {
+    var s = String(c || '').toLowerCase().trim();
+    if (!s || s === 'renew' || s === '—') return false;
+    return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
+  }
+  // Thưởng Up/Cross sale (6.5): Upsale, Cross sale, Expansion CSM, Up/Cross-sell 270 ngày
+  function contractBonus(c) {
+    return /upsale|up-sell|cross|expansion/i.test(String(c || ''));
+  }
+  // PS/PaS không phải phần mềm → loại khỏi SRR & Commission
+  function isNonSoftware(d) {
+    var b = String(d.solution || '').trim().toUpperCase();
+    return b === 'PS' || b === 'PAS';
+  }
+  function countsForSrr(d) { return contractCounted(d.contract) && !isNonSoftware(d); }
+  // CR theo tháng m: deal nằm trong MẪU số từ tháng ghi nhận CR (tháng hạn, đã tính gia hạn)
+  // cho tới tháng go-live thực tế; tháng go-live tính cả TỬ số. Sau đó không tính nữa.
+  // Go-live trước tháng hạn → tính 1 lần ở tháng hạn (cả tử + mẫu). Deal dừng: không có tháng CR.
+  function crIn(d, m, gl) {
+    if (!d.crMonth || !contractCounted(d.contract)) return null;
+    if (mCmp(m, d.crMonth) < 0) return null;
+    if (gl) {
+      var g = mNorm(gl);
+      if (mCmp(g, d.crMonth) <= 0) return (m === d.crMonth) ? { dat: true } : null;
+      if (mCmp(m, g) > 0) return null;
+      return { dat: m === g };
+    }
+    return { dat: false };
+  }
   var RATING_LABEL = { out: 'OUT — Xuất sắc', goal: 'GOAL — Giỏi', kpi: 'KPI — Đạt', under: 'UNDER KPI', none: 'Không xếp loại' };
   var CHART_COLORS = ['#4C6FFF', '#7C5CFC', '#22A06B', '#E39230', '#D93B3B', '#147D6F', '#4C8C2B', '#C97A0E'];
 
@@ -1434,7 +1467,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
     // 1b) NEW — deal thuộc kỳ ghi nhận CR của tháng làm việc (dùng nội bộ cho nút
     // "xem chi tiết" ở 2 card tử số/mẫu số CR — không hiện thành chip riêng).
-    if (d.crMonth === cur) tags.crMonth = true;
+    if (crIn(d, cur, v.gl)) tags.crMonth = true;
 
     // 2) Kỳ đo ĐÃ QUA nhưng còn thiếu số → nhập bù gấp (CHS trống = mất SRR & commission)
     if ((d.monthT1 && mCmp(d.monthT1, cur) < 0 && missT(v.aT1, v.oT1)) ||
@@ -1668,7 +1701,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   function fcChsGroup(cur, monthKey, chsKey, cmp) {
     var list = [];
     fcDeals.forEach(function (d) {
-      if (d[monthKey] !== cur) return;
+      if (d[monthKey] !== cur || !countsForSrr(d)) return;
       var r = fcCompute(d);
       var v = (chsKey === 'cT1') ? r.cT1 : r.cT4;
       if (v == null) return;
@@ -1695,15 +1728,14 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       if (acrEl) acrEl.textContent = fmtMoneyShort(res.acr);
     });
 
-    // Tử số / mẫu số CR, nhóm theo tháng ghi nhận CR (d.crMonth)
-    var byM = {};
+    // Tử số / mẫu số CR của tháng làm việc — quy tắc crIn() (dồn mẫu số tới khi go-live)
+    var cd = { phai: 0, dat: 0 };
     fcDeals.forEach(function (d) {
-      var r = fcCompute(d), m = d.crMonth || '—';
-      if (!byM[m]) byM[m] = { phai: 0, dat: 0 };
-      byM[m].phai += d.dtPhai || 0;
-      byM[m].dat += r.dtDat;
+      var x = crIn(d, cur, fcCompute(d).gl);
+      if (!x) return;
+      cd.phai += d.dtPhai || 0;
+      if (x.dat) cd.dat += d.dtPhai || 0;
     });
-    var cd = byM[cur] || { phai: 0, dat: 0 };
     var crPct = (cd.phai > 0) ? Math.round(cd.dat / cd.phai * 10000) / 100 : null;
 
     var numEl = $('fcCrNum'), numSub = $('fcCrNumSub');
@@ -2077,16 +2109,17 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
   // ---- Chỉ số tháng: CR / SRR_1 / SRR_4 / Doanh thu go-live ----
   function dashPerf(m) {
     var crDeals = [], t1Deals = [], t4Deals = [];
+    var sumPhai = 0, sumDat = 0, rev = 0;
     fcDeals.forEach(function (d) {
-      if (d.crMonth === m) crDeals.push(d);
+      var x = crIn(d, m, fcCompute(d).gl);
+      if (x) {
+        crDeals.push(d);
+        sumPhai += d.dtPhai || 0;
+        if (x.dat) { sumDat += d.dtPhai || 0; rev += d.dtPhai || 0; }
+      }
+      if (!countsForSrr(d)) return;
       if (d.monthT1 === m) t1Deals.push(d);
       if (d.monthT4 === m) t4Deals.push(d);
-    });
-    var sumPhai = 0, sumDat = 0;
-    crDeals.forEach(function (d) {
-      var r = fcCompute(d);
-      sumPhai += d.dtPhai || 0;
-      sumDat += r.dtDat;
     });
     var cr = (crDeals.length && sumPhai > 0) ? Math.round(sumDat / sumPhai * 10000) / 100 : null;
 
@@ -2105,11 +2138,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     }
     var s1 = srr(t1Deals, 'T1'), s4 = srr(t4Deals, 'T4');
 
-    // Doanh thu go-live trong tháng — chỉ tính hợp đồng New / Upsale / Cross sale (mục 6.2)
-    var rev = 0;
-    crDeals.forEach(function (d) {
-      if (/(^|[^a-z])new|upsale|cross/i.test(d.contract)) rev += fcCompute(d).dtDat;  // không bắt nhầm "Renew"
-    });
+    // Doanh thu go-live trong tháng = tử số CR (deal go-live đúng tháng m, loại HĐ theo contractCounted)
     return { m: m, crDeals: crDeals, t1Deals: t1Deals, t4Deals: t4Deals, cr: cr, sumPhai: sumPhai, sumDat: sumDat, s1: s1, s4: s4, rev: rev };
   }
 
@@ -2258,7 +2287,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     if (def.comT4) pushRows(p.t4Deals, 'T4', rT4);
 
     // NEW — ACR nhiều năm (Năm 2-5) khớp đúng tháng Scorecard đang xem, tính y hệt cơ chế năm 1
-    var multi = mcAllMatches(p.m);
+    var multi = mcAllMatches(p.m).filter(function (x) { return countsForSrr(x.d); });  // loại HĐ + PS/PaS như năm 1
     var multiT1 = multi.filter(function (x) { return x.ky === 'T1'; });
     var multiT4 = multi.filter(function (x) { return x.ky === 'T4'; });
     pushRows(multiT1, 'T1', rT1);
@@ -2266,7 +2295,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
 
     // Thưởng Upsale / Cross sale — tháng nhận PL (≈ tháng nhận deal, mục 6.5)
     var usDeals = fcDeals.filter(function (d) {
-      return d.received && mNorm(d.received) === p.m && /upsale|cross/i.test(d.contract);
+      return d.received && mNorm(d.received) === p.m && contractBonus(d.contract);
     });
     var usBase = usDeals.reduce(function (s, d) { return s + (d.val || 0); }, 0);
     var usPct = upsaleBonusPct(usBase);
