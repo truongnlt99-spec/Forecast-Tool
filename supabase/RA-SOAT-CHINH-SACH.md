@@ -80,3 +80,21 @@ Scorecard (`app.js`), lớp vá Gia hạn/Dừng (`ui.js`). Dữ liệu kiểm t
     chỉ tính hợp đồng Upsale/Cross sale (không gồm Expansion CSM / Up-sell 270 ngày). Xác nhận cả 4 ý.
 13. **Com 4 tháng CS level 7** trong policy ghi giống hệt level 6 (3% / 3,3% / 3,5%) — có phải lỗi văn bản?
 14. **CHS = 50**: theo bảng nhóm sức khỏe là "Weak" (21–50) nhưng vẫn "Đạt" để nhận com (≥ 50). Giữ nguyên?
+
+## D. Quyết định của chủ tool (15/10/2026)
+
+| # | Câu hỏi | Quyết định | Cần làm |
+|---|---|---|---|
+| 1 | Loại HĐ tính chỉ số | Doanh thu go-live, CR, SRR_1, SRR_4 tính: New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày | Sửa bộ lọc (app.js + ui.js) |
+| 2 | Mốc TTGL | Ngày xác thực (giữ như BigQuery) | Không |
+| 3 | Giá trị tra TTGL | Hỏi chị Chi cách tính `Tong_gia_tri_sizing` | Gửi câu hỏi |
+| 4 | Phân khúc | Theo ARR (giá trị/số năm): SA < 20tr, MA 20–200tr, KA ≥ 200tr | Sửa view |
+| 5–6 | CR khi chưa go-live | Deal nằm trong MẪU số CR mọi tháng từ tháng hạn cho tới tháng go-live; tháng go-live tính cả tử + mẫu; tháng sau đó không tính nữa (trừ khi gia hạn/dừng) | Sửa cách gom CR (app.js + ui.js) |
+| 7 | Chưa nhập % tới kỳ đo | Tính không đạt (giữ) | Không |
+| 8 | Thiếu Tier | Loại PS/PaS khỏi SRR/Com; deal trống Bộ giải pháp đánh dấu thiếu dữ liệu để bổ sung | Sửa |
+| 9 | Tier 4 | Other = Tier 4 | Không |
+| 10 | Kiêm nhiệm CS_A | Giữ như hiện tại | Không |
+| 11 | Số năm 0/trống | Đều = 1 năm | Sửa view |
+| 12 | Thưởng Up/Cross | Một mức %, 150tr = 5%, theo tháng nhận deal; tính thêm Expansion CSM + Up/Cross-sell 270 ngày | Sửa bộ lọc thưởng |
+| 13 | Com 4 tháng level 7 | Giữ theo văn bản | Không |
+| 14 | CHS = 50 | Giữ nguyên | Không |
