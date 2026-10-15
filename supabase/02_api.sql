@@ -28,7 +28,7 @@ create or replace function fmt_num(n numeric) returns text immutable language sq
 create or replace function fmt_num1(n numeric) returns text immutable language sql as $$
   select case when n is null then '' else replace(to_char(n, 'FM9999990.0'), '.', ',') end $$;
 
--- ---------- View hiển thị: 104 cột text, đúng thứ tự header sheet ----------
+-- ---------- View hiển thị: 104 cột text đúng thứ tự header sheet + cột "Nguồn go-live" ----------
 create or replace view v_database_display with (security_invoker = true) as
 select
   coalesce((d."ID Workflow bàn giao")::text, '') as "ID Workflow bàn giao",
@@ -134,7 +134,8 @@ select
   fmt_num(d."Điểm U (T4) - Năm 5") as "Điểm U (T4) - Năm 5",
   fmt_num(d."Điểm O (T4) - Năm 5") as "Điểm O (T4) - Năm 5",
   fmt_num1(d."CHS_CS T4 - Năm 5") as "CHS_CS T4 - Năm 5",
-  fmt_money(d."ACR đủ đk COM T4 - Năm 5") as "ACR đủ đk COM T4 - Năm 5"
+  fmt_money(d."ACR đủ đk COM T4 - Năm 5") as "ACR đủ đk COM T4 - Năm 5",
+  coalesce(d."Nguồn go-live", '') as "Nguồn go-live"   -- 'Đã kéo' (CRM) / 'Forecast' (CS nhập)
 from v_database d;
 revoke all on v_database_display from anon, authenticated;
 

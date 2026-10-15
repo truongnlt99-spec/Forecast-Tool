@@ -225,7 +225,9 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
     r.*,
     r.job_id is not null                                         as has_job,
     m.email                                                      as cs_email,
-    i.go_live_actual as m_, i.go_live_extend as n_,
+    -- Ngày go-live thực tế: ưu tiên ngày đã kéo đánh giá trên Base CRM (BigQuery),
+    -- chưa kéo thì dùng ngày CS forecast/nhập tay (quyết định 15/10/2026)
+    coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual) as m_, i.go_live_extend as n_,
     i.active_t1 as o_, i.output_t1 as p_, i.active_t4 as q_, i.output_t4 as r_,
     coalesce(i.stopped, false) as stopped, i.link_request,
     case when r.job_id is null then null
@@ -472,7 +474,9 @@ select
   u_t4_y5   as "Điểm U (T4) - Năm 5",
   op_t4_y5  as "Điểm O (T4) - Năm 5",
   chs_t4_y5 as "CHS_CS T4 - Năm 5",
-  case when m_t4_y5 is null or chs_t4_y5 is null or chs_t4_y5 < 50 then 0 else ar_acr end as "ACR đủ đk COM T4 - Năm 5"
+  case when m_t4_y5 is null or chs_t4_y5 is null or chs_t4_y5 < 50 then 0 else ar_acr end as "ACR đủ đk COM T4 - Năm 5",
+  case when custom_ngay_keo_danh_gia is not null then 'Đã kéo'
+       when m_ is not null then 'Forecast' end as "Nguồn go-live"
 from s9
 order by ngay_tao_deal desc, deal_id desc;
 

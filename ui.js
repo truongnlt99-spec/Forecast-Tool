@@ -1228,6 +1228,7 @@
         glActual: qFindKey(keys, ['go-live thực tế', 'golive thực tế']),
         crMonth:  qFindKey(keys, ['tháng ghi nhận']),
         contract: qFindKey(keys, ['loại hợp đồng']),
+        glSource: qFindKey(keys, ['nguồn go-live']),
         dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
         acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
         // 3 cột riêng của tính năng này (app.js không đọc):
@@ -1251,6 +1252,7 @@
         glActual: qParseDate(g(K.glActual)),
         crMonth: qMNorm(g(K.crMonth)),
         contract: String(g(K.contract) || ''),
+        glFromCrm: String(g(K.glSource) || '').trim() === 'Đã kéo',
         dtPhai: qParseMoney(g(K.dtPhai)),
         acr: qParseMoney(g(K.acr)),
         glExtend: qParseDate(g(K.glExtend)),
@@ -1588,6 +1590,34 @@
       nameRow.appendChild(b);
     }
 
+    /* ---- Ngày go-live đã kéo đánh giá trên Base CRM (cột "Nguồn go-live" = "Đã kéo") ----
+       Supabase ưu tiên ngày CRM (BigQuery custom_ngay_keo_danh_gia) đè lên ngày CS forecast.
+       Ở đây khoá ô nhập go-live và gắn nhãn "Đã kéo" để CS biết số đã chốt theo CRM. */
+    function qMarkCrmGoLive(tr) {
+      if (!tr.id) return;
+      var d = qById[tr.id.replace(/^fc-row-/, '')];
+      var inp = tr.querySelector('[data-f="goLive"]');
+      if (!d || !inp) return;
+      var badge = inp.parentElement && inp.parentElement.querySelector('.fc-gl-crm-badge');
+      if (d.glFromCrm) {
+        if (!inp.disabled) inp.disabled = true;
+        inp.setAttribute('data-crm-locked', '1');
+        inp.title = 'Ngày go-live đã kéo đánh giá trên Base CRM — tự cập nhật từ hệ thống, không sửa tay được';
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'fc-gl-crm-badge';
+          badge.textContent = 'Đã kéo';
+          badge.title = inp.title;
+          badge.style.cssText = 'display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;' +
+            'font-size:11px;font-weight:600;background:#e7f6ec;color:#1a7f37;border:1px solid #a6dcb5;white-space:nowrap;';
+          inp.insertAdjacentElement('afterend', badge);
+        }
+      } else {
+        if (inp.getAttribute('data-crm-locked')) { inp.disabled = false; inp.removeAttribute('data-crm-locked'); inp.title = ''; }
+        if (badge) badge.remove();
+      }
+    }
+
     /* ---- Hàng "mượn": deal gia hạn hiện thêm ở tháng của ngày Go-live gia hạn ---- */
     function qInjectExtendedRows() {
       var sel = $('fcFilterMonth');
@@ -1629,6 +1659,7 @@
       fcTbodyEl.querySelectorAll('tr').forEach(function (tr) {
         qAddActionCell(tr);
         qAddBadge(tr);
+        qMarkCrmGoLive(tr);
       });
       qInjectExtendedRows();
     }
