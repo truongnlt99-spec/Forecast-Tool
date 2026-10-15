@@ -20,15 +20,15 @@ Supabase Dashboard → project **Forecast-Tool** → **Edge Functions** → **Se
 
 Không cần deploy lại function. Thiếu secret này thì đăng nhập báo lỗi `Thiếu secret SESSION_SECRET`.
 
-## 2. Link riêng trên Netlify (khuyên dùng: site mới)
+## 2. Link test trên Vercel (Preview của nhánh `supabase-test`)
 
-1. Netlify → **Add new site** → **Import an existing project** → GitHub → repo `Forecast-Tool`.
-2. **Branch to deploy**: `supabase-test`. Build command: để trống. Publish directory: `.`
-3. Deploy, rồi **Site configuration → Change site name** thành ví dụ `cs-console-test`
-   → link test: `https://cs-console-test.netlify.app`.
+Vercel đã nối Git sẽ tự build mỗi nhánh được push thành **Preview Deployment**. Production (nhánh `main`) không đổi.
 
-Site thật không bị đụng tới. (Cách khác: bật *Branch deploys* cho `supabase-test` trên site hiện tại,
-link sẽ là `https://supabase-test--<tên-site>.netlify.app` — nhưng việc này sửa cài đặt của site thật.)
+1. Vercel → project CS Console → **Deployments** → lọc Branch = `supabase-test` → mở bản mới nhất.
+2. Dùng link **Branch URL** cố định dạng `https://<project>-git-supabase-test-<team>.vercel.app`
+   (đừng dùng link có mã hash, link đó đổi mỗi lần push).
+3. Nếu bật **Deployment Protection** (Vercel Authentication), người test phải đăng nhập Vercel hoặc dùng
+   *Shareable Link*; hoặc tắt bảo vệ cho Preview ở Settings → Deployment Protection.
 
 ## 3. Cho phép đăng nhập Google từ link test
 
@@ -36,7 +36,7 @@ Google Cloud Console → **APIs & Services → Credentials** → OAuth 2.0 Clien
 `621765385511-nn699q39euvcf2slmqbv9jp6oi70kpgb` → **Authorized JavaScript origins** → *Add URI*:
 
 ```
-https://cs-console-test.netlify.app
+https://<project>-git-supabase-test-<team>.vercel.app
 ```
 
 (không có `/` ở cuối, không có đường dẫn). Save, chờ vài phút tới vài giờ để Google cập nhật.
