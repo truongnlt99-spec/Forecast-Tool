@@ -1255,9 +1255,12 @@
         stopped: !!(stopRaw != null && String(stopRaw).trim() !== '' && String(stopRaw).trim().toLowerCase() !== 'false'),
         reqLink: String(g(K.reqLink) || '').trim(),
       };
-      // Ngày Go-live tối đa = ngày nhận + 200% TTGL (đúng công thức "quá 200%
-      // định mức TTGL" mà app.js dùng ở fcTags/fcCompute).
-      d.glMax = (d.received && d.ttgl != null) ? new Date(d.received.getTime() + 2 * d.ttgl * 86400000) : null;
+      // Ngày Go-live tối đa = mốc 200% TTGL. Tính từ CÙNG mốc với "Ngày go-live
+      // dự kiến" (= ngày dự kiến + 1×TTGL) để khỏi lệch khi nguồn dữ liệu đo
+      // TTGL từ ngày xác thực thay vì ngày nhận deal; thiếu ngày dự kiến thì
+      // quay về ngày nhận + 2×TTGL như cũ.
+      d.glMax = (d.glPlan && d.ttgl != null) ? new Date(d.glPlan.getTime() + d.ttgl * 86400000)
+              : (d.received && d.ttgl != null) ? new Date(d.received.getTime() + 2 * d.ttgl * 86400000) : null;
       return d;
     }
     function qSub(d) { return (d.sysId ? 'Sys ' + d.sysId + ' · ' : '') + 'Deal ' + d.id; }

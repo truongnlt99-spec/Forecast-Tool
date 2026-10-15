@@ -193,7 +193,7 @@ create or replace function chs(tier int, a numeric, o numeric) returns numeric i
   select case when o is null then null
               when tier = 4 then o * 100
               when a is null or u_point(tier, a) is null then null
-              else 0.7 * u_point(tier, a) + 0.3 * o * 100 end $$;
+              else round(0.7 * u_point(tier, a) + 0.3 * o * 100, 1) end $$;  -- làm tròn 1 số lẻ như app.js
 
 -- ---------------------------------------------------------------------
 -- VIEW TÍNH TOÁN — tương đương toàn bộ công thức tab Database (A → CZ)
@@ -245,11 +245,11 @@ s2 as (   -- Z, AA, AB, AC
     case when not has_job then null
          when bo_giai_phap = 'Other' then 4
          when bo_giai_phap = 'Work Ops'
-              then case when so_luong_user <= 15 then 2 when so_luong_user <= 500 then 1 else 3 end
+              then case when coalesce(so_luong_user, 0) <= 15 then 2 when coalesce(so_luong_user, 0) <= 500 then 1 else 3 end
          when bo_giai_phap = 'People Ops'
-              then case when so_luong_user <= 1000 then 2 else 3 end
+              then case when coalesce(so_luong_user, 0) <= 1000 then 2 else 3 end
          when bo_giai_phap = 'Business Ops'
-              then case when so_luong_user <= 15 then 1 when so_luong_user <= 200 then 2 else 3 end
+              then case when coalesce(so_luong_user, 0) <= 15 then 1 when coalesce(so_luong_user, 0) <= 200 then 2 else 3 end
          else null end                                                as tier_num,
     case when has_job then ttgl_so_ngay end                           as ab_ttgl,
     case when has_job then ngay_go_live_du_kien end                   as ac_gl_plan
@@ -261,7 +261,7 @@ s3 as (   -- AD trạng thái go-live
          when stopped then 'Dừng triển khai'
          when m_ is not null then
               case when m_ <= coalesce(n_, ac_gl_plan) then 'Go-live đúng hạn' else 'Go-live trễ' end
-         when vn_today() > ngay_tao_deal + 2 * ab_ttgl then 'Quá 200% → dồn CR1'
+         when vn_today() > ac_gl_plan + ab_ttgl then 'Quá 200% → dồn CR1'  -- 200% TTGL tính từ cùng mốc với ngày go-live dự kiến
          when vn_today() > coalesce(n_, ac_gl_plan)    then 'Trễ - chưa go-live'
          else 'Đang triển khai' end                                    as ad_trang_thai
   from s2
@@ -276,7 +276,7 @@ s4 as (   -- AE..AV
 ),
 s5 as (
   select s4.*,
-    case when not has_job or ae_thang_cr is null or m_ is null then null
+    case when not has_job or stopped or m_ is null then null
          else month_anchor(m_) end                                     as ah_thang_t1
   from s4
 ),
@@ -289,9 +289,9 @@ s6 as (
     case when tier_num = 4 then null else u_point(tier_num, q_) end   as an_u_t4,
     r_ * 100                                                          as ao_o_t4,
     case when not has_job then null else chs(tier_num, q_, r_) end    as ap_chs_t4,
-    case when not has_job or so_nam is null or ae_thang_cr is null then null
+    case when not has_job or so_nam is null then null
          else deal_value::numeric / case when so_nam = 0 then 1 else so_nam end end as ar_acr,
-    case when m_ is null or ae_thang_cr is null then null
+    case when not has_job or stopped or m_ is null then null
          else (m_ + make_interval(years => greatest(coalesce(so_nam, 0), 1)))::date end as au_het_han_com,
     case when has_job then greatest(coalesce(so_nam, 0), 1) end       as av_so_nam_com
   from s5
