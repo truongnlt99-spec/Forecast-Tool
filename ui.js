@@ -1660,7 +1660,7 @@
             inp.style.outline = '2px solid #d1242f';
             inp.style.background = '#ffebe9';
             inp.title = 'Đã kéo đánh giá trên CRM nhưng BigQuery chưa có ' +
-              (f.charAt(0) === 'a' ? 'tỉ lệ sử dụng (điểm U)' : 'điểm O') + ' — kiểm tra lại trên Base CRM';
+              (f.charAt(0) === 'a' ? 'tỉ lệ sử dụng (điểm U) hoặc tỉ lệ = 0%' : 'điểm O') + ' — kiểm tra lại trên Base CRM';
           }
         } else if (inp.getAttribute('data-uo-missing')) {
           inp.removeAttribute('data-uo-missing');
