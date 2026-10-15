@@ -25,7 +25,7 @@ Không cần deploy lại function. Thiếu secret này thì đăng nhập báo 
 Vercel đã nối Git sẽ tự build mỗi nhánh được push thành **Preview Deployment**. Production (nhánh `main`) không đổi.
 
 1. Vercel → project CS Console → **Deployments** → lọc Branch = `supabase-test` → mở bản mới nhất.
-2. Dùng link **Branch URL** cố định dạng `https://<project>-git-supabase-test-<team>.vercel.app`
+2. Dùng link **Branch URL** cố định dạng `https://csconsole-test.vercel.app`
    (đừng dùng link có mã hash, link đó đổi mỗi lần push).
 3. Nếu bật **Deployment Protection** (Vercel Authentication), người test phải đăng nhập Vercel hoặc dùng
    *Shareable Link*; hoặc tắt bảo vệ cho Preview ở Settings → Deployment Protection.
@@ -36,7 +36,7 @@ Google Cloud Console → **APIs & Services → Credentials** → OAuth 2.0 Clien
 `621765385511-nn699q39euvcf2slmqbv9jp6oi70kpgb` → **Authorized JavaScript origins** → *Add URI*:
 
 ```
-https://<project>-git-supabase-test-<team>.vercel.app
+https://csconsole-test.vercel.app
 ```
 
 (không có `/` ở cuối, không có đường dẫn). Save, chờ vài phút tới vài giờ để Google cập nhật.
