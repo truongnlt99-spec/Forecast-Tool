@@ -467,3 +467,14 @@ select
   case when m_t4_y5 is null or chs_t4_y5 is null or chs_t4_y5 < 50 then 0 else ar_acr end as "ACR đủ đk COM T4 - Năm 5"
 from s9
 order by ngay_tao_deal desc, deal_id desc;
+
+-- ---------------------------------------------------------------------
+-- BẢO MẬT — view chạy theo quyền người gọi (không bỏ qua RLS), hàm cố
+-- định search_path. Thiếu dòng security_invoker thì anon key đọc được
+-- toàn bộ dữ liệu qua v_database.
+-- ---------------------------------------------------------------------
+alter view v_database set (security_invoker = true);
+alter function vn_today() set search_path = '';
+alter function month_anchor(date) set search_path = '';
+alter function u_point(int, numeric) set search_path = public;
+alter function chs(int, numeric, numeric) set search_path = public;
