@@ -135,7 +135,9 @@ select
   fmt_num(d."Điểm O (T4) - Năm 5") as "Điểm O (T4) - Năm 5",
   fmt_num1(d."CHS_CS T4 - Năm 5") as "CHS_CS T4 - Năm 5",
   fmt_money(d."ACR đủ đk COM T4 - Năm 5") as "ACR đủ đk COM T4 - Năm 5",
-  coalesce(d."Nguồn go-live", '') as "Nguồn go-live"   -- 'Đã kéo' (CRM) / 'Forecast' (CS nhập)
+  coalesce(d."Nguồn go-live", '') as "Nguồn go-live",  -- 'Đã kéo' (CRM) / 'Forecast' (CS nhập)
+  coalesce(d."U/O từ BigQuery", '') as "U/O từ BigQuery",       -- vd 'aT1,oT1' → UI khoá các ô này
+  coalesce(d."Thiếu U/O BigQuery", '') as "Thiếu U/O BigQuery"  -- vd 'U T1, O T1' → UI tô đỏ
 from v_database d;
 revoke all on v_database_display from anon, authenticated;
 

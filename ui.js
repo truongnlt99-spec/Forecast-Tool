@@ -1229,6 +1229,8 @@
         crMonth:  qFindKey(keys, ['tháng ghi nhận']),
         contract: qFindKey(keys, ['loại hợp đồng']),
         glSource: qFindKey(keys, ['nguồn go-live']),
+        uoBq:     qFindKey(keys, ['u/o từ bigquery']),
+        uoMiss:   qFindKey(keys, ['thiếu u/o bigquery']),
         dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
         acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
         // 3 cột riêng của tính năng này (app.js không đọc):
@@ -1253,6 +1255,8 @@
         crMonth: qMNorm(g(K.crMonth)),
         contract: String(g(K.contract) || ''),
         glFromCrm: String(g(K.glSource) || '').trim() === 'Đã kéo',
+        uoBq: String(g(K.uoBq) || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+        uoMiss: String(g(K.uoMiss) || '').trim(),
         dtPhai: qParseMoney(g(K.dtPhai)),
         acr: qParseMoney(g(K.acr)),
         glExtend: qParseDate(g(K.glExtend)),
@@ -1618,6 +1622,55 @@
       }
     }
 
+    /* ---- % Active/Output T1/T4 lấy từ BigQuery khi deal đã kéo đánh giá trên CRM ----
+       Cột "U/O từ BigQuery" liệt kê ô nào đã có số BigQuery (vd "aT1,oT1") → khoá ô đó + nhãn "BQ".
+       Cột "Thiếu U/O BigQuery" (vd "U T1, O T1"): đã kéo, đã tới tháng đánh giá mà BigQuery chưa có số
+       → tô đỏ ô thiếu (ô vẫn mở để CS nhập tạm). */
+    var qUOFields = { aT1: 'U T1', oT1: 'O T1', aT4: 'U T4', oT4: 'O T4' };
+    function qMarkCrmUO(tr) {
+      if (!tr.id) return;
+      var d = qById[tr.id.replace(/^fc-row-/, '')];
+      if (!d) return;
+      Object.keys(qUOFields).forEach(function (f) {
+        var inp = tr.querySelector('[data-f="' + f + '"]');
+        if (!inp) return;
+        var fromBq = d.glFromCrm && d.uoBq.indexOf(f) !== -1;
+        var missing = d.glFromCrm && d.uoMiss.indexOf(qUOFields[f]) !== -1;
+        var badge = inp.parentElement && inp.parentElement.querySelector('.fc-uo-bq-badge');
+        if (fromBq) {
+          if (!inp.disabled) inp.disabled = true;
+          inp.setAttribute('data-crm-locked', '1');
+          inp.title = 'Số lấy từ BigQuery (deal đã kéo đánh giá trên Base CRM) — không sửa tay được';
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'fc-uo-bq-badge';
+            badge.textContent = 'BQ';
+            badge.title = inp.title;
+            badge.style.cssText = 'display:inline-block;margin-left:4px;padding:0 4px;border-radius:999px;' +
+              'font-size:10px;font-weight:600;background:#e7f6ec;color:#1a7f37;border:1px solid #a6dcb5;';
+            inp.insertAdjacentElement('afterend', badge);
+          }
+        } else {
+          if (inp.getAttribute('data-crm-locked')) { inp.disabled = false; inp.removeAttribute('data-crm-locked'); inp.title = ''; }
+          if (badge) badge.remove();
+        }
+        if (missing) {
+          if (inp.getAttribute('data-uo-missing') !== '1') {
+            inp.setAttribute('data-uo-missing', '1');
+            inp.style.outline = '2px solid #d1242f';
+            inp.style.background = '#ffebe9';
+            inp.title = 'Đã kéo đánh giá trên CRM nhưng BigQuery chưa có ' +
+              (f.charAt(0) === 'a' ? 'tỉ lệ sử dụng (điểm U)' : 'điểm O') + ' — kiểm tra lại trên Base CRM';
+          }
+        } else if (inp.getAttribute('data-uo-missing')) {
+          inp.removeAttribute('data-uo-missing');
+          inp.style.outline = '';
+          inp.style.background = '';
+          if (!fromBq) inp.title = '';
+        }
+      });
+    }
+
     /* ---- Hàng "mượn": deal gia hạn hiện thêm ở tháng của ngày Go-live gia hạn ---- */
     function qInjectExtendedRows() {
       var sel = $('fcFilterMonth');
@@ -1660,6 +1713,7 @@
         qAddActionCell(tr);
         qAddBadge(tr);
         qMarkCrmGoLive(tr);
+        qMarkCrmUO(tr);
       });
       qInjectExtendedRows();
     }

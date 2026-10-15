@@ -228,7 +228,17 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
     -- Ngày go-live thực tế: ưu tiên ngày đã kéo đánh giá trên Base CRM (BigQuery),
     -- chưa kéo thì dùng ngày CS forecast/nhập tay (quyết định 15/10/2026)
     coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual) as m_, i.go_live_extend as n_,
-    i.active_t1 as o_, i.output_t1 as p_, i.active_t4 as q_, i.output_t4 as r_,
+    -- % Active/Output T1/T4: deal đã kéo đánh giá trên CRM → lấy tỉ lệ sử dụng tháng 1/tháng 4
+    -- và O (thang 0–100) từ BigQuery, tool tự tính U/O/CHS; BigQuery chưa có số thì dùng số CS nhập
+    -- (quyết định 15/10/2026; BigQuery chỉ có 1 cột O nên O dùng chung cho T1 và T4)
+    case when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_1_thang is not null
+         then r.ty_le_su_dung_1_thang::numeric(7,4) else i.active_t1 end as o_,
+    case when r.custom_ngay_keo_danh_gia is not null and r.o1 is not null
+         then (r.o1 / 100)::numeric(7,4) else i.output_t1 end as p_,
+    case when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_4_thang is not null
+         then r.ty_le_su_dung_4_thang::numeric(7,4) else i.active_t4 end as q_,
+    case when r.custom_ngay_keo_danh_gia is not null and r.o4 is not null
+         then (r.o4 / 100)::numeric(7,4) else i.output_t4 end as r_,
     coalesce(i.stopped, false) as stopped, i.link_request,
     case when r.job_id is null then null
          else sum(r.deal_value) over (partition by r.job_id) end as x_tong_gt,
@@ -476,7 +486,22 @@ select
   chs_t4_y5 as "CHS_CS T4 - Năm 5",
   case when m_t4_y5 is null or chs_t4_y5 is null or chs_t4_y5 < 50 then 0 else ar_acr end as "ACR đủ đk COM T4 - Năm 5",
   case when custom_ngay_keo_danh_gia is not null then 'Đã kéo'
-       when m_ is not null then 'Forecast' end as "Nguồn go-live"
+       when m_ is not null then 'Forecast' end as "Nguồn go-live",
+  -- Ô nào lấy từ BigQuery (UI khoá ô đó); ô BigQuery còn trống sau khi tới tháng đánh giá → cảnh báo
+  nullif(concat_ws(',',
+    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_1_thang is not null then 'aT1' end,
+    case when custom_ngay_keo_danh_gia is not null and o1 is not null then 'oT1' end,
+    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_4_thang is not null then 'aT4' end,
+    case when custom_ngay_keo_danh_gia is not null and o4 is not null then 'oT4' end), '') as "U/O từ BigQuery",
+  nullif(concat_ws(', ',
+    case when custom_ngay_keo_danh_gia is not null and tier_num in (1,2,3) and ty_le_su_dung_1_thang is null
+              and custom_ngay_keo_danh_gia + interval '1 month' <= current_date then 'U T1' end,
+    case when custom_ngay_keo_danh_gia is not null and o1 is null
+              and custom_ngay_keo_danh_gia + interval '1 month' <= current_date then 'O T1' end,
+    case when custom_ngay_keo_danh_gia is not null and tier_num in (1,2,3) and ty_le_su_dung_4_thang is null
+              and custom_ngay_keo_danh_gia + interval '4 months' <= current_date then 'U T4' end,
+    case when custom_ngay_keo_danh_gia is not null and o4 is null
+              and custom_ngay_keo_danh_gia + interval '4 months' <= current_date then 'O T4' end), '') as "Thiếu U/O BigQuery"
 from s9
 order by ngay_tao_deal desc, deal_id desc;
 
