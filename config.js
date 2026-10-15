@@ -3,8 +3,9 @@ window.CS_TOOL_CONFIG = {
   // OAuth Client ID lấy từ Google Cloud Console (Credentials > OAuth client ID)
   CLIENT_ID: '621765385511-nn699q39euvcf2slmqbv9jp6oi70kpgb.apps.googleusercontent.com',
 
-  // URL Web App sau khi deploy Apps Script (kết thúc bằng /exec)
-  API_URL: 'https://script.google.com/macros/s/AKfycbzpVwtX6cHHSvZa-t0QptKR2ZZ7NmiK86s0ikv85DvdPzrngJlJmcqK2LG9_bGM2WTO/exec',
+  // BẢN TEST (nhánh supabase-test): trỏ tới Edge Function Supabase thay cho Apps Script.
+  // Bản thật (nhánh main) vẫn dùng Apps Script /exec — KHÔNG merge file này vào main.
+  API_URL: 'https://lheaoklvumzapmwuhysr.supabase.co/functions/v1/api',
 
   // Domain email được phép đăng nhập
   ALLOWED_DOMAIN: 'base.vn',

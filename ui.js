@@ -18,6 +18,26 @@
 (function () {
   'use strict';
 
+  /* -------------------------------------------------------
+     BANNER "BẢN TEST" — chỉ hiện khi config.js trỏ API_URL tới
+     Supabase (nhánh supabase-test). Bản thật dùng Apps Script nên
+     khối này tự bỏ qua, không đổi gì giao diện của team.
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    if (String(CFG.API_URL || '').indexOf('.supabase.co/') === -1) return;
+    var bar = document.createElement('div');
+    bar.id = 'testEnvBanner';
+    bar.textContent = 'BẢN TEST – dữ liệu Supabase (không phải bản thật, sửa ở đây không ghi về Google Sheet)';
+    bar.setAttribute('role', 'status');
+    bar.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483000;' +
+      'background:#d92d20;color:#fff;font:600 12px/1.3 system-ui,sans-serif;padding:4px 14px;' +
+      'border-radius:0 0 8px 8px;box-shadow:0 2px 6px rgba(0,0,0,.25);pointer-events:none;' +
+      'max-width:calc(100vw - 32px);text-align:center;';
+    document.body.appendChild(bar);
+    if (document.title.indexOf('[TEST]') !== 0) document.title = '[TEST] ' + document.title;
+  })();
+
   var $ = function (id) { return document.getElementById(id); };
   var LS_SIDE = 'cs_tool_sidebar';
   var LS_THEME = 'cs_tool_theme';
