@@ -113,12 +113,14 @@ function contractCounted(c: string): boolean {
   if (!s || s === "renew" || s === "—") return false;
   return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
 }
-function crIn(d: Deal, m: string): { dat: boolean } | null {
+function crIn(d: Deal, m: string): { dat: boolean; noDen?: boolean } | null {
   const crMonth = d["Tháng ghi nhận CR"];
   if (!isMonth(crMonth) || !contractCounted(d["Loại hợp đồng"]) || isStopped(d)) return null;
   const g = monthOf(d["Ngày go-live thực tế"]);
   if (g) {
-    if (mCmp(g, crMonth) <= 0) return m === g ? { dat: true } : null;
+    // go-live SỚM (tháng trước tháng hạn) → chỉ tử số ở tháng go-live, không vào mẫu số tháng nào
+    if (mCmp(g, crMonth) < 0) return m === g ? { dat: true, noDen: true } : null;
+    if (g === crMonth) return m === g ? { dat: true } : null;
     if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
     return { dat: m === g };
   }
@@ -207,7 +209,8 @@ const TOOLS: Tool[] = [
     name: "cr_summary",
     description:
       "Tính CR của tháng (tử số = DT go-live đạt, mẫu số = DT phải go-live) theo đúng quy tắc của console: " +
-      "deal nằm trong mẫu số từ tháng hạn tới tháng go-live; go-live sớm/đúng hạn tính ở đúng tháng go-live thực tế; " +
+      "deal nằm trong mẫu số từ tháng hạn tới tháng go-live; go-live đúng tháng hạn tính cả tử + mẫu; " +
+      "go-live SỚM (tháng trước tháng hạn) chỉ cộng tử số ở tháng go-live, không vào mẫu số tháng nào; " +
       "chỉ loại HĐ New/Upsale/Cross/Expansion/Renew CSM/Renew triển khai lại; bỏ deal dừng triển khai.",
     inputSchema: S({ thang: str("Tháng MM/YYYY (mặc định tháng hiện tại)") }),
     readOnly: true,
@@ -220,7 +223,7 @@ const TOOLS: Tool[] = [
         const x = crIn(d, m);
         if (!x) continue;
         const v = numVN(d["DT phải go-live"]);
-        phai += v;
+        if (!x.noDen) phai += v;
         if (x.dat) { dat += v; tuSo.push(compact(d)); } else chuaDat.push(compact(d));
       }
       return {

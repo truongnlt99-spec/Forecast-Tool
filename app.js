@@ -90,13 +90,15 @@
   function countsForSrr(d) { return contractCounted(d.contract) && !isNonSoftware(d); }
   // CR theo tháng m: deal nằm trong MẪU số từ tháng ghi nhận CR (tháng hạn, đã tính gia hạn)
   // cho tới tháng go-live thực tế; tháng go-live tính cả TỬ số. Sau đó không tính nữa.
-  // Go-live trước tháng hạn → tính 1 lần ở tháng hạn (cả tử + mẫu). Deal dừng: không có tháng CR.
+  // Go-live ĐÚNG tháng hạn → tử + mẫu tháng đó. Go-live SỚM (tháng trước tháng hạn) → chỉ cộng
+  // TỬ số ở tháng go-live, KHÔNG vào mẫu số tháng nào (noDen) — quyết định 16/10/2026.
+  // Deal dừng: không có tháng CR.
   function crIn(d, m, gl) {
     if (!d.crMonth || !contractCounted(d.contract)) return null;
     if (gl) {
       var g = mNorm(gl);
-      // go-live sớm/đúng tháng hạn → tính tử + mẫu ở đúng tháng go-live thực tế (16/10/2026)
-      if (mCmp(g, d.crMonth) <= 0) return (m === g) ? { dat: true } : null;
+      if (mCmp(g, d.crMonth) < 0) return (m === g) ? { dat: true, noDen: true } : null;
+      if (g === d.crMonth) return (m === g) ? { dat: true } : null;
       if (mCmp(m, d.crMonth) < 0 || mCmp(m, g) > 0) return null;
       return { dat: m === g };
     }
@@ -1734,7 +1736,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
     fcDeals.forEach(function (d) {
       var x = crIn(d, cur, fcCompute(d).gl);
       if (!x) return;
-      cd.phai += d.dtPhai || 0;
+      if (!x.noDen) cd.phai += d.dtPhai || 0;
       if (x.dat) cd.dat += d.dtPhai || 0;
     });
     var crPct = (cd.phai > 0) ? Math.round(cd.dat / cd.phai * 10000) / 100 : null;
@@ -2115,7 +2117,7 @@ function loadDeals(token, silentRetryOnFail, isBackgroundRefresh) {
       var x = crIn(d, m, fcCompute(d).gl);
       if (x) {
         crDeals.push(d);
-        sumPhai += d.dtPhai || 0;
+        if (!x.noDen) sumPhai += d.dtPhai || 0;
         if (x.dat) { sumDat += d.dtPhai || 0; rev += d.dtPhai || 0; }
       }
       if (!countsForSrr(d)) return;

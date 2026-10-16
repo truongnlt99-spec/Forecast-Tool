@@ -1740,8 +1740,9 @@
     //  - chỉ loại HĐ: New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày,
     //    Renew triển khai lại (không tính "Renew" thuần)
     //  - deal nằm trong MẪU số từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế;
-    //    tháng go-live tính cả TỬ số; go-live trước/đúng tháng hạn → tính 1 lần (tử + mẫu) ở
-    //    tháng go-live thực tế (16/10/2026); deal dừng: loại.
+    //    tháng go-live tính cả TỬ số; go-live đúng tháng hạn → tử + mẫu tháng đó; go-live SỚM
+    //    (tháng trước tháng hạn) → chỉ cộng TỬ số ở tháng go-live, không vào mẫu số tháng nào
+    //    (16/10/2026); deal dừng: loại.
     function qContractCounted(c) {
       var s = String(c || '').toLowerCase().trim();
       if (!s || s === 'renew' || s === '—') return false;
@@ -1765,13 +1766,13 @@
           var inp = row.querySelector('[data-f="goLive"]');
           if (inp) gl = inp.value ? new Date(inp.value) : null;
         }
-        var isDat = false;
+        var isDat = false, inDen = true;
         if (gl) {
           var g = qMNorm(gl);
-          if (qMCmp(g, start) <= 0) { if (cur !== g) return; isDat = true; }
+          if (qMCmp(g, start) <= 0) { if (cur !== g) return; isDat = true; inDen = g === start; }
           else { if (qMCmp(cur, start) < 0 || qMCmp(cur, g) > 0) return; isDat = (cur === g); }
         } else if (qMCmp(cur, start) < 0) return;
-        phai += d.dtPhai || 0;
+        if (inDen) phai += d.dtPhai || 0;
         if (isDat) dat += d.dtPhai || 0;
       });
       return { phai: phai, dat: dat, touched: touched };
