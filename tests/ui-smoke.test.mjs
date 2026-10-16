@@ -49,7 +49,10 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
     page.on('dialog', (d) => { errors.push('dialog: ' + d.message()); d.dismiss(); });
     await page.route(/supabase\.co|accounts\.google|script\.google/, async (route) => {
       const req = route.request();
-      if (req.url().includes('accounts.google')) return route.fulfill({ body: '', contentType: 'text/javascript' });
+      if (req.url().includes('accounts.google')) {
+        return route.fulfill({ contentType: 'text/javascript',
+          body: 'window.google={accounts:{id:{initialize(){},renderButton(){},prompt(){},disableAutoSelect(){},cancel(){}}}};' });
+      }
       if (req.method() === 'GET') {
         return route.fulfill({ json: { ok: true, email: 'admin@base.vn', sessionToken: 'CST1.x.y', isAdmin: true, deals: [],
           profile: { username: 'admin', email: 'admin@base.vn', hoTen: 'Admin', level: 'CS level 3', salary: '', avatar: '' } } });
@@ -74,7 +77,31 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
     await page.goto(`http://localhost:${port}/`);
     await page.waitForFunction(() => !document.getElementById('adminBtn').hidden, null, { timeout: 15000 });
 
-    await page.evaluate(() => document.getElementById('claudeBtn').click());
+    // Menu gọn: sidebar chỉ còn "Theo dõi", mục con luôn mở; nút hệ thống nằm trong menu hồ sơ
+    await page.waitForSelector('#profileStrip', { state: 'visible' });
+    assert.equal(await page.$$eval('aside .nav-item', (els) => els.filter((e) => e.offsetParent).length), 0);
+    for (const id of ['refreshBtn', 'donationBtn', 'playbookBtn']) assert.equal(await page.isVisible('#' + id), false, id);
+    await page.mouse.move(900, 600);
+    assert.ok(await page.isVisible('#navForecastGroup .nav-sub [data-view=multi]'), 'mục con Forecast mở sẵn');
+    assert.ok(await page.isVisible('#navOverviewGroup .nav-sub .cp-nav-btn .new-tag'), 'Career path có tag New');
+    assert.ok(await page.isVisible('#profileStrip .ps-new'), 'nút hồ sơ có chữ New');
+    await page.click('#profileStrip');
+    await page.waitForSelector('#changelogBtn .new-tag', { state: 'visible', timeout: 3000 });
+    assert.ok(await page.isVisible('#claudeBtn .new-tag'));
+    assert.ok(await page.isVisible('#adminBtn'));
+    await page.click('#changelogBtn');
+    await page.waitForSelector('#changelogModal.open');
+    assert.ok((await page.textContent('#changelogModal')).includes('Câu hỏi mẫu'));
+    assert.equal(await page.evaluate(() => document.getElementById('accMenu').classList.contains('open')), false, 'bấm mục thì đóng menu');
+    await page.click('#changelogClose');
+    assert.ok(await page.isVisible('#profileStrip .ps-new'), 'còn Kết nối Claude chưa xem');
+    await page.click('#profileStrip');
+    await page.waitForSelector('#claudeBtn', { state: 'visible' });
+    assert.equal(await page.$('#changelogBtn .new-tag'), null);
+    await page.click('#claudeBtn');
+    assert.equal(await page.isVisible('#profileStrip .ps-new'), false, 'xem hết thì tắt chữ New');
+    await page.waitForSelector('#claudeModal.open');
+
     await page.fill('#mcLabel', 'Laptop');
     await page.click('#mcCreate');
     await page.waitForSelector('#mcUrl');
