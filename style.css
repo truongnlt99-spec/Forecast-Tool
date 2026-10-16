@@ -1343,3 +1343,29 @@ html[data-theme="light"] .income-hero::after{
   .cp-kpis .kpi-sub{display:block !important}
   .cp-form{grid-template-columns:1fr}
 }
+
+/* Career path — biểu đồ thăng tiến + tạo bù */
+.cp-chart{position:relative; margin-top:6px}
+.cp-chart svg{display:block}
+.cp-grid{stroke:var(--stroke-soft); stroke-width:1}
+.cp-axis{fill:var(--tx-3); font:500 11px Inter}
+.cp-axis-now{fill:var(--tx); font-weight:700}
+.cp-line{fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.cp-line-plan{stroke:var(--lav); stroke-dasharray:6 5}
+.cp-dot{fill:var(--accent); stroke:var(--bg); stroke-width:2}
+.cp-dot-now{fill:var(--accent); stroke:var(--bg); stroke-width:3}
+.cp-dot-plan{fill:var(--bg); stroke:var(--lav); stroke-width:2; stroke-dasharray:3 2}
+.cp-dot-miss{fill:var(--tx-3)}
+.cp-dlabel{fill:var(--tx); font:600 11.5px Inter}
+.cp-hit{fill:transparent; cursor:pointer; outline:none}
+.cp-tip{position:absolute; z-index:2; pointer-events:none; white-space:nowrap; padding:6px 10px; border-radius:8px;
+  background:var(--tip-bg); color:var(--tip-tx); font:500 12px Inter; box-shadow:var(--shadow)}
+.cp-legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:var(--tx-2); margin:2px 0 4px}
+.cp-legend span{display:inline-flex; align-items:center; gap:7px}
+.cp-key{display:inline-block; width:18px; height:0; border-top:2px solid var(--accent)}
+.cp-key-plan{border-top:2px dashed var(--lav)}
+.cp-banner{padding:12px 16px; border-radius:var(--r-md); background:var(--weak-bg); color:var(--tx); font-size:13px; line-height:1.6}
+.cp-banner .ad-btn{margin-left:8px}
+.cp-form-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:760px){ .cp-form-5{grid-template-columns:1fr 1fr} }
+@media (max-width:640px){ .cp-form-5{grid-template-columns:1fr} }

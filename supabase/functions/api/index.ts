@@ -223,6 +223,9 @@ const CAREER_LEVELS: Record<string, { lo: number; hi: number; kpi: { cr: number;
   "CS level 7": { lo: 25000000, hi: 35000000, kpi: { cr: 87, s1: 85, s4: 85 } },
 };
 const CAREER_ORDER = Object.keys(CAREER_LEVELS);
+// TẠO BÙ: quý đã qua vẫn cho chốt commit tới hết tháng ghi ở đây (CS khai level đầu quý).
+// Q3/2026: Career path ra mắt giữa Q4 → mở bù tới hết 10/2026 (= hạn bấm Đạt của Q3).
+const CAREER_BACKFILL: Record<string, string> = { "Q3/2026": "10/2026" };
 const CAREER_KEYS = ["cr", "s1", "s4"] as const;
 const CAREER_NAME = { cr: "CR", s1: "SRR_1", s4: "SRR_4" };
 type CareerKey = typeof CAREER_KEYS[number];
@@ -288,15 +291,17 @@ function quarterMonths(q: string): string[] {
 // Giai đoạn của quý so với tháng hiện tại:
 //  future → chưa tới · commit → tháng 1–2 (chốt/sửa commit) · achieve → tháng 3 (vẫn sửa
 //  commit được) + tháng đầu quý sau (chỉ bấm Đạt) · closed → quá hạn bấm Đạt
+//  backfill → quý đã qua đang mở TẠO BÙ (CAREER_BACKFILL): vẫn chốt/sửa commit được
 function careerPhase(q: string, now = currentMonth()) {
   const months = quarterMonths(q), deadline = mShift(months[2], 1);
-  const canEdit = months.includes(now);
+  const backfill = !!CAREER_BACKFILL[q] && mCmp(now, months[2]) > 0 && mCmp(now, CAREER_BACKFILL[q]) <= 0;
+  const canEdit = months.includes(now) || backfill;
   const canAchieveWindow = now === months[2] || now === deadline;
   let phase = "closed";
   if (mCmp(now, months[0]) < 0) phase = "future";
   else if (canAchieveWindow) phase = "achieve";
   else if (canEdit) phase = "commit";
-  return { phase, canEdit, canAchieveWindow, deadline, months };
+  return { phase, canEdit, canAchieveWindow, deadline, months, backfill };
 }
 
 // Chỉ tính các tháng ĐÃ TỚI của quý (giữa quý không cộng sẵn mẫu số / kỳ đo của tháng sau)
@@ -349,6 +354,38 @@ function careerEvaluate(commit: Record<string, unknown> | null, act: ReturnType<
   return { items, present, met, allMet: !!commit && present > 0 && met === present };
 }
 
+// Biểu đồ thăng tiến: level CS giữ TRONG từng quý, từ quý commit đầu tiên tới quý hiện tại,
+// cộng 1 điểm "kế hoạch" ở quý sau = level mục tiêu của commit quý hiện tại (nếu có).
+//  quý đã qua có commit → level đầu quý (baseLevel); không commit → nối tiếp level cuối quý trước;
+//  quý hiện tại → level trong hồ sơ; Đạt có lên level → quý sau bắt đầu ở level mục tiêu.
+// deno-lint-ignore no-explicit-any
+function careerTrack(commits: any[], level: string, now = currentMonth()) {
+  const curQ = quarterOfMonth(now);
+  const qStart = (q: string) => quarterMonths(q)[0];
+  const byQ: Record<string, { quarter: string; baseLevel: string; targetLevel: string; status: string }> = {};
+  for (const c of commits) byQ[c.quarter] = c;
+  const past = Object.keys(byQ).filter((q) => mCmp(qStart(q), qStart(curQ)) < 0).sort((a, b) => mCmp(qStart(a), qStart(b)));
+  const points: Array<{ quarter: string; level: string; kind: string; status: string; levelUp: boolean }> = [];
+  let carry = "";
+  if (past.length) {
+    for (let q = past[0]; mCmp(qStart(q), qStart(curQ)) < 0; q = quarterOfMonth(mShift(qStart(q), 3))) {
+      const c = byQ[q];
+      const start = c ? c.baseLevel : carry;
+      const status = c ? (c.status === "open" && careerPhase(q, now).phase === "closed" ? "missed" : c.status) : "none";
+      const up = !!c && c.status === "achieved" && CAREER_ORDER.indexOf(c.targetLevel) > CAREER_ORDER.indexOf(start);
+      if (start) points.push({ quarter: q, level: start, kind: "past", status, levelUp: up });
+      carry = up ? c.targetLevel : start;
+    }
+  }
+  const cur = byQ[curQ];
+  points.push({ quarter: curQ, level, kind: "current", status: cur ? cur.status : "none", levelUp: false });
+  if (cur && cur.status === "open") {
+    points.push({ quarter: quarterOfMonth(mShift(qStart(curQ), 3)), level: cur.targetLevel, kind: "plan", status: "plan",
+      levelUp: CAREER_ORDER.indexOf(cur.targetLevel) > CAREER_ORDER.indexOf(level) });
+  }
+  return points;
+}
+
 function trimKeys(rows: Row[]): Row[] {
   return (rows || []).map((r) => {
     const o: Row = {};
@@ -380,7 +417,8 @@ function careerView_(q: string, data: Awaited<ReturnType<typeof careerLoad_>>) {
     c.status === "open" && careerPhase(c.quarter, now).phase === "closed" ? "missed" : c.status;
   const status = commit ? statusOf(commit) : "none";
   // Quý chọn được: quý hiện tại, quý trước (tháng đầu quý mới vẫn còn hạn bấm Đạt), các quý đã commit
-  const quarters = Array.from(new Set([curQ, quarterOfMonth(mShift(now, -1)), ...data.list.commits.map((c) => c.quarter)]))
+  const backfillOpen = Object.keys(CAREER_BACKFILL).filter((bq) => careerPhase(bq, now).backfill);
+  const quarters = Array.from(new Set([curQ, quarterOfMonth(mShift(now, -1)), ...backfillOpen, ...data.list.commits.map((c) => c.quarter)]))
     .sort((a, b) => mCmp(quarterMonths(b)[0], quarterMonths(a)[0]));
   const levelUp = !!commit && CAREER_ORDER.indexOf(commit.targetLevel) > idx;
   return {
@@ -393,6 +431,10 @@ function careerView_(q: string, data: Awaited<ReturnType<typeof careerLoad_>>) {
       quarter: c.quarter, status: statusOf(c), baseLevel: c.baseLevel, targetLevel: c.targetLevel, achievedAt: c.achievedAt,
     })),
     levelHistory: data.list.levelHistory,
+    track: careerTrack(data.list.commits, level, now),
+    // quý đang mở tạo bù mà CS chưa commit → giao diện nhắc
+    backfillPending: backfillOpen.filter((bq) => !data.list.commits.some((c) => c.quarter === bq)),
+    backfillDeadline: CAREER_BACKFILL,
   };
 }
 
@@ -408,22 +450,27 @@ async function careerAction_(body: any, email: string): Promise<Record<string, u
     case "careerSaveCommit": {
       if (idx < 0) throw new Error("Career path hiện chỉ áp dụng cho CS level 1–7");
       const q = body.quarter;
-      if (!isQ(q) || !careerPhase(q).canEdit) throw new Error("Chỉ chốt/sửa commit được trong quý đang chạy");
+      const ph = isQ(q) ? careerPhase(q) : null;
+      if (!ph || !ph.canEdit) throw new Error("Chỉ chốt/sửa commit được trong quý đang chạy (hoặc quý đang mở tạo bù)");
       const old = data.list.commits.find((c) => c.quarter === q);
       if (old && old.status === "achieved") throw new Error("Quý " + q + " đã bấm Đạt — không sửa commit được nữa");
-      const target = String(body.targetLevel || level);
+      // Tạo bù: CS khai level ĐẦU quý đó (có thể thấp hơn level hiện tại nếu đã lên level rồi)
+      const base = ph.backfill ? String(body.baseLevel || level) : level;
+      const bi = CAREER_ORDER.indexOf(base);
+      if (bi < 0 || bi > idx) throw new Error("Level đầu quý không hợp lệ (không cao hơn level hiện tại)");
+      const target = String(body.targetLevel || base);
       const ti = CAREER_ORDER.indexOf(target);
-      if (ti < idx) throw new Error("Level mục tiêu không hợp lệ");
+      if (ti < bi) throw new Error("Level mục tiêu không hợp lệ");
       const vals = { cr: 0, s1: 0, s4: 0 };
       for (const k of CAREER_KEYS) {
         const v = Number(body[k]);
         if (!isFinite(v) || v <= 0 || v > 100) throw new Error(CAREER_NAME[k] + " phải là số lớn hơn 0 và tối đa 100");
         const floor = CAREER_LEVELS[target].kpi[k];
-        if (ti > idx && v < floor) throw new Error(CAREER_NAME[k] + " commit tối thiểu " + floor + "% (mốc KPI của " + target + ")");
+        if (ti > bi && v < floor) throw new Error(CAREER_NAME[k] + " commit tối thiểu " + floor + "% (mốc KPI của " + target + ")");
         vals[k as CareerKey] = Math.round(v * 100) / 100;
       }
       await rpc_("api_career_save_commit", {
-        p_email: email, p_quarter: q, p_base_level: level, p_target_level: target,
+        p_email: email, p_quarter: q, p_base_level: base, p_target_level: target,
         p_cr: vals.cr, p_s1: vals.s1, p_s4: vals.s4,
       });
       return careerView_(q, await careerLoad_(email));

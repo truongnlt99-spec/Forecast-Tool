@@ -20,18 +20,12 @@ try {
 
 const EMAIL = 'cs@base.vn';
 const SECRET = 'ui-secret-' + 'y'.repeat(30);
-// Tháng 12/2026 = tháng cuối Q4: vừa sửa commit được vừa bấm Đạt được
-const NOW = new Date('2026-12-20T03:00:00Z').getTime();
 
 // "DB" giả — mô phỏng đúng hành vi các hàm SQL api_career_* (04_career_path.sql)
-const db = {
-  profile: { username: 'cs', email: EMAIL, hoTen: 'Chị CS', level: 'CS level 3', salary: '13000000', avatar: '' },
-  commits: [],
-  levelHistory: [{ oldLevel: 'CS level 2', newLevel: 'CS level 3', oldSalary: 12000000, newSalary: 13000000,
-    reason: '<img src=x onerror=alert(1)>', quarter: 'Q1/2026', at: '01/04/2026 09:00' }],
-  deals: [{ 'Deal ID': '1', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '15/10/2026',
-    'DT phải go-live': '10.000.000', 'Giá trị phần mềm bộ (VNĐ)': '10.000.000', 'Tháng đo T1': '11/2026', 'CHS_CS T1': '90,0' }],
-};
+let db;
+function freshDb(profile, deals) {
+  db = { profile: { username: 'cs', email: EMAIL, hoTen: 'Chị CS', avatar: '', ...profile }, commits: [], levelHistory: [], deals };
+}
 const list = () => ({ commits: db.commits, levelHistory: db.levelHistory });
 const fake = {
   rpc: async (fn, a) => {
@@ -68,7 +62,9 @@ async function validToken() {
   return 'CST1.' + payload + '.' + b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))));
 }
 
-test('UI Career path: commit → % loading → Đạt lên level', { skip: !chromium && 'chưa cài playwright' }, async () => {
+// Dựng trang thật + Edge Function thật trên Chromium; `now` = giờ giả của máy chủ
+async function withPage(now, fn) {
+  const NOW = new Date(now + 'T03:00:00Z').getTime();
   const api = await loadEdgeFunction('api', fake, { SESSION_SECRET: SECRET });
   const token = await validToken();
   const realNow = Date.now;
@@ -118,63 +114,126 @@ test('UI Career path: commit → % loading → Đạt lên level', { skip: !chro
     });
     await page.addInitScript(() => localStorage.setItem('cs_tool_token', 'CST1.x.y'));
     await page.goto(`http://localhost:${port}/#/overview/career-path`);
-
-    // Chưa có commit → hiện form; khối Overview gốc bị ẩn; tiêu đề đổi
-    await page.waitForSelector('#cpTarget', { timeout: 15000 });
-    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#panel-overview .tab-panel-body:not(.cp-view)')).display), 'none');
-    assert.equal(await page.textContent('#pageTitle'), 'Career path');
-    assert.ok(await page.evaluate(() => document.querySelector('.cp-nav-btn').classList.contains('active')));
-    assert.ok((await page.innerHTML('.cp-lv-hist')).includes('&lt;img'), 'lý do trong lịch sử level phải được escape');
-
-    // Lên CS level 4 với CR 77% < mốc KPI 78% → bị chặn
-    await page.selectOption('#cpTarget', 'CS level 4');
-    assert.match(await page.textContent('#cpFloor_cr'), /Tối thiểu 78%/);
-    await page.fill('#cpIn_cr', '77'); await page.fill('#cpIn_s1', '80'); await page.fill('#cpIn_s4', '79');
-    await page.click('#cpSave');
-    await page.waitForFunction(() => /tối thiểu 78%/.test(document.getElementById('cpFormErr').textContent));
-    assert.equal(db.commits.length, 0);
-
-    await page.fill('#cpIn_cr', '78');
-    await page.click('#cpSave');
-    await page.waitForSelector('.cp-commit-vals');
-    assert.match(await page.textContent('.cp-target'), /lên CS level 4/);
-    // CR quý 100% (deal go-live đúng hạn), SRR_1 100%, SRR_4 chưa có kỳ đo → bỏ qua
-    const kpis = await page.$$eval('.cp-kpis .kpi-value', (els) => els.map((e) => e.textContent));
-    assert.deepEqual(kpis, ['128,2%', '125%', '—']);
-
-    // Sửa commit → lưu lịch sử, hiện bản chốt đầu quý
-    await page.click('#cpEdit');
-    await page.fill('#cpIn_s1', '85');
-    await page.click('#cpSave');
-    await page.waitForSelector('.cp-hist');
-    assert.match(await page.textContent('.cp-hist summary'), /đã sửa 1 lần/);
-
-    // Đạt: lương ngoài khung bị chặn, trong khung thì lên level ngay
-    await page.fill('#cpSalary', '20000000');
-    await page.click('#cpAchieve'); await page.click('#cpAchieve');
-    await page.waitForFunction(() => /Lương mới phải trong khung/.test(document.getElementById('cpAchErr').textContent));
-    await page.fill('#cpSalary', '14500000');
-    await page.click('#cpAchieve'); await page.click('#cpAchieve');
-    await page.waitForSelector('.cp-done');
-    assert.equal(db.profile.level, 'CS level 4');
-    assert.equal(db.profile.salary, '14500000');
-    assert.equal(db.commits[0].status, 'achieved');
-    assert.ok(careerCalls.includes('careerAchieve'));
-
-    // Sau khi Đạt, trang tự nạp lại → hồ sơ mới; popup Cập nhật thông tin khoá ô Level
-    await page.waitForFunction(() => document.querySelector('.ps-chip.lvl') && /CS level 4/.test(document.querySelector('.ps-chip.lvl').textContent), null, { timeout: 15000 });
-    await page.evaluate(() => document.getElementById('accEdit').click());
-    assert.equal(await page.evaluate(() => document.getElementById('pmLevel').disabled), true);
-    await page.evaluate(() => document.getElementById('pmClose').click());
-
-    // Rời sang Overview → khối Overview hiện lại, trang Career path ẩn
-    await page.evaluate(() => document.querySelector('.tab[data-tab="overview"]').click());
-    await page.waitForFunction(() => document.getElementById('cpView').style.display === 'none');
-    assert.notEqual(await page.evaluate(() => getComputedStyle(document.querySelector('#panel-overview .tab-panel-body:not(.cp-view)')).display), 'none');
+    await fn(page, careerCalls);
     assert.deepEqual(errors, []);
   } finally {
     Date.now = realNow;
     await browser.close();
     srv.close();
   }
+}
+
+// Tháng 12/2026 = tháng cuối Q4: vừa sửa commit được vừa bấm Đạt được
+test('UI Career path: commit → % loading → Đạt lên level', { skip: !chromium && 'chưa cài playwright' }, async () => {
+  freshDb({ level: 'CS level 3', salary: '13000000' }, [{ 'Deal ID': '1', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '10/2026',
+    'Ngày go-live thực tế': '15/10/2026', 'DT phải go-live': '10.000.000', 'Giá trị phần mềm bộ (VNĐ)': '10.000.000',
+    'Tháng đo T1': '11/2026', 'CHS_CS T1': '90,0' }]);
+  db.levelHistory = [{ oldLevel: 'CS level 2', newLevel: 'CS level 3', oldSalary: 12000000, newSalary: 13000000,
+    reason: '<img src=x onerror=alert(1)>', quarter: 'Q1/2026', at: '01/04/2026 09:00' }];
+  await withPage('2026-12-20', async (page, careerCalls) => {
+      // Chưa có commit → hiện form; khối Overview gốc bị ẩn; tiêu đề đổi
+      await page.waitForSelector('#cpTarget', { timeout: 15000 });
+      assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#panel-overview .tab-panel-body:not(.cp-view)')).display), 'none');
+      assert.equal(await page.textContent('#pageTitle'), 'Career path');
+      assert.ok(await page.evaluate(() => document.querySelector('.cp-nav-btn').classList.contains('active')));
+      assert.ok((await page.innerHTML('.cp-lv-hist')).includes('&lt;img'), 'lý do trong lịch sử level phải được escape');
+
+      // Lên CS level 4 với CR 77% < mốc KPI 78% → bị chặn
+      await page.selectOption('#cpTarget', 'CS level 4');
+      assert.match(await page.textContent('#cpFloor_cr'), /Tối thiểu 78%/);
+      await page.fill('#cpIn_cr', '77'); await page.fill('#cpIn_s1', '80'); await page.fill('#cpIn_s4', '79');
+      await page.click('#cpSave');
+      await page.waitForFunction(() => /tối thiểu 78%/.test(document.getElementById('cpFormErr').textContent));
+      assert.equal(db.commits.length, 0);
+
+      await page.fill('#cpIn_cr', '78');
+      await page.click('#cpSave');
+      await page.waitForSelector('.cp-commit-vals');
+      assert.match(await page.textContent('.cp-target'), /lên CS level 4/);
+      // CR quý 100% (deal go-live đúng hạn), SRR_1 100%, SRR_4 chưa có kỳ đo → bỏ qua
+      const kpis = await page.$$eval('.cp-kpis .kpi-value', (els) => els.map((e) => e.textContent));
+      assert.deepEqual(kpis, ['128,2%', '125%', '—']);
+      // Biểu đồ thăng tiến ở đầu trang: hiện tại CS level 3 → mục tiêu CS level 4 (quý sau, nét đứt)
+      assert.ok(await page.evaluate(() => document.querySelector('#cpView > .cp-chart-card') === document.querySelector('#cpView .table-card')));
+      assert.deepEqual(await page.$$eval('#cpChart .cp-dlabel', (els) => els.map((e) => e.textContent)),
+        ['Hiện tại · CS level 3', 'Mục tiêu · CS level 4']);
+      assert.equal(await page.locator('#cpChart .cp-line-plan').count(), 1);
+      await page.hover('#cpChart .cp-hit >> nth=1');
+      assert.match(await page.textContent('#cpTip'), /Q1\/2027 · CS level 4 · Mục tiêu/);
+
+      // Sửa commit → lưu lịch sử, hiện bản chốt đầu quý
+      await page.click('#cpEdit');
+      await page.fill('#cpIn_s1', '85');
+      await page.click('#cpSave');
+      await page.waitForSelector('.cp-hist');
+      assert.match(await page.textContent('.cp-hist summary'), /đã sửa 1 lần/);
+
+      // Đạt: lương ngoài khung bị chặn, trong khung thì lên level ngay
+      await page.fill('#cpSalary', '20000000');
+      await page.click('#cpAchieve'); await page.click('#cpAchieve');
+      await page.waitForFunction(() => /Lương mới phải trong khung/.test(document.getElementById('cpAchErr').textContent));
+      await page.fill('#cpSalary', '14500000');
+      await page.click('#cpAchieve'); await page.click('#cpAchieve');
+      await page.waitForSelector('.cp-done');
+      assert.equal(db.profile.level, 'CS level 4');
+      assert.equal(db.profile.salary, '14500000');
+      assert.equal(db.commits[0].status, 'achieved');
+      assert.ok(careerCalls.includes('careerAchieve'));
+
+      // Sau khi Đạt, trang tự nạp lại → hồ sơ mới; popup Cập nhật thông tin khoá ô Level
+      await page.waitForFunction(() => document.querySelector('.ps-chip.lvl') && /CS level 4/.test(document.querySelector('.ps-chip.lvl').textContent), null, { timeout: 15000 });
+      await page.evaluate(() => document.getElementById('accEdit').click());
+      assert.equal(await page.evaluate(() => document.getElementById('pmLevel').disabled), true);
+      await page.evaluate(() => document.getElementById('pmClose').click());
+
+      // Rời sang Overview → khối Overview hiện lại, trang Career path ẩn
+      await page.evaluate(() => document.querySelector('.tab[data-tab="overview"]').click());
+      await page.waitForFunction(() => document.getElementById('cpView').style.display === 'none');
+      assert.notEqual(await page.evaluate(() => getComputedStyle(document.querySelector('#panel-overview .tab-panel-body:not(.cp-view)')).display), 'none');
+  });
+});
+
+// Tháng 10/2026: Q3 đang mở tạo bù. CS đã lên CS level 4 trong Q3 (hồ sơ đã là level 4)
+test('UI tạo bù Q3: khai level đầu quý, Đạt chỉ ghi nhận, biểu đồ hiện bước lên level', { skip: !chromium && 'chưa cài playwright' }, async () => {
+  freshDb({ level: 'CS level 4', salary: '14000000' }, [{ 'Deal ID': '9', 'Loại hợp đồng': 'Upsale', 'Tháng ghi nhận CR': '08/2026',
+    'Ngày go-live thực tế': '20/08/2026', 'DT phải go-live': '30.000.000', 'Giá trị phần mềm bộ (VNĐ)': '30.000.000' }]);
+  await withPage('2026-10-20', async (page) => {
+    // Đang ở Q4 (chưa commit): biểu đồ 1 điểm, banner mời tạo bù Q3
+    await page.waitForSelector('[data-cp-goto="Q3/2026"]', { timeout: 15000 });
+    assert.match(await page.textContent('.cp-banner'), /Quý 3\/2026 đang mở tạo bù tới hết tháng 10\/2026/);
+    assert.equal(await page.locator('#cpChart .cp-dot').count(), 1);
+
+    await page.click('[data-cp-goto="Q3/2026"]');
+    await page.waitForSelector('#cpBase');
+    assert.equal(await page.locator('.cp-banner').count(), 0);
+    // Level đầu quý chỉ chọn được tới level hiện tại; mục tiêu tính từ level đầu quý
+    assert.deepEqual(await page.$$eval('#cpBase option', (o) => o.map((x) => x.value)),
+      ['CS level 1', 'CS level 2', 'CS level 3', 'CS level 4']);
+    await page.selectOption('#cpBase', 'CS level 3');
+    assert.deepEqual(await page.$$eval('#cpTarget option', (o) => o.map((x) => x.textContent)).then((t) => t.slice(0, 2)),
+      ['Giữ CS level 3', 'Lên CS level 4']);
+    await page.selectOption('#cpTarget', 'CS level 4');
+    assert.match(await page.textContent('#cpFloor_s4'), /Tối thiểu 79%/);
+    await page.fill('#cpIn_cr', '80'); await page.fill('#cpIn_s1', '80'); await page.fill('#cpIn_s4', '79');
+    await page.click('#cpSave');
+    await page.waitForSelector('.cp-commit-vals');
+    assert.equal(db.commits[0].baseLevel, 'CS level 3');
+    assert.match(await page.textContent('.cp-target'), /lên CS level 4.*từ CS level 3/);
+
+    // Hồ sơ đã ở level 4 → không hỏi lương, Đạt chỉ ghi nhận
+    assert.equal(await page.locator('#cpSalary').count(), 0);
+    assert.match(await page.textContent('.cp-achieve'), /chỉ ghi nhận/);
+    await page.click('#cpAchieve'); await page.click('#cpAchieve');
+    await page.waitForSelector('.cp-done');
+    assert.match(await page.textContent('.cp-done'), /Ghi nhận lên CS level 4/);
+    assert.equal(db.profile.level, 'CS level 4');
+    assert.equal(db.profile.salary, '14000000');
+    assert.equal(db.levelHistory.length, 0);
+
+    // Biểu đồ: Q3 ở CS level 3 (đã Đạt, lên level) → Q4 hiện tại CS level 4
+    assert.equal(await page.locator('#cpChart .cp-dot').count(), 2);
+    assert.deepEqual(await page.$$eval('#cpChart .cp-axis-now', (e) => e.map((x) => x.textContent)), ['Q4/26']);
+    await page.hover('#cpChart .cp-hit >> nth=0');
+    assert.match(await page.textContent('#cpTip'), /Q3\/2026 · CS level 3 · Đạt — lên level/);
+  });
 });

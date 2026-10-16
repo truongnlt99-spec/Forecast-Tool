@@ -21,6 +21,8 @@ const DEALS = [
   { 'Deal ID': 'D9', 'Loại hợp đồng': 'New', 'Giá trị phần mềm bộ (VNĐ)': tr(8), 'Tháng đo T4': '10/2026', 'CHS_CS T4': '70,0' },
   // Kỳ đo tháng 12 chưa có CHS — giữa quý KHÔNG được tính (tháng chưa tới)
   { 'Deal ID': 'D10', 'Loại hợp đồng': 'New', 'Giá trị phần mềm bộ (VNĐ)': tr(100), 'Tháng đo T1': '12/2026', 'CHS_CS T1': '' },
+  // Q3 — CR quý 3 = 100 / (100 + 30 của D3 trễ ở tháng 9) = 76,92%
+  { 'Deal ID': 'D11', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '08/2026', 'Ngày go-live thực tế': '10/08/2026', 'DT phải go-live': tr(100) },
 ];
 
 const state = { profile: { level: 'CS level 3', salary: '13000000' }, list: { commits: [], levelHistory: [] }, deals: DEALS };
@@ -206,5 +208,83 @@ test('careerAchieve: chỉ trong cửa sổ, phải đạt đủ, lên level th�
   assert.equal(r.commits[0].status, 'missed');
   assert.equal(r.canAchieve, false);
   assert.match((await post({ action: 'careerAchieve', quarter: 'Q4/2026' })).error, /không còn mở/);
+  Date.now = realNow;
+});
+
+test('tạo bù Q3/2026: mở tới hết 10/2026, CS khai level đầu quý, mốc sàn theo level đầu quý', async () => {
+  at('2026-10-16');
+  state.profile = { level: 'CS level 3', salary: '13000000' };
+  state.list = { commits: [], levelHistory: [] };
+  let r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.backfill, true);
+  assert.equal(r.canEdit, true);
+  assert.deepEqual(r.backfillPending, ['Q3/2026']);
+  assert.equal(r.actuals.cr.v, 76.92);
+
+  // đã lên CS level 3 trong Q3 → khai đầu quý là CS level 2, mục tiêu CS level 3 (sàn KPI level 3: 78/80/78)
+  assert.match((await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 70, s1: 80, s4: 78 })).error, /CR commit tối thiểu 78%/);
+  calls.length = 0;
+  r = await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 78, s1: 80, s4: 78 });
+  assert.equal(r.ok, true, r.error);
+  const save = calls.find((c) => c[0] === 'api_career_save_commit')[1];
+  assert.equal(save.p_base_level, 'CS level 2');
+  assert.equal(save.p_target_level, 'CS level 3');
+  // level đầu quý không được cao hơn level hiện tại
+  assert.match((await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 4', targetLevel: 'CS level 4', cr: 90, s1: 90, s4: 90 })).error, /Level đầu quý/);
+  // quý thường: baseLevel gửi lên bị bỏ qua, luôn lấy level hiện tại
+  calls.length = 0;
+  await post({ action: 'careerSaveCommit', quarter: 'Q4/2026', baseLevel: 'CS level 1', targetLevel: 'CS level 3', cr: 50, s1: 50, s4: 50 });
+  assert.equal(calls.find((c) => c[0] === 'api_career_save_commit')[1].p_base_level, 'CS level 3');
+
+  // hết hạn tạo bù
+  at('2026-11-01');
+  assert.equal((await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 78, s1: 80, s4: 78 })).ok, false);
+  r = await post({ action: 'careerGet' });
+  assert.deepEqual(r.backfillPending, []);
+  Date.now = realNow;
+});
+
+test('Đạt bù Q3: hồ sơ đã ở level mục tiêu → chỉ ghi nhận; hồ sơ còn thấp → đổi level + lương', async () => {
+  at('2026-10-20');
+  state.profile = { level: 'CS level 3', salary: '13000000' };
+  state.list = { commits: [commit({ quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 75, s1: 80, s4: 78 })], levelHistory: [] };
+  let r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.levelUp, false);   // hồ sơ đã là CS level 3
+  assert.equal(r.canAchieve, true); // CR 76,92% ≥ 75%; SRR Q3 không có kỳ đo → bỏ qua
+  calls.length = 0;
+  assert.equal((await post({ action: 'careerAchieve', quarter: 'Q3/2026' })).ok, true);
+  assert.equal(calls.find((c) => c[0] === 'api_career_achieve')[1].p_new_level, null);
+
+  state.profile = { level: 'CS level 2', salary: '12000000' };
+  r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.levelUp, true);
+  calls.length = 0;
+  assert.equal((await post({ action: 'careerAchieve', quarter: 'Q3/2026', newSalary: 13500000 })).ok, true);
+  const a = calls.find((c) => c[0] === 'api_career_achieve')[1];
+  assert.equal(a.p_new_level, 'CS level 3');
+  assert.equal(a.p_new_salary, 13500000);
+  state.profile = { level: 'CS level 3', salary: '13000000' };
+  Date.now = realNow;
+});
+
+test('track biểu đồ thăng tiến: level theo quý + điểm kế hoạch quý sau', async () => {
+  at('2026-10-20');
+  state.list = { commits: [], levelHistory: [] };
+  let r = await post({ action: 'careerGet' });
+  assert.deepEqual(r.track.map((p) => [p.quarter, p.level, p.kind]), [['Q4/2026', 'CS level 3', 'current']]);
+
+  state.list = { commits: [
+    commit({ quarter: 'Q4/2026', baseLevel: 'CS level 3', targetLevel: 'CS level 4' }),
+    commit({ quarter: 'Q2/2026', baseLevel: 'CS level 1', targetLevel: 'CS level 2', status: 'achieved' }),
+  ], levelHistory: [] };
+  r = await post({ action: 'careerGet' });
+  assert.deepEqual(r.track.map((p) => [p.quarter, p.level, p.kind, p.levelUp]), [
+    ['Q2/2026', 'CS level 1', 'past', true],
+    ['Q3/2026', 'CS level 2', 'past', false],     // quý không commit → nối tiếp level cuối Q2
+    ['Q4/2026', 'CS level 3', 'current', false],  // hồ sơ hiện tại
+    ['Q1/2027', 'CS level 4', 'plan', true],
+  ]);
+  assert.equal(r.track[0].status, 'achieved');
+  assert.equal(r.track[1].status, 'none');
   Date.now = realNow;
 });
