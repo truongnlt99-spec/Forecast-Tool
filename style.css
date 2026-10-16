@@ -1416,3 +1416,66 @@ html[data-theme="light"] .income-hero::after{
 .app-wrapper.collapsed .phuoc-lb,.app-wrapper.collapsed .phuoc-sub{display:none}
 .app-wrapper.collapsed .phuoc-btn{justify-content:center; padding:10px 0; flex-direction:column; gap:4px}
 .app-wrapper.collapsed .phuoc-n{margin:0; font-size:10px; padding:1px 6px}
+
+/* ---------- Mở deal trên Base CRM ---------- */
+.crm-link{color:inherit; text-decoration:none; border-bottom:1px dashed currentColor; display:inline-flex; align-items:center; gap:3px}
+.crm-link svg{width:11px; height:11px; stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; opacity:.8}
+.crm-link:hover{color:var(--lav, #8A9BFF); border-bottom-style:solid}
+.fc-crm-btn{background:linear-gradient(135deg,#3D5CFF,#6D5BEE); text-decoration:none}
+
+/* ---------- FORECAST UX (ui.js mục FORECAST UX) ---------- */
+/* Ô cần nhập: vàng = kỳ đo tháng đang chọn, đỏ = kỳ đã qua còn thiếu */
+.fc-in.fc-need{border-color:var(--amber); box-shadow:0 0 0 2px color-mix(in srgb,var(--amber) 22%,transparent);
+  background:color-mix(in srgb,var(--amber) 8%,transparent)}
+.fc-in.fc-need-past{border-color:var(--risk); box-shadow:0 0 0 2px color-mix(in srgb,var(--risk) 22%,transparent);
+  background:color-mix(in srgb,var(--risk) 8%,transparent)}
+.fc-in.fc-need::placeholder{color:var(--amber); opacity:.9}
+.fc-in.fc-need-past::placeholder{color:var(--risk); opacity:.9}
+.fc-in.fc-pct{width:60px}
+
+/* Ngày go-live dd/mm/yyyy: ô chữ + nút lịch, ô date gốc ẩn (vẫn mở được lịch) */
+.fc-date-box{position:relative; display:inline-flex; align-items:center}
+.fc-in.fc-date-proxy{width:128px; min-width:128px; padding-right:30px; text-align:left}
+.fc-in.fc-date-proxy.fc-bad{border-color:var(--risk); box-shadow:0 0 0 2px color-mix(in srgb,var(--risk) 22%,transparent)}
+.fc-date-pick{position:absolute; right:4px; top:50%; transform:translateY(-50%); width:24px; height:24px; border:0; border-radius:6px;
+  background:transparent; color:var(--tx-3); cursor:pointer; display:grid; place-items:center}
+.fc-date-pick:hover:not(:disabled){color:var(--tx); background:var(--glass-2)}
+.fc-date-pick:disabled{opacity:.35; cursor:not-allowed}
+.fc-date-pick svg{width:15px; height:15px; stroke:currentColor; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round}
+.fc-in.fc-date-orig{position:absolute; left:0; bottom:0; width:1px !important; min-width:0 !important; height:1px; padding:0; border:0; opacity:0; pointer-events:none}
+
+/* Nút Lưu: số ô chưa lưu */
+.fc-save{position:relative}
+.fc-save.fc-dirty{box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 35%,transparent)}
+.fc-save-n{margin-left:6px; min-width:18px; height:18px; padding:0 5px; border-radius:var(--r-pill); display:inline-flex; align-items:center;
+  justify-content:center; font:700 11px Inter; background:var(--amber); color:#1b1300}
+.fc-save-n[hidden]{display:none}
+
+/* Chip lọc: chấm số đỏ chỉ cho nhóm cần xử lý, còn lại xám */
+.fc-chip:not(.warn) .fc-chip-badge{background:var(--glass-2); color:var(--tx-2); box-shadow:0 0 0 1px var(--stroke-soft)}
+
+/* Chế độ "Hiện đầy đủ": cột Khách hàng không bị bóp + cố định khi cuộn ngang */
+.fc-table:not(.fc-compact) th:first-child,
+.fc-table:not(.fc-compact) td:first-child{min-width:240px; position:sticky; left:0; z-index:1; background:var(--menu-bg)}
+.fc-table:not(.fc-compact) th:first-child{z-index:2}
+
+/* KPI: ACR thành dòng phụ của thẻ CHS → 1 hàng 6 thẻ */
+.fc-kpis-merged .fc-acr-merged{display:none}
+.fc-kpis.fc-kpis-merged{grid-template-columns:repeat(6,minmax(0,1fr))}
+.fc-acr-line{margin-top:4px}
+.fc-acr-line b{color:var(--tx); font-weight:600}
+@media (max-width:1180px){ .fc-kpis.fc-kpis-merged{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:640px){
+  .fc-kpis.fc-kpis-merged{grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:10px; row-gap:10px}
+  .fc-kpis.fc-kpis-merged .kpi-value{font-size:18px !important}
+}
+
+/* Droplist CHS ẩn (trùng nút ⤵ trên thẻ CHS) — đang lọc thì có chip bỏ lọc */
+.fc-chs-hidden{display:none !important}
+.fc-chs-pill[hidden]{display:none}
+.fc-chs-pill{border-color:color-mix(in srgb,var(--cyan) 45%,transparent)}
+.fc-kpis-merged .kpi-value{white-space:nowrap; font-size:clamp(16px,1.45vw,22px) !important}
+@media (max-width:640px){
+  .fc-kpis-merged .fc-acr-line{display:block !important}
+  .fc-table td:first-child,.fc-table th:first-child{min-width:170px}
+}

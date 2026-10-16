@@ -40,6 +40,15 @@
   })();
 
   var $ = function (id) { return document.getElementById(id); };
+
+  // Link mở deal trên Base CRM (SaaS): https://basevn.base.vn/sales/deal/<Deal ID>.
+  // Chỉ nhận Deal ID toàn số → không ghép chuỗi lạ vào URL. Dùng ở cột Hành động
+  // của Forecast + mục MỞ DEAL TRÊN CRM (cuối file).
+  var CRM_DEAL_URL = 'https://basevn.base.vn/sales/deal/';
+  window.csCrmDealUrl = function (id) {
+    id = String(id == null ? '' : id).trim();
+    return /^\d{1,15}$/.test(id) ? CRM_DEAL_URL + id : '';
+  };
   var LS_SIDE = 'cs_tool_sidebar';
   var LS_THEME = 'cs_tool_theme';
 
@@ -765,6 +774,14 @@
     t.addEventListener('click', function () { setTimeout(syncTitle, 0); });
   });
   window.addEventListener('hashchange', function () { setTimeout(syncTitle, 0); });
+  // F5 đang ở #/forecast: app.js tự chuyển tab khi vào app (không có click/hashchange)
+  // → theo dõi class .active của các tab để tiêu đề + ô tìm kiếm luôn đúng tab.
+  var tabNavEl = $('tabNav');
+  if (tabNavEl) {
+    new MutationObserver(function (muts) {
+      if (muts.some(function (m) { return m.target.classList && m.target.classList.contains('tab'); })) setTimeout(syncTitle, 0);
+    }).observe(tabNavEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  }
   syncTitle();
 
   /* -------------------------------------------------------
@@ -1240,6 +1257,9 @@
         uoMiss:   qFindKey(keys, ['thiếu u/o bigquery']),
         dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
         acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
+        monthT1:  qFindKey(keys, ['tháng đo t1']),
+        monthT4:  qFindKey(keys, ['tháng đo t4']),
+        tier:     qFindKey(keys, ['tier']),
         // 3 cột riêng của tính năng này (app.js không đọc):
         glExtend: qFindKey(keys, ['go-live gia hạn', 'golive gia hạn', 'gia hạn']),
         stop:     qFindKey(keys, ['dừng triển khai', 'dung trien khai']),
@@ -1269,6 +1289,9 @@
         glExtend: qParseDate(g(K.glExtend)),
         stopped: !!(stopRaw != null && String(stopRaw).trim() !== '' && String(stopRaw).trim().toLowerCase() !== 'false'),
         reqLink: String(g(K.reqLink) || '').trim(),
+        monthT1: qMNorm(g(K.monthT1)),
+        monthT4: qMNorm(g(K.monthT4)),
+        tierNum: (function (m) { return m ? +m[0] : null; })(String(g(K.tier) || '').match(/\d+/)),
       };
       // Ngày Go-live tối đa = mốc 200% TTGL. Tính từ CÙNG mốc với "Ngày go-live
       // dự kiến" (= ngày dự kiến + 1×TTGL) để khỏi lệch khi nguồn dữ liệu đo
@@ -1294,6 +1317,8 @@
                   qList = d.deals.map(qNormalize).filter(function (x) { return x.id; });
                   qById = {};
                   qList.forEach(function (x) { qById[x.id] = x; });
+                  window.csFcDealsById = qById;   // mục FORECAST UX (cuối file) dùng để biết ô nào cần nhập
+                  if (window.csFcUxRefresh) window.csFcUxRefresh();
                   qDecorateSoon();
                   qRenderReqList();
                   qCrAdjustSoon();
@@ -1549,6 +1574,7 @@
     var CLOCK_SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
     var X_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     var PEN_SVG = '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg>';
+    var CRM_SVG = '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>';
     var TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>';
 
     function qAddActionCell(tr) {
@@ -1560,6 +1586,9 @@
         '<div class="fc-action-btns">' +
           '<button type="button" class="fc-icon-btn fc-extend-btn" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
           '<button type="button" class="fc-icon-btn fc-stop-btn" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
+          (window.csCrmDealUrl && window.csCrmDealUrl(dealId)
+            ? '<a class="fc-icon-btn fc-crm-btn" href="' + qEsc(window.csCrmDealUrl(dealId)) + '" target="_blank" rel="noopener"' +
+              ' title="Mở deal trên Base CRM" aria-label="Mở deal trên Base CRM">' + CRM_SVG + '</a>' : '') +
         '</div>';
       td.querySelector('.fc-extend-btn').addEventListener('click', function () {
         var d = qById[dealId];
@@ -2484,6 +2513,19 @@
     var EXTRA_CHANGELOG = [
       {
         date: '16/10/2026',
+        title: 'Forecast dễ nhập hơn + mở deal trên Base CRM',
+        body:
+          '<ul>' +
+            '<li><b>Mở deal trên Base CRM</b>: nút ↗ ở cột Hành động, hoặc bấm chữ "Deal …" dưới tên khách hàng (Overview, Forecast, Request).</li>' +
+            '<li><b>Ô cần nhập được đánh dấu</b>: viền vàng = kỳ đo T1/T4 tháng đang chọn còn trống; viền đỏ = kỳ đã qua còn thiếu số.</li>' +
+            '<li><b>Ngày go-live nhập dạng dd/mm/yyyy</b> (gõ tay hoặc bấm biểu tượng lịch) — hết cảnh máy hiện tháng/ngày kiểu Mỹ.</li>' +
+            '<li>Nút <b>Lưu</b> hiện số ô đã sửa chưa lưu; đóng / tải lại trang khi còn số chưa lưu sẽ được hỏi lại.</li>' +
+            '<li>Thẻ KPI gọn còn 1 hàng (ACR nằm ngay dưới số deal), điện thoại xếp 2 cột. Lọc CHS bằng nút ⤵ trên thẻ, bỏ lọc bằng chip ✕.</li>' +
+            '<li>Chế độ "Hiện đầy đủ": cột Khách hàng không bị bóp và đứng yên khi cuộn ngang.</li>' +
+          '</ul>',
+      },
+      {
+        date: '16/10/2026',
         title: 'Kết nối Claude — hỏi & cập nhật deal bằng chat',
         body:
           '<h5>Claude làm được gì</h5>' +
@@ -3221,5 +3263,240 @@
         apply(d); paint(); box.hidden = false;
       });
     })(0);
+  })();
+
+  /* -------------------------------------------------------
+     MỞ DEAL TRÊN CRM — chữ "Deal <ID>" dưới tên khách hàng (Overview, Forecast Năm 1 /
+     Năm 2++, màn Request) và ô "Deal ID" trong chi tiết deal thành link mở Base CRM ở tab
+     mới. Bảng do app.js vẽ lại liên tục → theo dõi DOM, gắn link vào phần mới xuất hiện.
+     ------------------------------------------------------- */
+  (function () {
+    var ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>';
+    function makeLink(id, text) {
+      var a = document.createElement('a');
+      a.className = 'crm-link';
+      a.href = window.csCrmDealUrl(id);
+      a.target = '_blank'; a.rel = 'noopener';
+      a.title = 'Mở deal ' + id + ' trên Base CRM';
+      a.textContent = text;
+      a.insertAdjacentHTML('beforeend', ICON);
+      // Không để click link bật/tắt dòng chi tiết của bảng Overview
+      a.addEventListener('click', function (e) { e.stopPropagation(); });
+      return a;
+    }
+    function linkSubLine(el) {
+      if (el.getAttribute('data-crm')) return;
+      el.setAttribute('data-crm', '1');
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), node;
+      while ((node = walker.nextNode())) {
+        var m = node.nodeValue.match(/Deal (\d{1,15})\b/);
+        if (!m || !window.csCrmDealUrl(m[1])) continue;
+        var after = node.splitText(m.index);
+        after.nodeValue = after.nodeValue.slice(m[0].length);
+        after.parentNode.insertBefore(makeLink(m[1], m[0]), after);
+        return;
+      }
+    }
+    function linkDetail(item) {
+      if (item.getAttribute('data-crm')) return;
+      var k = item.querySelector('.k'), v = item.querySelector('.v');
+      if (!k || !v || k.textContent.trim() !== 'Deal ID') return;
+      item.setAttribute('data-crm', '1');
+      var id = v.textContent.trim();
+      if (!window.csCrmDealUrl(id)) return;
+      v.textContent = '';
+      v.appendChild(makeLink(id, id));
+    }
+    function scan() {
+      document.querySelectorAll('.deal-id:not([data-crm])').forEach(linkSubLine);
+      document.querySelectorAll('.detail-item:not([data-crm])').forEach(linkDetail);
+    }
+    var pending = false;
+    new MutationObserver(function () {
+      if (pending) return;
+      pending = true;
+      setTimeout(function () { pending = false; scan(); }, 0);
+    }).observe(document.body, { childList: true, subtree: true });
+    scan();
+  })();
+
+  /* -------------------------------------------------------
+     FORECAST UX — các tối ưu màn Forecast, đều đắp thêm trên DOM app.js vẽ (không sửa app.js):
+      1. Ô %Active/%Output CẦN NHẬP: kỳ đo T1/T4 rơi vào tháng đang chọn mà còn trống → viền vàng;
+         kỳ đã qua mà còn trống → viền đỏ (Tier 4 chỉ cần %Output, giống quy tắc app.js).
+      2. Chưa lưu: nút Lưu hiện số ô đã sửa + hỏi lại trước khi đóng / tải lại trang.
+      3. Ô % gợi ý "%" thay "0-100" (bị cắt chữ).
+      4. Ngày go-live nhập dạng dd/mm/yyyy cố định (ô date gốc theo ngôn ngữ máy, máy en-US hiện mm/dd)
+         — proxy-input: ô chữ hiển thị, đồng bộ về ô date gốc rồi bắn 'change' cho app.js xử lý.
+      5. Thẻ KPI: gộp ACR vào dòng phụ của 4 thẻ CHS (ẩn 4 thẻ ACR) → 1 hàng 6 thẻ, điện thoại 2 cột.
+      6. Bỏ droplist CHS (trùng nút ⤵ trên thẻ CHS) — đang lọc CHS thì hiện chip "✕" để bỏ lọc.
+     ------------------------------------------------------- */
+  (function () {
+    var tbody = $('fcTbody');
+    if (!tbody) return;
+    var monthSel = $('fcFilterMonth');
+    function mCmp(a, b) {
+      var p = a.split('/'), q = b.split('/');
+      return (p[1] - q[1]) || (p[0] - q[0]);
+    }
+
+    /* ---- 1. ô cần nhập ---- */
+    function markNeed() {
+      var deals = window.csFcDealsById || {};
+      var cur = monthSel && monthSel.value;
+      tbody.querySelectorAll('tr[id^="fc-row-"]').forEach(function (tr) {
+        var d = deals[tr.id.slice(7)];
+        [['T1', 'aT1', 'oT1'], ['T4', 'aT4', 'oT4']].forEach(function (k) {
+          var m = d && d['month' + k[0]];
+          var cmp = m && cur ? mCmp(m, cur) : 1;
+          [k[1], k[2]].forEach(function (f) {
+            var inp = tr.querySelector('.fc-in[data-f="' + f + '"]');
+            if (!inp) return;
+            var need = cmp <= 0 && !inp.disabled && String(inp.value).trim() === '' &&
+              !(d.tierNum === 4 && f.charAt(0) === 'a');
+            inp.classList.toggle('fc-need', need && cmp === 0);
+            inp.classList.toggle('fc-need-past', need && cmp < 0);
+            if (need) inp.setAttribute('data-need-tip', cmp === 0 ? 'Kỳ đo ' + k[0] + ' tháng này — cần nhập' : 'Kỳ đo ' + k[0] + ' (' + m + ') đã qua — còn thiếu số');
+            else inp.removeAttribute('data-need-tip');
+            if (inp.getAttribute('placeholder') === '0-100') { inp.setAttribute('placeholder', '%'); inp.title = inp.title || 'Nhập 0–100'; }
+          });
+        });
+      });
+    }
+
+    /* ---- 4. proxy ô ngày go-live: dd/mm/yyyy ---- */
+    function isoToVn(v) { var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+    function vnToIso(v) {
+      var m = String(v || '').trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+      if (!m) return null;
+      var d = +m[1], mo = +m[2], y = +m[3], dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+      return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    var CAL = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+    function proxyDates() {
+      tbody.querySelectorAll('input.fc-in.fc-date[type="date"]').forEach(function (orig) {
+        var wrap = orig.parentElement;
+        var px = wrap.querySelector('.fc-date-proxy');
+        if (!px) {
+          var box = document.createElement('span');
+          box.className = 'fc-date-box';
+          box.innerHTML = '<input type="text" class="fc-in fc-date-proxy" inputmode="numeric" placeholder="dd/mm/yyyy" maxlength="10" aria-label="Ngày go-live thực tế (dd/mm/yyyy)">' +
+            '<button type="button" class="fc-date-pick" title="Chọn trên lịch" aria-label="Chọn trên lịch">' + CAL + '</button>';
+          orig.parentNode.insertBefore(box, orig);
+          box.appendChild(orig);              // ô gốc ẩn trong box: vẫn là ô app.js đọc/ghi + mở lịch
+          orig.classList.add('fc-date-orig');
+          px = box.querySelector('.fc-date-proxy');
+          px.addEventListener('change', function () {
+            var t = px.value.trim(), iso = t === '' ? '' : vnToIso(t);
+            if (iso == null) {
+              px.classList.add('fc-bad');
+              px.title = 'Ngày không hợp lệ — nhập dạng dd/mm/yyyy, vd 05/10/2026';
+              return;
+            }
+            px.classList.remove('fc-bad'); px.title = '';
+            px.value = isoToVn(iso);
+            if (orig.value !== iso) { orig.value = iso; orig.dispatchEvent(new Event('change', { bubbles: true })); }
+          });
+          orig.addEventListener('change', function () { px.value = isoToVn(orig.value); px.classList.remove('fc-bad'); });
+          box.querySelector('.fc-date-pick').addEventListener('click', function () {
+            if (orig.disabled) return;
+            try { orig.showPicker(); } catch (e) { orig.focus(); }
+          });
+        }
+        if (document.activeElement !== px && !px.classList.contains('fc-bad')) px.value = isoToVn(orig.value);
+        px.disabled = orig.disabled;
+        px.title = orig.disabled ? orig.title : px.title;
+        px.classList.toggle('fc-edited', orig.classList.contains('fc-edited'));
+        var pick = px.parentNode.querySelector('.fc-date-pick');
+        if (pick) pick.disabled = orig.disabled;
+      });
+    }
+
+    /* ---- 2. chưa lưu ---- */
+    function dirtyBinder(tbodyId, btnId, flagId) {
+      var tb = $(tbodyId), btn = $(btnId), flag = $(flagId);
+      if (!tb || !btn || !flag) return function () { return 0; };
+      var keys = {};
+      var badge = document.createElement('span');
+      badge.className = 'fc-save-n'; badge.hidden = true;
+      btn.appendChild(badge);
+      function paint() {
+        var n = Object.keys(keys).length;
+        badge.textContent = n; badge.hidden = !n;
+        btn.classList.toggle('fc-dirty', n > 0);
+        btn.title = n ? n + ' ô đã sửa chưa lưu — bấm Lưu để ghi' : '';
+      }
+      tb.addEventListener('change', function (e) {
+        var el = e.target;
+        if (!el.classList || !el.classList.contains('fc-in') || !el.getAttribute('data-f')) return;
+        var k = (el.getAttribute('data-id') || el.getAttribute('data-k') || '') + '|' + el.getAttribute('data-f');
+        setTimeout(function () {   // để app.js xử lý trước: sửa về như cũ thì app.js bỏ class fc-edited
+          if (el.classList.contains('fc-edited')) keys[k] = 1; else delete keys[k];
+          paint();
+        }, 0);
+      });
+      new MutationObserver(function () {
+        if (/^✓ đã lưu/.test(flag.textContent)) { keys = {}; paint(); }
+      }).observe(flag, { childList: true, characterData: true, subtree: true });
+      return function () { return Object.keys(keys).length; };
+    }
+    var fcDirty = dirtyBinder('fcTbody', 'fcSaveBtn', 'fcFlag');
+    var mcDirty = dirtyBinder('mcTbody', 'mcSaveBtn', 'mcFlag');
+    window.addEventListener('beforeunload', function (e) {
+      if (fcDirty() + mcDirty() > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
+    });
+
+    /* ---- 5. KPI: ACR thành dòng phụ của thẻ CHS ---- */
+    var kpis = document.querySelector('.fc-kpis-10');
+    [['fcT1OkAcr', 'fcT1OkSub'], ['fcT1LowAcr', 'fcT1LowSub'], ['fcT4OkAcr', 'fcT4OkSub'], ['fcT4RiskAcr', 'fcT4RiskSub']].forEach(function (p) {
+      var acr = $(p[0]), sub = $(p[1]);
+      if (!acr || !sub || !kpis) return;
+      acr.closest('.kpi-card').classList.add('fc-acr-merged');
+      var line = document.createElement('div');
+      line.className = 'kpi-sub fc-acr-line';
+      sub.insertAdjacentElement('afterend', line);
+      function sync() { line.innerHTML = 'ACR <b></b>'; line.querySelector('b').textContent = acr.textContent.trim() || '—'; }
+      sync();
+      new MutationObserver(sync).observe(acr, { childList: true, characterData: true, subtree: true });
+    });
+    if (kpis) kpis.classList.add('fc-kpis-merged');
+
+    /* ---- 6. bỏ droplist CHS, giữ chip bỏ lọc ---- */
+    var chsSel = $('fcChsFilter');
+    var chsLbl = document.querySelector('label[for="fcChsFilter"]');
+    var chsPill = null;
+    if (chsSel) {
+      chsSel.classList.add('fc-chs-hidden');
+      if (chsLbl) chsLbl.classList.add('fc-chs-hidden');
+      chsPill = document.createElement('button');
+      chsPill.type = 'button'; chsPill.className = 'chip-btn fc-chs-pill'; chsPill.hidden = true;
+      chsPill.addEventListener('click', function () {
+        chsSel.value = ''; chsSel.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      chsSel.insertAdjacentElement('afterend', chsPill);
+    }
+    function syncChsPill() {
+      if (!chsPill) return;
+      var v = chsSel.value, opt = chsSel.selectedOptions[0];
+      chsPill.hidden = !v;
+      if (v) chsPill.textContent = '✕ Bỏ lọc ' + (opt ? opt.textContent : v);
+    }
+
+    var pending = false;
+    function refresh() {
+      if (pending) return;
+      pending = true;
+      setTimeout(function () {
+        pending = false;
+        markNeed(); proxyDates(); syncChsPill();
+      }, 0);
+    }
+    window.csFcUxRefresh = refresh;
+    new MutationObserver(refresh).observe(tbody, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'class'] });
+    tbody.addEventListener('input', function (e) { if (e.target.classList && e.target.classList.contains('fc-pct')) refresh(); });
+    tbody.addEventListener('change', refresh);
+    if (monthSel) monthSel.addEventListener('change', refresh);
+    refresh();
   })();
 })();
