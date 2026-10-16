@@ -136,8 +136,12 @@ select
   fmt_num1(d."CHS_CS T4 - Năm 5") as "CHS_CS T4 - Năm 5",
   fmt_money(d."ACR đủ đk COM T4 - Năm 5") as "ACR đủ đk COM T4 - Năm 5",
   coalesce(d."Nguồn go-live", '') as "Nguồn go-live",  -- 'Đã kéo' (CRM) / 'Forecast' (CS nhập)
-  coalesce(d."U/O từ BigQuery", '') as "U/O từ BigQuery",       -- vd 'aT1,oT1' → UI khoá các ô này
-  coalesce(d."Thiếu U/O BigQuery", '') as "Thiếu U/O BigQuery"  -- vd 'U T1, O T1' → UI tô đỏ
+  coalesce(d."U/O từ BigQuery", '') as "U/O từ BigQuery",       -- vd 'aT1,oT1' → ô đang hiện số CRM (nhãn "CRM")
+  coalesce(d."Thiếu U/O BigQuery", '') as "Thiếu U/O BigQuery", -- vd 'U T1, O T1' → UI tô đỏ
+  fmt_date(d."Ngày đánh giá T1") as "Ngày đánh giá T1",
+  fmt_date(d."Ngày đánh giá T4") as "Ngày đánh giá T4",
+  coalesce(d."Khoá U/O", '') as "Khoá U/O",                    -- vd 'aT1,oT1' → qua ngày đánh giá T1, UI khoá
+  coalesce(d."Khoá Năm 2++", '') as "Khoá Năm 2++"             -- vd '2|T1,2|T4' → UI khoá ô Năm 2–5
 from v_database d;
 revoke all on v_database_display from anon, authenticated;
 
@@ -185,9 +189,11 @@ create or replace function api_get_deals_json(p_email text) returns json stable 
     and x."Deal ID" <> '' $$;
 
 -- ---------- GHI: 5 ô Năm 1 (thay saveRows_) ----------
+-- Kỳ T1/T4 đã qua ngày đánh giá (deal_ngay_dg < hôm nay) → giữ nguyên số cũ, bỏ qua số gửi lên
+-- (web gửi đủ 5 ô của deal đã sửa nên không báo lỗi, chỉ không ghi ô đã khoá).
 create or replace function api_save_rows(p_email text, p_rows jsonb) returns int language plpgsql as $$
 declare
-  r jsonb; did bigint; cur deal_inputs%rowtype; n int := 0;
+  r jsonb; did bigint; cur deal_inputs%rowtype; n int := 0; k1 boolean; k4 boolean;
 begin
   for r in select * from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) loop
     if coalesce(r->>'dealId', '') !~ '^\s*\d+\s*$' then continue; end if;
@@ -198,12 +204,14 @@ begin
     end if;
     insert into deal_inputs (deal_id) values (did) on conflict (deal_id) do nothing;
     select * into cur from deal_inputs where deal_id = did for update;
+    k1 := coalesce(deal_ngay_dg(did, 'T1') < vn_today(), false);
+    k4 := coalesce(deal_ngay_dg(did, 'T4') < vn_today(), false);
     update deal_inputs set
       go_live_actual = date_in(r->>'goLive', cur.go_live_actual),
-      active_t1 = pct_in(r->'aT1', cur.active_t1),
-      output_t1 = pct_in(r->'oT1', cur.output_t1),
-      active_t4 = pct_in(r->'aT4', cur.active_t4),
-      output_t4 = pct_in(r->'oT4', cur.output_t4),
+      active_t1 = case when k1 then cur.active_t1 else pct_in(r->'aT1', cur.active_t1) end,
+      output_t1 = case when k1 then cur.output_t1 else pct_in(r->'oT1', cur.output_t1) end,
+      active_t4 = case when k4 then cur.active_t4 else pct_in(r->'aT4', cur.active_t4) end,
+      output_t4 = case when k4 then cur.output_t4 else pct_in(r->'oT4', cur.output_t4) end,
       updated_by = lower(p_email), updated_at = now()
     where deal_id = did;
     n := n + 1;
@@ -226,6 +234,8 @@ begin
     yr := trim(r->>'year')::int;
     if yr < 2 or yr > 5 then continue; end if;
     per := case when upper(coalesce(r->>'period', '')) = 'T4' then 'T4' else 'T1' end;
+    -- Năm N đã qua ngày đánh giá (ngày đánh giá Năm 1 + (N−1) năm) → khoá, bỏ qua
+    if deal_ngay_dg(did, per) + make_interval(years => yr - 1) < vn_today() then continue; end if;
     insert into deal_multiyear_inputs (deal_id, year, period) values (did, yr, per)
       on conflict (deal_id, year, period) do nothing;
     select * into cur from deal_multiyear_inputs
