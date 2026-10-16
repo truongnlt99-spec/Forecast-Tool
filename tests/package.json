@@ -1,0 +1,12 @@
+{
+  "name": "cs-console-tests",
+  "private": true,
+  "description": "Test cho CS Console — chạy: cd tests && npm install && npm test (KHÔNG đặt package.json ở gốc repo để Vercel giữ deploy tĩnh)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-reporter=spec *.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5"
+  }
+}

@@ -416,11 +416,19 @@ const TOOLS: Tool[] = [
   {
     name: "admin_add_todo",
     description: "[Admin] Thêm 1 việc vào todo.",
-    inputSchema: S({ noi_dung: str("Nội dung việc"), note: str("Ghi chú"), dau_moi: str("Đầu mối") }, ["noi_dung"]),
+    inputSchema: S({
+      noi_dung: str("Nội dung việc"), note: str("Ghi chú"), dau_moi: str("Đầu mối"),
+      feedback_id: str("Mã feedback gốc (PF...) nếu việc sinh ra từ feedback — feedback đã có todo đang mở thì cập nhật todo đó, không tạo trùng"),
+      pr_url: str("Link PR GitHub liên quan (nếu có)"),
+      nguon: { type: "string", enum: ["claude", "manual"], description: "Ai tạo: claude (mặc định) / manual" },
+    }, ["noi_dung"]),
     admin: true,
     run: async (a, ctx) => await rpc("api_admin_save_todo", {
       p_email: ctx.email,
-      p_item: { noiDung: a.noi_dung, note: a.note ?? "", dauMoi: a.dau_moi ?? "" },
+      p_item: {
+        noiDung: a.noi_dung, note: a.note ?? "", dauMoi: a.dau_moi ?? "",
+        feedbackId: a.feedback_id ?? "", prUrl: a.pr_url ?? "", nguon: a.nguon ?? "claude",
+      },
     }),
   },
   {
@@ -430,6 +438,7 @@ const TOOLS: Tool[] = [
       id: { type: "integer", description: "id của việc (lấy từ admin_list_todo)" },
       noi_dung: str("Nội dung"), note: str("Ghi chú"), dau_moi: str("Đầu mối"),
       done: { type: "boolean", description: "true = đã xong" },
+      pr_url: str("Link PR GitHub liên quan"),
     }, ["id"]),
     admin: true,
     run: async (a, ctx) => {
@@ -438,6 +447,7 @@ const TOOLS: Tool[] = [
       if ("note" in a) item.note = a.note;
       if ("dau_moi" in a) item.dauMoi = a.dau_moi;
       if ("done" in a) item.done = !!a.done;
+      if ("pr_url" in a) item.prUrl = a.pr_url;
       return await rpc("api_admin_save_todo", { p_email: ctx.email, p_item: item });
     },
   },
@@ -449,6 +459,106 @@ const TOOLS: Tool[] = [
     run: async (a, ctx) => {
       await rpc("api_admin_delete_todo", { p_email: ctx.email, p_id: Number(a.id) });
       return { ok: true };
+    },
+  },
+  {
+    name: "admin_feedback_queue",
+    description:
+      "[Admin] Hàng chờ cho Claude: feedback còn mở (Received / In Progress) mà Claude CHƯA xử lý, cũ nhất trước. " +
+      "Xử lý xong mỗi cái phải gọi admin_mark_feedback để không bị lặp lại ở lần chạy sau.",
+    inputSchema: S({}),
+    admin: true,
+    readOnly: true,
+    run: async (_a, ctx) => await rpc("api_admin_feedback_queue", { p_email: ctx.email }),
+  },
+  {
+    name: "admin_get_feedback",
+    description:
+      "[Admin] Chi tiết 1 feedback, kèm ẢNH đính kèm (file upload trong console). Link Google Drive thì chỉ trả link — " +
+      "đọc bằng connector Google Drive nếu có.",
+    inputSchema: S({ id: str("Mã feedback PF...") }, ["id"]),
+    admin: true,
+    readOnly: true,
+    run: async (a, ctx) => {
+      const fb = await rpc<{ attachments?: string[] }>("api_admin_get_feedback", { p_email: ctx.email, p_id: String(a.id) });
+      const content: Record<string, unknown>[] = [{ type: "text", text: JSON.stringify(fb, null, 1) }];
+      const base = (Deno.env.get("SUPABASE_URL") || "") + "/storage/v1/object/public/feedback/";
+      for (const url of (fb?.attachments || []).slice(0, 5)) {
+        if (!String(url).startsWith(base)) continue;
+        try {
+          const r = await fetch(url);
+          const mime = r.headers.get("content-type") || "";
+          const buf = new Uint8Array(await r.arrayBuffer());
+          if (!/^image\/(png|jpe?g|gif|webp)$/.test(mime) || buf.length > 4_000_000) {
+            content.push({ type: "text", text: "File đính kèm không phải ảnh nhỏ (" + mime + ", " + buf.length + " byte): " + url });
+            continue;
+          }
+          let bin = "";
+          for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+          content.push({ type: "image", data: btoa(bin), mimeType: mime });
+        } catch (e) {
+          content.push({ type: "text", text: "Không tải được " + url + ": " + String((e as Error).message || e) });
+        }
+      }
+      return { __content: content };
+    },
+  },
+  {
+    name: "admin_mark_feedback",
+    description:
+      "[Admin] Ghi KẾT QUẢ Claude xử lý 1 feedback (nội bộ, người gửi không thấy) để lần sau không xử lý lại. " +
+      "ket_qua: da_tra_loi (đã trả lời/giải thích, không cần sửa), cho_duyet_pr (đã mở PR chờ admin duyệt), " +
+      "da_tao_todo (đã tạo todo cho admin), bo_qua (trùng/không cần làm). null = đưa lại vào hàng chờ.",
+    inputSchema: S({
+      id: str("Mã feedback PF..."),
+      ket_qua: { type: ["string", "null"], enum: ["da_tra_loi", "cho_duyet_pr", "da_tao_todo", "bo_qua", null] },
+      ghi_chu: str("Tóm tắt Claude đã kiểm tra gì, kết luận gì (1–3 câu)"),
+      todo_id: { type: "integer", description: "id todo đã tạo (nếu có)" },
+      pr_url: str("Link PR (nếu có)"),
+    }, ["id", "ket_qua", "ghi_chu"]),
+    admin: true,
+    run: async (a, ctx) => await rpc("api_admin_mark_feedback", {
+      p_email: ctx.email, p_id: String(a.id), p_ai_status: a.ket_qua ?? null, p_note: String(a.ghi_chu || ""),
+      p_todo_id: a.todo_id == null ? null : Number(a.todo_id), p_pr_url: a.pr_url == null ? null : String(a.pr_url),
+    }),
+  },
+  {
+    name: "admin_get_deal",
+    description:
+      "[Admin] Soi 1 deal BẤT KỲ (của mọi CS): dòng đang hiện trên console, số gốc từ BigQuery (deals_raw), số CS nhập " +
+      "Năm 1 và Năm 2–5, 30 lần sửa gần nhất, và lý do nếu deal không hiện trên console. Dùng để kiểm tra feedback về dữ liệu.",
+    inputSchema: S({ deal_id: str("Deal ID") }, ["deal_id"]),
+    admin: true,
+    readOnly: true,
+    run: async (a, ctx) => {
+      const id = String(a.deal_id).trim();
+      if (!/^\d+$/.test(id)) throw new ToolError("deal_id không hợp lệ");
+      return await rpc("api_admin_get_deal", { p_email: ctx.email, p_deal_id: Number(id) });
+    },
+  },
+  {
+    name: "admin_find_deals",
+    description:
+      "[Admin] Tìm deal trong toàn bộ dữ liệu (kể cả deal không hiện trên console) theo Deal ID, System ID, Job ID, " +
+      "tên deal hoặc tên công ty. Tối đa 30 kết quả.",
+    inputSchema: S({ tu_khoa: str("Từ khoá (≥ 2 ký tự)") }, ["tu_khoa"]),
+    admin: true,
+    readOnly: true,
+    run: async (a, ctx) => await rpc("api_admin_find_deals", { p_email: ctx.email, p_query: String(a.tu_khoa || "") }),
+  },
+  {
+    name: "admin_list_deals_of",
+    description: "[Admin] Danh sách deal trên console của 1 CS bất kỳ (theo email), dạng rút gọn như list_my_deals.",
+    inputSchema: S({
+      email: str("Email CS, vd luan.pham@base.vn"),
+      gioi_han: { type: "integer", minimum: 1, maximum: 300, description: "Số deal tối đa (mặc định 100)" },
+    }, ["email"]),
+    admin: true,
+    readOnly: true,
+    run: async (a) => {
+      const ds = await myDeals(String(a.email || "").trim().toLowerCase());
+      const lim = Number(a.gioi_han) || 100;
+      return { tong: ds.length, deals: ds.slice(0, lim).map(compact) };
     },
   },
   {
@@ -467,7 +577,8 @@ const INSTRUCTIONS =
   "CS Console (Base.vn) — dữ liệu deal triển khai của CS. Mỗi kết nối gắn với 1 tài khoản: chỉ thấy và sửa deal " +
   "mình phụ trách. Ngày dạng dd/mm/yyyy, tháng dạng MM/YYYY, tiền VNĐ, % nhập 0–100. Ô go-live 'Đã kéo' và ô U/O " +
   "lấy từ BigQuery bị khoá (không sửa tay). Trước khi gọi tool ghi (update_*, request_*, cancel_request, submit_feedback, " +
-  "admin_reply_feedback, admin_*_todo) hãy tóm tắt thay đổi và hỏi người dùng xác nhận. Tool có tiền tố admin_ chỉ dành cho admin.";
+  "admin_reply_feedback, admin_*_todo) hãy tóm tắt thay đổi và hỏi người dùng xác nhận — trừ khi đang chạy tác vụ tự động " +
+  "đã được admin giao sẵn quy trình. Tool có tiền tố admin_ chỉ dành cho admin.";
 
 // ---------------------------------------------------------------------
 // Email (Resend) — giống function api; chưa cấu hình thì bỏ qua
@@ -526,6 +637,9 @@ async function handle(msg: RpcMsg, ctx: Ctx): Promise<Record<string, unknown> | 
       if (!tool) return err(-32602, "Không có tool " + name + (TOOLS.some((t) => t.name === name) ? " (chỉ admin)" : ""));
       try {
         const out = await tool.run((msg.params?.arguments as Record<string, unknown>) || {}, ctx);
+        if (out && typeof out === "object" && "__content" in (out as Record<string, unknown>)) {
+          return ok({ content: (out as { __content: unknown[] }).__content });
+        }
         return ok({ content: [{ type: "text", text: JSON.stringify(out, null, 1) }] });
       } catch (e) {
         return ok({ content: [{ type: "text", text: "Lỗi: " + String((e as Error)?.message || e) }], isError: true });

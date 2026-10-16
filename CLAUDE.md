@@ -25,3 +25,17 @@ Hướng dẫn bắt buộc khi làm việc trong repo này.
 ...
 <script src="ui.js?v=18"></script>
 <script src="app.js?v=7"></script>
+```
+
+## 4. Test
+
+```bash
+cd tests && npm install && npm test   # quy tắc CR (app.js + ui.js + MCP), MCP server, UI smoke trên Chromium
+```
+
+Không đặt `package.json` ở gốc repo (Vercel đang deploy tĩnh). Sửa logic/giao diện thì thêm test vào `tests/`.
+
+## 5. Claude tự xử lý feedback mỗi sáng
+
+Quy trình bắt buộc: `docs/XU-LY-FEEDBACK.md`. Tóm tắt: chỉ mở PR (không push `main`), không sửa `app.js`/SQL
+chính sách; không chắc → tạo todo cho admin qua MCP CS Console.

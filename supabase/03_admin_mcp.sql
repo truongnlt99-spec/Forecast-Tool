@@ -264,3 +264,191 @@ begin
     execute format('alter function %s set search_path = public', f);
   end loop;
 end $$;
+
+-- =====================================================================
+-- CLAUDE TỰ XỬ LÝ FEEDBACK MỖI SÁNG (16/10/2026) — xem docs/XU-LY-FEEDBACK.md
+--  • product_feedback.ai_*: kết quả Claude xử lý (nội bộ, người gửi không thấy)
+--  • todolist.feedback_id / nguon / pr_url: todo sinh từ feedback, không tạo trùng
+--  • api_admin_get_deal / api_admin_find_deals: admin soi deal bất kỳ để kiểm tra feedback dữ liệu
+-- =====================================================================
+alter table product_feedback add column if not exists ai_status text;
+alter table product_feedback add column if not exists ai_note text;
+alter table product_feedback add column if not exists ai_checked_at timestamptz;
+alter table product_feedback add column if not exists ai_todo_id int;
+alter table product_feedback add column if not exists ai_pr_url text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'product_feedback_ai_status_chk') then
+    alter table product_feedback add constraint product_feedback_ai_status_chk
+      check (ai_status is null or ai_status in ('da_tra_loi','cho_duyet_pr','da_tao_todo','bo_qua'));
+  end if;
+end $$;
+alter table todolist add column if not exists feedback_id text;
+alter table todolist add column if not exists nguon text not null default 'manual';
+alter table todolist add column if not exists pr_url text;
+
+create or replace function fb_json(f product_feedback) returns json stable language sql as $$
+  select json_build_object(
+    'id', f.id,
+    'ts', coalesce(to_char(f.submitted_at at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'), ''),
+    'senderEmail', coalesce(f.sender_email, ''), 'senderName', coalesce(f.sender_name, ''),
+    'title', coalesce(f.title, ''), 'category', coalesce(f.type, ''),
+    'description', coalesce(f.description, ''),
+    'attachments', coalesce(f.attachments, '[]'::jsonb),
+    'expected', fmt_date(f.expected_date),
+    'status', coalesce(f.status, ''), 'response', coalesce(f.team_reply, ''),
+    'repliedAt', coalesce(to_char(f.replied_at at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'), ''),
+    'aiStatus', coalesce(f.ai_status, ''), 'aiNote', coalesce(f.ai_note, ''),
+    'aiCheckedAt', coalesce(to_char(f.ai_checked_at at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'), ''),
+    'aiTodoId', f.ai_todo_id, 'aiPrUrl', coalesce(f.ai_pr_url, '')) $$;
+
+create or replace function api_admin_list_feedback(p_email text, p_status text default null)
+returns json stable language plpgsql as $$
+begin
+  perform admin_check(p_email);
+  return (select coalesce(json_agg(fb_json(f) order by f.submitted_at desc nulls last, f.id desc), '[]'::json)
+          from product_feedback f
+          where nullif(trim(coalesce(p_status, '')), '') is null or f.status = trim(p_status));
+end $$;
+
+-- Hàng chờ cho Claude: feedback còn mở (Received / In Progress) mà Claude chưa xử lý, cũ nhất trước
+create or replace function api_admin_feedback_queue(p_email text) returns json stable language plpgsql as $$
+begin
+  perform admin_check(p_email);
+  return (select coalesce(json_agg(fb_json(f) order by f.submitted_at nulls first, f.id), '[]'::json)
+          from product_feedback f
+          where f.ai_status is null and coalesce(f.status, 'Received') in ('Received', 'In Progress'));
+end $$;
+
+create or replace function api_admin_get_feedback(p_email text, p_id text) returns json stable language plpgsql as $$
+declare r json;
+begin
+  perform admin_check(p_email);
+  select fb_json(f) into r from product_feedback f where f.id = p_id;
+  if r is null then raise exception 'Không tìm thấy feedback %', p_id; end if;
+  return r;
+end $$;
+
+-- Ghi kết quả Claude xử lý 1 feedback (không đổi trạng thái/phản hồi người gửi thấy)
+create or replace function api_admin_mark_feedback(p_email text, p_id text, p_ai_status text, p_note text,
+                                                   p_todo_id int default null, p_pr_url text default null)
+returns json language plpgsql as $$
+declare r product_feedback%rowtype;
+begin
+  perform admin_check(p_email);
+  if p_ai_status is not null and p_ai_status not in ('da_tra_loi', 'cho_duyet_pr', 'da_tao_todo', 'bo_qua') then
+    raise exception 'ket_qua phải là da_tra_loi / cho_duyet_pr / da_tao_todo / bo_qua (hoặc null để đưa lại vào hàng chờ)';
+  end if;
+  update product_feedback set
+    ai_status = p_ai_status,
+    ai_note = case when p_ai_status is null then null else nullif(trim(coalesce(p_note, '')), '') end,
+    ai_checked_at = case when p_ai_status is null then null else now() end,
+    ai_todo_id = case when p_ai_status is null then null else coalesce(p_todo_id, ai_todo_id) end,
+    ai_pr_url = case when p_ai_status is null then null else coalesce(nullif(trim(coalesce(p_pr_url, '')), ''), ai_pr_url) end
+  where id = p_id returning * into r;
+  if not found then raise exception 'Không tìm thấy feedback %', p_id; end if;
+  return fb_json(r);
+end $$;
+
+create or replace function api_admin_list_todo(p_email text) returns json stable language plpgsql as $$
+begin
+  perform admin_check(p_email);
+  return (
+    select coalesce(json_agg(json_build_object(
+             'id', id, 'stt', stt, 'noiDung', coalesce(noi_dung, ''), 'note', coalesce(note, ''),
+             'dauMoi', coalesce(dau_moi, ''), 'done', done,
+             'feedbackId', coalesce(feedback_id, ''), 'nguon', coalesce(nguon, 'manual'), 'prUrl', coalesce(pr_url, ''),
+             'updatedAt', coalesce(to_char(coalesce(updated_at, created_at) at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'), ''))
+           order by done, stt nulls last, id), '[]'::json)
+    from todolist where deleted_at is null);
+end $$;
+
+-- p_item: {id?, noiDung?, note?, dauMoi?, done?, stt?, feedbackId?, nguon?, prUrl?}
+-- Thêm mới kèm feedbackId mà feedback đó đã có todo đang mở → cập nhật todo cũ (không tạo trùng)
+create or replace function api_admin_save_todo(p_email text, p_item jsonb) returns json language plpgsql as $$
+declare t todolist%rowtype; tid int;
+begin
+  perform admin_check(p_email);
+  if coalesce(p_item->>'id', '') ~ '^\d+$' then
+    tid := (p_item->>'id')::int;
+  elsif nullif(trim(coalesce(p_item->>'feedbackId', '')), '') is not null then
+    select id into tid from todolist
+    where feedback_id = trim(p_item->>'feedbackId') and deleted_at is null and not done
+    order by id desc limit 1;
+  end if;
+
+  if tid is not null then
+    update todolist set
+      noi_dung = case when p_item ? 'noiDung' then trim(p_item->>'noiDung') else noi_dung end,
+      note     = case when p_item ? 'note'    then trim(coalesce(p_item->>'note', '')) else note end,
+      dau_moi  = case when p_item ? 'dauMoi'  then trim(coalesce(p_item->>'dauMoi', '')) else dau_moi end,
+      done     = case when p_item ? 'done'    then coalesce((p_item->>'done')::boolean, false) else done end,
+      stt      = case when p_item ? 'stt' and (p_item->>'stt') ~ '^\d+$' then (p_item->>'stt')::int else stt end,
+      feedback_id = case when p_item ? 'feedbackId' then nullif(trim(coalesce(p_item->>'feedbackId', '')), '') else feedback_id end,
+      pr_url   = case when p_item ? 'prUrl'   then nullif(trim(coalesce(p_item->>'prUrl', '')), '') else pr_url end,
+      updated_at = now(), updated_by = lower(p_email)
+    where id = tid and deleted_at is null returning * into t;
+    if not found then raise exception 'Không tìm thấy việc #%', tid; end if;
+  else
+    if trim(coalesce(p_item->>'noiDung', '')) = '' then raise exception 'Cần nhập nội dung công việc'; end if;
+    insert into todolist (stt, noi_dung, note, dau_moi, done, feedback_id, nguon, pr_url, updated_at, updated_by)
+    values ((select coalesce(max(stt), 0) + 1 from todolist where deleted_at is null), trim(p_item->>'noiDung'),
+            trim(coalesce(p_item->>'note', '')), trim(coalesce(p_item->>'dauMoi', '')),
+            coalesce((p_item->>'done')::boolean, false),
+            nullif(trim(coalesce(p_item->>'feedbackId', '')), ''),
+            coalesce(nullif(trim(coalesce(p_item->>'nguon', '')), ''), 'manual'),
+            nullif(trim(coalesce(p_item->>'prUrl', '')), ''), now(), lower(p_email))
+    returning * into t;
+  end if;
+  return json_build_object('id', t.id, 'stt', t.stt, 'noiDung', t.noi_dung, 'note', coalesce(t.note, ''),
+                           'dauMoi', coalesce(t.dau_moi, ''), 'done', t.done, 'feedbackId', coalesce(t.feedback_id, ''),
+                           'nguon', t.nguon, 'prUrl', coalesce(t.pr_url, ''));
+end $$;
+
+-- Admin xem 1 deal bất kỳ: dòng hiển thị trên console + số gốc BigQuery + số CS nhập + lịch sử sửa
+create or replace function api_admin_get_deal(p_email text, p_deal_id bigint) returns json stable language plpgsql as $$
+declare raw json;
+begin
+  perform admin_check(p_email);
+  select row_to_json(r) into raw from deals_raw r where r.deal_id = p_deal_id;
+  if raw is null then raise exception 'Không có deal % trong dữ liệu (deals_raw)', p_deal_id; end if;
+  return json_build_object(
+    'trenConsole', (select row_to_json(d) from v_database_display d where d."Deal ID" = p_deal_id::text),
+    'lyDoKhongHien', case
+       when not (raw->>'is_active')::boolean then 'Deal đã rớt khỏi query BigQuery (is_active = false)'
+       when raw->>'co_che_com' = 'Chính sách cũ' then 'Cơ chế tính com = Chính sách cũ (bị loại khỏi console)'
+       when not exists (select 1 from v_database_display d where d."Deal ID" = p_deal_id::text) then 'Không hiện trên console'
+       end,
+    'csPhuTrach', (select lower(email) from v_deal_owner o where o.deal_id = p_deal_id),
+    'bigQueryGoc', raw,
+    'csNhapNam1', (select row_to_json(i) from deal_inputs i where i.deal_id = p_deal_id),
+    'csNhapNam2_5', (select coalesce(json_agg(row_to_json(m) order by m.year, m.period), '[]'::json)
+                     from deal_multiyear_inputs m where m.deal_id = p_deal_id),
+    'lichSuSua', (select coalesce(json_agg(json_build_object('luc', to_char(h.changed_at at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'),
+                        'o', h.field, 'cu', h.old_value, 'moi', h.new_value, 'boi', h.changed_by) order by h.changed_at desc), '[]'::json)
+                  from (select * from deal_input_history where deal_id = p_deal_id order by changed_at desc limit 30) h));
+end $$;
+
+create or replace function api_admin_find_deals(p_email text, p_query text) returns json stable language plpgsql as $$
+declare q text := lower(trim(coalesce(p_query, '')));
+begin
+  perform admin_check(p_email);
+  if length(q) < 2 then raise exception 'Từ khoá tối thiểu 2 ký tự'; end if;
+  return (select coalesce(json_agg(json_build_object('dealId', r.deal_id, 'ten', r.deal_name, 'congTy', r.ten_cong_ty,
+            'systemId', r.system_id, 'cs', r.co_owner, 'stage', r.stage, 'ngayTao', fmt_date(r.ngay_tao_deal),
+            'coCheCom', r.co_che_com, 'active', r.is_active)), '[]'::json)
+          from (select * from deals_raw r
+                where r.deal_id::text = q or r.system_id::text = q or r.job_id::text = q
+                   or lower(r.deal_name) like '%' || q || '%' or lower(coalesce(r.ten_cong_ty, '')) like '%' || q || '%'
+                order by r.ngay_tao_deal desc nulls last limit 30) r);
+end $$;
+
+do $$
+declare f text;
+begin
+  for f in select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'public' and (p.proname like 'api\_%' or p.proname in ('admin_check', 'fb_json')) loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+    execute format('alter function %s set search_path = public', f);
+  end loop;
+end $$;

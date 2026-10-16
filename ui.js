@@ -2253,6 +2253,11 @@
     var FB_STATUS = {
       'Received': 'pfs-received', 'In Progress': 'pfs-progress', "Won't Do": 'pfs-wontdo', 'Completed': 'pfs-done'
     };
+    // Kết quả Claude tự xử lý feedback (tác vụ chạy mỗi sáng) — nội bộ, người gửi không thấy
+    var AI_STATUS = {
+      'da_tra_loi': 'Đã trả lời', 'cho_duyet_pr': 'Có PR chờ duyệt', 'da_tao_todo': 'Đã tạo todo', 'bo_qua': 'Bỏ qua'
+    };
+    function safeUrl(u) { return /^https:\/\//.test(String(u || '')) ? String(u) : ''; }
     bindModal(adminBtn, adminModal, 'adminClose', function () { renderAdmin(); });
 
     function renderAdmin() {
@@ -2300,6 +2305,11 @@
             (atts.length ? '<div class="pf-item-atts">' + atts.map(function (a, i) {
               return '<a href="' + esc(a) + '" target="_blank" rel="noopener noreferrer">📎 File ' + (i + 1) + '</a>';
             }).join(' · ') + '</div>' : '') +
+            (it.aiStatus ? '<div class="pf-item-resp">🤖 <b>Claude · ' + esc(AI_STATUS[it.aiStatus] || it.aiStatus) + '</b>' +
+              (it.aiCheckedAt ? ' · ' + esc(it.aiCheckedAt) : '') +
+              (it.aiTodoId ? ' · todo #' + esc(it.aiTodoId) : '') +
+              (safeUrl(it.aiPrUrl) ? ' · <a href="' + esc(safeUrl(it.aiPrUrl)) + '" target="_blank" rel="noopener noreferrer">Xem PR</a>' : '') +
+              (it.aiNote ? '<br>' + esc(it.aiNote) : '') + '</div>' : '') +
             '<div class="ad-edit">' +
               '<textarea rows="2" data-reply placeholder="Phản hồi cho người gửi (hiện trong Product Feedback của họ)">' + esc(it.response) + '</textarea>' +
               '<div class="mc-row"><select data-status>' + Object.keys(FB_STATUS).map(function (k) {
@@ -2360,7 +2370,10 @@
             '<div class="ad-todo-main" data-view>' +
               '<div class="pf-item-title" style="white-space:pre-wrap">' + (t.stt ? '#' + esc(t.stt) + ' · ' : '') + esc(t.noiDung) + '</div>' +
               (t.note ? '<div class="pf-item-desc">📝 ' + esc(t.note) + '</div>' : '') +
-              '<div class="pf-item-meta">' + (t.dauMoi ? 'Đầu mối: ' + esc(t.dauMoi) + ' · ' : '') + 'Cập nhật ' + esc(t.updatedAt) + '</div>' +
+              '<div class="pf-item-meta">' + (t.nguon === 'claude' ? '🤖 Claude tạo · ' : '') +
+                (t.feedbackId ? 'Từ feedback ' + esc(t.feedbackId) + ' · ' : '') +
+                (safeUrl(t.prUrl) ? '<a href="' + esc(safeUrl(t.prUrl)) + '" target="_blank" rel="noopener noreferrer">Xem PR</a> · ' : '') +
+                (t.dauMoi ? 'Đầu mối: ' + esc(t.dauMoi) + ' · ' : '') + 'Cập nhật ' + esc(t.updatedAt) + '</div>' +
             '</div>' +
             '<div class="ad-acts"><button class="ad-btn" data-edit>Sửa</button><button class="ad-btn ad-danger" data-del>Xoá</button></div>' +
           '</div>';
