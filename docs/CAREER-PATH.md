@@ -17,6 +17,15 @@ Mục **Overview → Career path** (`#/overview/career-path`). Áp dụng cho **
 4. Level trong popup *Cập nhật thông tin* bị khoá (`api_register` từ chối đổi level khi đã có level).
    Muốn sửa level tay: admin sửa trực tiếp bảng `cs_members` trên Supabase.
 
+5. **Lộ trình thăng tiến** (đầu trang): biểu đồ đường, trục dọc = level, trục ngang = quý. Mỗi điểm là level CS
+   giữ trong quý đó (quý đã qua: level đầu quý theo commit, quý không commit thì nối tiếp; quý hiện tại: level
+   trong hồ sơ). Nét đứt tới quý sau = level mục tiêu của commit quý này. Máy chủ tính sẵn (`track`).
+6. **Tạo bù** (`CAREER_BACKFILL` trong Edge Function `api`): quý đã qua vẫn cho chốt commit tới hạn ghi ở đó —
+   hiện là **Q3/2026, tới hết 10/2026**. Khi tạo bù CS khai thêm *level đầu quý*; mốc sàn tính theo level đầu quý.
+   Bấm Đạt vẫn phải đủ số thực tế của quý đó. Hồ sơ đã ở level mục tiêu (hoặc cao hơn) → chỉ ghi nhận, không đổi
+   level / lương; hồ sơ còn thấp hơn → đổi level + lương như quý thường. Mở thêm quý khác: thêm 1 dòng vào
+   `CAREER_BACKFILL` rồi deploy lại function.
+
 Số thực tế và điều kiện bấm Đạt **tính ở máy chủ** (Edge Function `api`, action `careerGet` /
 `careerSaveCommit` / `careerAchieve`) — trình duyệt chỉ hiển thị.
 

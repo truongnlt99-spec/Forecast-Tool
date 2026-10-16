@@ -2686,6 +2686,8 @@
       var s = STATUS[d.status] || STATUS.none;
       view.innerHTML =
         (st.err ? '<div class="cp-err">' + esc(st.err) + '</div>' : '') +
+        chartHtml(d) +
+        backfillBannerHtml(d) +
         '<div class="table-card cp-head">' +
           '<div class="cp-head-row">' +
             '<div><div class="chart-title">Career path · ' + esc(qLabel(d.quarter)) +
@@ -2703,11 +2705,107 @@
         achieveHtml(d) +
         historyHtml(d);
       bind(d);
+      drawChart(d);
+    }
+
+    /* ---------- biểu đồ thăng tiến (đầu trang) ----------
+       Dữ liệu d.track do máy chủ tính: level CS giữ trong từng quý + 1 điểm "kế hoạch"
+       ở quý sau = level mục tiêu của commit quý này. Cột dọc = level, trục ngang = quý.
+       SVG vẽ theo đúng bề ngang khung (vẽ lại khi đổi cỡ cửa sổ) để chữ không bị co. */
+    function chartHtml(d) {
+      var hasPlan = (d.track || []).some(function (p) { return p.kind === 'plan'; });
+      return '<div class="table-card cp-chart-card">' +
+        '<div class="table-head"><div class="chart-title">Lộ trình thăng tiến</div>' +
+          '<div class="table-hint">Level theo quý' + (hasPlan ? '' : ' · chốt commit quý này để thấy kế hoạch') + '</div></div>' +
+        (hasPlan ? '<div class="cp-legend"><span><i class="cp-key"></i>Level thực tế</span>' +
+          '<span><i class="cp-key cp-key-plan"></i>Kế hoạch (commit quý này)</span></div>' : '') +
+        '<div class="cp-chart" id="cpChart"><div class="cp-tip" id="cpTip" hidden></div></div>' +
+      '</div>';
+    }
+    var SVGNS = 'http://www.w3.org/2000/svg';
+    function svgEl(tag, attrs, text) {
+      var e = document.createElementNS(SVGNS, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      if (text != null) e.textContent = text;
+      return e;
+    }
+    function shortQ(q) { return String(q).replace(/^Q(\d)\/\d\d(\d\d)$/, 'Q$1/$2'); }
+    function drawChart(d) {
+      var box = $('cpChart'), tip = $('cpTip');
+      var pts = d.track || [];
+      if (!box || !pts.length) return;
+      var old = box.querySelector('svg'); if (old) box.removeChild(old);
+      var W = Math.max(300, box.clientWidth), H = 230, L = 84, R = 28, T = 26, B = 30;
+      var li = pts.map(function (p) { return d.order.indexOf(p.level); });
+      var lo = Math.max(0, Math.min.apply(null, li) - 1), hi = Math.min(d.order.length - 1, Math.max.apply(null, li) + 1);
+      if (hi - lo < 2) { hi = Math.min(d.order.length - 1, lo + 2); lo = Math.max(0, hi - 2); }
+      // điểm cách đều; tối thiểu 4 khe để 1–2 điểm không bị kéo dãn hết bề ngang
+      var slots = Math.max(pts.length, 4), step = (W - L - R) / (slots - 1);
+      var off = (slots - pts.length) * step / 2;
+      var x = function (i) { return L + off + i * step; };
+      var y = function (k) { return T + (hi - k) * (H - T - B) / (hi - lo); };
+      var svg = svgEl('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+        'aria-label': 'Biểu đồ level theo quý: ' + pts.map(function (p) { return p.quarter + ' ' + p.level + (p.kind === 'plan' ? ' (kế hoạch)' : ''); }).join(', ') });
+      for (var k = lo; k <= hi; k++) {
+        svg.appendChild(svgEl('line', { x1: L, x2: W - R, y1: y(k), y2: y(k), class: 'cp-grid' }));
+        svg.appendChild(svgEl('text', { x: L - 12, y: y(k) + 4, 'text-anchor': 'end', class: 'cp-axis' }, d.order[k]));
+      }
+      pts.forEach(function (p, i) {
+        svg.appendChild(svgEl('text', { x: x(i), y: H - 8, 'text-anchor': 'middle',
+          class: 'cp-axis' + (p.kind === 'current' ? ' cp-axis-now' : '') }, shortQ(p.quarter)));
+      });
+      var path = function (list) { return list.map(function (o, n) { return (n ? 'L' : 'M') + x(o.i) + ' ' + y(li[o.i]); }).join(' '); };
+      var real = [], plan = [];
+      pts.forEach(function (p, i) { if (p.kind === 'plan') plan.push({ i: i }); else real.push({ i: i }); });
+      if (real.length > 1) svg.appendChild(svgEl('path', { d: path(real), class: 'cp-line' }));
+      if (plan.length) svg.appendChild(svgEl('path', { d: path([real[real.length - 1]].concat(plan)), class: 'cp-line cp-line-plan' }));
+      var ST = { achieved: 'Đạt', missed: 'Không đạt', open: 'Đang chạy', none: 'Không commit', plan: 'Kế hoạch' };
+      pts.forEach(function (p, i) {
+        var cls = 'cp-dot' + (p.kind === 'plan' ? ' cp-dot-plan' : p.kind === 'current' ? ' cp-dot-now' : p.status === 'missed' ? ' cp-dot-miss' : '');
+        svg.appendChild(svgEl('circle', { cx: x(i), cy: y(li[i]), r: p.kind === 'current' ? 6 : 5, class: cls }));
+        var lab = p.kind === 'current' ? 'Hiện tại · ' + p.level : p.kind === 'plan' ? 'Mục tiêu · ' + p.level : '';
+        if (lab) {
+          var anchor = i === pts.length - 1 && pts.length > 1 ? 'end' : i === 0 && pts.length > 1 ? 'start' : 'middle';
+          svg.appendChild(svgEl('text', { x: x(i) + (anchor === 'end' ? 6 : anchor === 'start' ? -6 : 0), y: y(li[i]) - 12,
+            'text-anchor': anchor, class: 'cp-dlabel' }, lab));
+        }
+        var hit = svgEl('circle', { cx: x(i), cy: y(li[i]), r: 16, class: 'cp-hit', tabindex: 0 });
+        var txt = p.quarter + ' · ' + p.level + ' · ' + (p.kind === 'current' ? 'Hiện tại' + (p.status !== 'none' ? ' (' + ST[p.status] + ')' : '')
+          : p.kind === 'plan' ? 'Mục tiêu theo commit quý này' : ST[p.status] + (p.levelUp ? ' — lên level' : ''));
+        var show = function () {
+          tip.textContent = txt; tip.hidden = false;
+          var tx = Math.min(Math.max(x(i) - tip.offsetWidth / 2, 4), W - tip.offsetWidth - 4);
+          tip.style.left = tx + 'px'; tip.style.top = Math.max(0, y(li[i]) - 44) + 'px';
+        };
+        hit.addEventListener('mouseenter', show); hit.addEventListener('focus', show);
+        hit.addEventListener('mouseleave', function () { tip.hidden = true; });
+        hit.addEventListener('blur', function () { tip.hidden = true; });
+        svg.appendChild(hit);
+      });
+      box.insertBefore(svg, tip);
+    }
+    var cpResizeT = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(cpResizeT);
+      cpResizeT = setTimeout(function () { if (st.data && isOn()) drawChart(st.data); }, 150);
+    });
+
+    function backfillBannerHtml(d) {
+      var pend = (d.backfillPending || []).filter(function (q) { return q !== d.quarter; });
+      if (!pend.length) return '';
+      return '<div class="cp-banner">' + pend.map(function (q) {
+        return '<div><b>' + esc(qLabel(q)) + '</b> đang mở <b>tạo bù</b> tới hết tháng ' +
+          esc((d.backfillDeadline || {})[q] || '') + ' — nếu bạn đã lên level trong quý này, tạo bù để ghi nhận vào lộ trình. ' +
+          '<button class="ad-btn ad-primary" data-cp-goto="' + esc(q) + '">Tạo bù ' + esc(qLabel(q)) + '</button></div>';
+      }).join('') + '</div>';
     }
 
     function phaseText(d) {
       var m = d.months || [];
       if (d.phase === 'future') return 'Quý chưa bắt đầu.';
+      if (d.status === 'achieved') return 'Đã hoàn tất Career path của quý này.';
+      if (d.backfill) return 'Quý đã kết thúc — đang mở tạo bù tới hết tháng ' + (d.backfillDeadline || {})[d.quarter] +
+        ': khai level đầu quý + commit, rồi bấm Đạt nếu số thực tế của quý đủ.';
       if (d.phase === 'commit') return 'Tháng ' + (m.indexOf(d.now) + 1) + '/3 của quý — chốt / sửa commit được tới hết tháng ' + m[2] + '. Nút Đạt mở từ tháng ' + m[2] + '.';
       if (d.phase === 'achieve' && d.canEdit) return 'Tháng cuối quý — vẫn sửa commit được; đủ số thì bấm Đạt (hạn tới hết tháng ' + d.deadline + ').';
       if (d.phase === 'achieve') return 'Quý đã kết thúc — còn hạn bấm Đạt tới hết tháng ' + d.deadline + '.';
@@ -2739,16 +2837,18 @@
 
     function formHtml(d) {
       var c = d.commit;
-      var target = (c && c.targetLevel) || d.level;
-      var opts = [d.level].concat(d.nextLevels).map(function (lv) {
-        return '<option value="' + esc(lv) + '"' + (lv === target ? ' selected' : '') + '>' +
-          (lv === d.level ? 'Giữ ' + esc(lv) : 'Lên ' + esc(lv)) + '</option>';
+      var base = d.backfill ? ((c && c.baseLevel) || d.level) : d.level;
+      var target = (c && c.targetLevel) || base;
+      var baseOpts = d.order.slice(0, d.order.indexOf(d.level) + 1).map(function (lv) {
+        return '<option value="' + esc(lv) + '"' + (lv === base ? ' selected' : '') + '>' + esc(lv) + '</option>';
       }).join('');
       return '<div class="table-card">' +
         '<div class="chart-title">' + (c ? 'Sửa commit ' : 'Lên commit ') + esc(qLabel(d.quarter)) + '</div>' +
-        '<p class="cp-note">Số commit là % bạn cam kết đạt cho cả quý. Chọn lên level thì mỗi số phải ≥ mốc KPI của level đó.</p>' +
-        '<div class="cp-form">' +
-          '<label>Level mục tiêu<select id="cpTarget">' + opts + '</select></label>' +
+        '<p class="cp-note">Số commit là % bạn cam kết đạt cho cả quý. Chọn lên level thì mỗi số phải ≥ mốc KPI của level đó.' +
+          (d.backfill ? ' <b>Tạo bù:</b> chọn level của bạn lúc <b>đầu quý</b> (nếu đã lên level trong quý thì chọn level cũ).' : '') + '</p>' +
+        '<div class="cp-form' + (d.backfill ? ' cp-form-5' : '') + '">' +
+          (d.backfill ? '<label>Level đầu quý<select id="cpBase">' + baseOpts + '</select></label>' : '') +
+          '<label>Level mục tiêu<select id="cpTarget" data-sel="' + esc(target) + '"></select></label>' +
           KEYS.map(function (k) {
             return '<label>' + NAME[k] + ' (%)<input type="number" id="cpIn_' + k + '" min="0.01" max="100" step="0.01" value="' +
               (c ? esc(c[k]) : '') + '"><span class="cp-floor" id="cpFloor_' + k + '"></span></label>';
@@ -2805,7 +2905,8 @@
       if (d.status === 'achieved') {
         return '<div class="table-card cp-done"><div class="chart-title">✓ Đã hoàn tất ' + esc(qLabel(d.quarter)) + '</div>' +
           '<p class="cp-note">Bấm Đạt lúc ' + esc(c.achievedAt) +
-          (c.newSalary ? ' · Lên <b>' + esc(c.targetLevel) + '</b>, lương mới <b>' + esc(money(c.newSalary)) + '</b>' : '') + '</p></div>';
+          (c.newSalary ? ' · Lên <b>' + esc(c.targetLevel) + '</b>, lương mới <b>' + esc(money(c.newSalary)) + '</b>'
+            : c.targetLevel !== c.baseLevel ? ' · Ghi nhận lên <b>' + esc(c.targetLevel) + '</b> (hồ sơ đã ở level này)' : '') + '</p></div>';
       }
       if (d.status === 'missed') {
         return '<div class="table-card"><div class="chart-title">Không đạt</div><p class="cp-note">Đã quá hạn bấm Đạt (hết tháng ' + esc(d.deadline) + ').</p></div>';
@@ -2821,7 +2922,9 @@
         '<div class="chart-title">Hoàn tất quý</div>' +
         '<p class="cp-note">' + (d.levelUp
           ? 'Commit có <b>lên ' + esc(c.targetLevel) + '</b>: bấm Đạt sẽ cập nhật level và lương mới vào hồ sơ ngay.'
-          : 'Bấm Đạt để hoàn tất Career path của quý (giữ level ' + esc(d.level) + ').') +
+          : c.targetLevel !== c.baseLevel
+            ? 'Commit lên <b>' + esc(c.targetLevel) + '</b> nhưng hồ sơ đã ở ' + esc(d.level) + ': bấm Đạt chỉ ghi nhận vào lộ trình, không đổi level / lương.'
+            : 'Bấm Đạt để hoàn tất Career path của quý (giữ level ' + esc(d.level) + ').') +
           ' Chỉ số chưa có deal tính trong quý được bỏ qua.</p>' +
         (lv ? '<div class="cp-form"><label>Lương mới (đ)<input type="number" id="cpSalary" min="' + lv.lo + '" max="' + lv.hi + '" step="100000" value="' + lv.lo + '">' +
           '<span class="cp-floor">Khung ' + esc(money(lv.lo)) + ' – ' + esc(money(lv.hi)) + '</span></label></div>' : '') +
@@ -2856,9 +2959,18 @@
       var cancel = $('cpCancel');
       if (cancel) cancel.addEventListener('click', function () { st.editing = false; render(); });
 
-      var target = $('cpTarget');
+      var target = $('cpTarget'), baseSel = $('cpBase');
+      function baseLv() { return baseSel ? baseSel.value : d.level; }
+      function fillTargets() {
+        var b = baseLv(), keep = target.value || target.getAttribute('data-sel');
+        var lvls = d.order.slice(d.order.indexOf(b));
+        target.innerHTML = lvls.map(function (lv) {
+          return '<option value="' + esc(lv) + '">' + (lv === b ? 'Giữ ' : 'Lên ') + esc(lv) + '</option>';
+        }).join('');
+        target.value = lvls.indexOf(keep) >= 0 ? keep : b;
+      }
       function floors() {
-        var lv = target.value, up = lv !== d.level;
+        var lv = target.value, up = lv !== baseLv();
         KEYS.forEach(function (k) {
           var f = $('cpFloor_' + k), inp = $('cpIn_' + k);
           var min = up ? d.levels[lv].kpi[k] : null;
@@ -2866,11 +2978,16 @@
           if (inp) inp.min = up ? String(min) : '0.01';
         });
       }
-      if (target) { target.addEventListener('change', floors); floors(); }
+      if (target) { fillTargets(); target.addEventListener('change', floors); floors(); }
+      if (baseSel) baseSel.addEventListener('change', function () { fillTargets(); floors(); });
+      view.querySelectorAll('[data-cp-goto]').forEach(function (b) {
+        b.addEventListener('click', function () { st.editing = false; load(b.getAttribute('data-cp-goto')); });
+      });
 
       var save = $('cpSave');
       if (save) save.addEventListener('click', function () {
         var body = { action: 'careerSaveCommit', quarter: d.quarter, targetLevel: target.value };
+        if (baseSel) body.baseLevel = baseSel.value;
         var errEl = $('cpFormErr');
         for (var i = 0; i < KEYS.length; i++) {
           var k = KEYS[i], v = $('cpIn_' + k).value.trim().replace(',', '.');
