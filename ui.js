@@ -40,6 +40,15 @@
   })();
 
   var $ = function (id) { return document.getElementById(id); };
+
+  // Link mở deal trên Base CRM (SaaS): https://basevn.base.vn/sales/deal/<Deal ID>.
+  // Chỉ nhận Deal ID toàn số → không ghép chuỗi lạ vào URL. Dùng ở cột Hành động
+  // của Forecast + mục MỞ DEAL TRÊN CRM (cuối file).
+  var CRM_DEAL_URL = 'https://basevn.base.vn/sales/deal/';
+  window.csCrmDealUrl = function (id) {
+    id = String(id == null ? '' : id).trim();
+    return /^\d{1,15}$/.test(id) ? CRM_DEAL_URL + id : '';
+  };
   var LS_SIDE = 'cs_tool_sidebar';
   var LS_THEME = 'cs_tool_theme';
 
@@ -765,6 +774,14 @@
     t.addEventListener('click', function () { setTimeout(syncTitle, 0); });
   });
   window.addEventListener('hashchange', function () { setTimeout(syncTitle, 0); });
+  // F5 đang ở #/forecast: app.js tự chuyển tab khi vào app (không có click/hashchange)
+  // → theo dõi class .active của các tab để tiêu đề + ô tìm kiếm luôn đúng tab.
+  var tabNavEl = $('tabNav');
+  if (tabNavEl) {
+    new MutationObserver(function (muts) {
+      if (muts.some(function (m) { return m.target.classList && m.target.classList.contains('tab'); })) setTimeout(syncTitle, 0);
+    }).observe(tabNavEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  }
   syncTitle();
 
   /* -------------------------------------------------------
@@ -1549,6 +1566,7 @@
     var CLOCK_SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
     var X_SVG = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     var PEN_SVG = '<svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></svg>';
+    var CRM_SVG = '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>';
     var TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>';
 
     function qAddActionCell(tr) {
@@ -1560,6 +1578,9 @@
         '<div class="fc-action-btns">' +
           '<button type="button" class="fc-icon-btn fc-extend-btn" title="Gia hạn Go-live" aria-label="Gia hạn Go-live">' + CLOCK_SVG + '</button>' +
           '<button type="button" class="fc-icon-btn fc-stop-btn" title="Dừng triển khai" aria-label="Dừng triển khai">' + X_SVG + '</button>' +
+          (window.csCrmDealUrl && window.csCrmDealUrl(dealId)
+            ? '<a class="fc-icon-btn fc-crm-btn" href="' + qEsc(window.csCrmDealUrl(dealId)) + '" target="_blank" rel="noopener"' +
+              ' title="Mở deal trên Base CRM" aria-label="Mở deal trên Base CRM">' + CRM_SVG + '</a>' : '') +
         '</div>';
       td.querySelector('.fc-extend-btn').addEventListener('click', function () {
         var d = qById[dealId];
@@ -3221,5 +3242,60 @@
         apply(d); paint(); box.hidden = false;
       });
     })(0);
+  })();
+
+  /* -------------------------------------------------------
+     MỞ DEAL TRÊN CRM — chữ "Deal <ID>" dưới tên khách hàng (Overview, Forecast Năm 1 /
+     Năm 2++, màn Request) và ô "Deal ID" trong chi tiết deal thành link mở Base CRM ở tab
+     mới. Bảng do app.js vẽ lại liên tục → theo dõi DOM, gắn link vào phần mới xuất hiện.
+     ------------------------------------------------------- */
+  (function () {
+    var ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>';
+    function makeLink(id, text) {
+      var a = document.createElement('a');
+      a.className = 'crm-link';
+      a.href = window.csCrmDealUrl(id);
+      a.target = '_blank'; a.rel = 'noopener';
+      a.title = 'Mở deal ' + id + ' trên Base CRM';
+      a.textContent = text;
+      a.insertAdjacentHTML('beforeend', ICON);
+      // Không để click link bật/tắt dòng chi tiết của bảng Overview
+      a.addEventListener('click', function (e) { e.stopPropagation(); });
+      return a;
+    }
+    function linkSubLine(el) {
+      if (el.getAttribute('data-crm')) return;
+      el.setAttribute('data-crm', '1');
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), node;
+      while ((node = walker.nextNode())) {
+        var m = node.nodeValue.match(/Deal (\d{1,15})\b/);
+        if (!m || !window.csCrmDealUrl(m[1])) continue;
+        var after = node.splitText(m.index);
+        after.nodeValue = after.nodeValue.slice(m[0].length);
+        after.parentNode.insertBefore(makeLink(m[1], m[0]), after);
+        return;
+      }
+    }
+    function linkDetail(item) {
+      if (item.getAttribute('data-crm')) return;
+      var k = item.querySelector('.k'), v = item.querySelector('.v');
+      if (!k || !v || k.textContent.trim() !== 'Deal ID') return;
+      item.setAttribute('data-crm', '1');
+      var id = v.textContent.trim();
+      if (!window.csCrmDealUrl(id)) return;
+      v.textContent = '';
+      v.appendChild(makeLink(id, id));
+    }
+    function scan() {
+      document.querySelectorAll('.deal-id:not([data-crm])').forEach(linkSubLine);
+      document.querySelectorAll('.detail-item:not([data-crm])').forEach(linkDetail);
+    }
+    var pending = false;
+    new MutationObserver(function () {
+      if (pending) return;
+      pending = true;
+      setTimeout(function () { pending = false; scan(); }, 0);
+    }).observe(document.body, { childList: true, subtree: true });
+    scan();
   })();
 })();
