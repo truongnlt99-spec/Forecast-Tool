@@ -2819,7 +2819,11 @@
       var hist = c.history || [], first = hist[0];
       return '<div class="table-card">' +
         '<div class="cp-head-row"><div class="chart-title">Commit ' + esc(qLabel(d.quarter)) + '</div>' +
-          (canEdit ? '<button class="ad-btn" id="cpEdit">Sửa commit</button>' : '') + '</div>' +
+          '<div class="cp-btns">' + (canEdit ? '<button class="ad-btn" id="cpEdit">Sửa commit</button>' : '') +
+          (d.canDelete ? '<button class="ad-btn ad-danger" id="cpDelete">Xoá commit</button>' : '') + '</div></div>' +
+          (d.canDelete && d.status === 'achieved'
+            ? '<div class="cp-note">Quý này đã bấm Đạt. Xoá commit sẽ huỷ kết quả Đạt' +
+              (c.newSalary ? ' và <b>trả level / lương về như trước khi Đạt</b>' : '') + ', rồi bạn tạo lại commit.</div>' : '') +
         '<div class="cp-target">' + (up ? 'Mục tiêu: <b>lên ' + esc(c.targetLevel) + '</b> (từ ' + esc(c.baseLevel) + ')' : 'Mục tiêu: <b>giữ ' + esc(c.targetLevel) + '</b>') + '</div>' +
         '<div class="cp-commit-vals">' + KEYS.map(function (k) {
           return '<div><span>' + NAME[k] + '</span><b>' + (c[k] == null ? '<span class="cp-dim">Không commit</span>' : pct(c[k])) + '</b></div>';
@@ -2958,6 +2962,25 @@
     function bind(d) {
       var sel = $('cpQuarter');
       if (sel) sel.addEventListener('change', function () { st.editing = false; load(sel.value); });
+      var del = $('cpDelete');
+      if (del) del.addEventListener('click', function () {
+        var reverts = !!(d.commit && d.commit.newSalary);
+        // bấm 2 lần trong 4 giây mới xoá
+        if (del.getAttribute('data-armed') !== '1') {
+          del.setAttribute('data-armed', '1');
+          del.textContent = reverts ? 'Bấm lần nữa: xoá + trả level/lương cũ' : 'Bấm lần nữa để xoá';
+          setTimeout(function () { if (del.getAttribute('data-armed') === '1') { del.removeAttribute('data-armed'); del.textContent = 'Xoá commit'; } }, 4000);
+          return;
+        }
+        del.removeAttribute('data-armed'); del.disabled = true; del.textContent = 'Đang xoá…';
+        post({ action: 'careerDeleteCommit', quarter: d.quarter }, function (err, res) {
+          if (err) { del.disabled = false; del.textContent = 'Xoá commit'; st.err = err; render(); return; }
+          st.err = ''; st.editing = false; st.data = res; st.loadedAt = Date.now(); render();
+          toast('Đã xoá commit ' + qLabel(d.quarter) + (reverts ? ' — level / lương đã trả về như trước' : ''), 'ok');
+          // level/lương đổi → nạp lại để app.js đọc hồ sơ mới
+          if (reverts) setTimeout(function () { location.reload(); }, 1500);
+        });
+      });
       var edit = $('cpEdit');
       if (edit) edit.addEventListener('click', function () { st.editing = true; render(); });
       var cancel = $('cpCancel');

@@ -1369,3 +1369,4 @@ html[data-theme="light"] .income-hero::after{
 .cp-form-5{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:760px){ .cp-form-5{grid-template-columns:1fr 1fr} }
 @media (max-width:640px){ .cp-form-5{grid-template-columns:1fr} }
+.cp-btns{display:flex; gap:8px; flex-wrap:wrap}

@@ -321,3 +321,29 @@ test('tạo bù Q3: SRR_4 không bắt buộc — để trống thì không xét
   state.deals = keep;
   Date.now = realNow;
 });
+
+test('careerDeleteCommit: xoá được khi quý còn hạn (kể cả đã Đạt), hết hạn thì chặn', async () => {
+  at('2026-10-20');
+  state.profile = { level: 'CS level 3', salary: '13000000' };
+  // Q3 đã Đạt (giữ level) — đang tháng đầu Q4 nên còn hạn
+  state.list = { commits: [commit({ quarter: 'Q3/2026', status: 'achieved', cr: 80, s1: 82, s4: null })], levelHistory: [] };
+  let r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.canDelete, true);
+  calls.length = 0;
+  r = await post({ action: 'careerDeleteCommit', quarter: 'Q3/2026' });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(calls.find((c) => c[0] === 'api_career_delete_commit')[1], { p_email: 'cs@base.vn', p_quarter: 'Q3/2026' });
+  // Q4 đang chạy, chưa Đạt
+  state.list = { commits: [commit({ quarter: 'Q4/2026' })], levelHistory: [] };
+  assert.equal((await post({ action: 'careerGet', quarter: 'Q4/2026' })).canDelete, true);
+  // không có commit
+  assert.match((await post({ action: 'careerDeleteCommit', quarter: 'Q2/2026' })).error, /Không có commit/);
+  assert.match((await post({ action: 'careerDeleteCommit', quarter: 'xx' })).error, /Quý không hợp lệ/);
+  // hết hạn: Q3 sang tháng 11
+  at('2026-11-02');
+  state.list = { commits: [commit({ quarter: 'Q3/2026', status: 'achieved' })], levelHistory: [] };
+  r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.canDelete, false);
+  assert.match((await post({ action: 'careerDeleteCommit', quarter: 'Q3/2026' })).error, /hết hạn/);
+  Date.now = realNow;
+});

@@ -19,6 +19,7 @@
  *   POST { token, action:'careerGet', quarter? }           → commit + số thực tế quý + % loading
  *   POST { token, action:'careerSaveCommit', quarter, targetLevel, cr, s1, s4 }
  *   POST { token, action:'careerAchieve', quarter, newSalary? }   (Đạt → lên level ngay)
+ *   POST { token, action:'careerDeleteCommit', quarter }    (xoá commit; đã Đạt lên level → trả level/lương cũ)
  *   POST { token, multiYearRows:[...] }
  *   POST { token, rows:[...] }
  *
@@ -430,6 +431,8 @@ function careerView_(q: string, data: Awaited<ReturnType<typeof careerLoad_>>) {
     levels: CAREER_LEVELS, order: CAREER_ORDER, nextLevels: idx >= 0 ? CAREER_ORDER.slice(idx + 1) : [],
     ...ph, status, commit, actuals, evaluation, levelUp,
     canAchieve: idx >= 0 && status === "open" && ph.canAchieveWindow && evaluation.allMet,
+    // xoá được khi quý còn trong hạn sửa commit hoặc hạn bấm Đạt (kể cả đã Đạt — để làm lại)
+    canDelete: !!commit && (ph.canEdit || ph.canAchieveWindow),
     commits: data.list.commits.map((c) => ({
       quarter: c.quarter, status: statusOf(c), baseLevel: c.baseLevel, targetLevel: c.targetLevel, achievedAt: c.achievedAt,
     })),
@@ -502,6 +505,15 @@ async function careerAction_(body: any, email: string): Promise<Record<string, u
       await rpc_("api_career_achieve", {
         p_email: email, p_quarter: q, p_new_level: newLevel, p_new_salary: newSalary, p_snapshot: snapshot,
       });
+      return careerView_(q, await careerLoad_(email));
+    }
+    case "careerDeleteCommit": {
+      const q = body.quarter;
+      if (!isQ(q)) throw new Error("Quý không hợp lệ");
+      const v = careerView_(q, data);
+      if (!v.commit) throw new Error("Không có commit quý " + q + " để xoá");
+      if (!v.canDelete) throw new Error("Quý " + q + " đã hết hạn — không xoá commit được nữa");
+      await rpc_("api_career_delete_commit", { p_email: email, p_quarter: q });
       return careerView_(q, await careerLoad_(email));
     }
     default:
