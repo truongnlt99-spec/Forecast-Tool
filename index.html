@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -215,44 +215,14 @@
         </button>
       </nav>
 
-      <div class="nav-cap">Hệ thống</div>
-
-      <button class="nav-item" id="playbookBtn" title="Hướng dẫn sử dụng tool" aria-label="Playbook">
-        <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 012-2h13v18H6.5A2.5 2.5 0 004 19.5zM4 19.5A2.5 2.5 0 016.5 17H19"/></svg>
-        <span class="nav-label">Playbook</span>
-        <span class="nav-fly">Playbook</span>
-      </button>
-      <button class="nav-item" id="changelogBtn" title="Lịch sử cập nhật" aria-label="Changelog">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span class="nav-label">Changelog</span>
-        <span class="nav-fly">Changelog</span>
-      </button>
-      <button class="nav-item" id="refreshBtn" title="Tải lại dữ liệu mới nhất từ sheet" aria-label="Làm mới">
-        <svg viewBox="0 0 24 24"><path d="M20 11A8 8 0 006.3 5.7L3 9M4 13a8 8 0 0013.7 5.3L21 15"/><path d="M3 4v5h5M21 20v-5h-5"/></svg>
-        <span class="nav-label">Làm mới dữ liệu</span>
-        <span class="nav-fly">Làm mới dữ liệu</span>
-      </button>
-      <button class="nav-item" id="pfBtn" title="Product Feedback" aria-label="Product Feedback">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        <span class="nav-label">Product Feedback</span>
-        <span class="nav-fly">Product Feedback</span>
-      </button>
-      <!-- Kết nối Claude (MCP) + Quản trị (chỉ admin) — ui.js điều khiển 100% -->
-      <button class="nav-item" id="claudeBtn" title="Kết nối Claude (MCP)" aria-label="Kết nối Claude">
-        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5"/></svg>
-        <span class="nav-label">Kết nối Claude</span>
-        <span class="nav-fly">Kết nối Claude</span>
-      </button>
-      <button class="nav-item" id="adminBtn" title="Quản trị" aria-label="Quản trị" hidden>
-        <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
-        <span class="nav-label">Quản trị</span>
-        <span class="nav-fly">Quản trị</span>
-      </button>
-      <button class="nav-item" id="donationBtn" title="Donation" aria-label="Donation">
-        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-        <span class="nav-label">Donation</span>
-        <span class="nav-fly">Donation</span>
-      </button>
+      <!-- Các nút "Hệ thống" cũ đã chuyển vào menu hồ sơ góc phải (#accMenu).
+           Playbook / Làm mới dữ liệu / Donation bỏ khỏi giao diện nhưng GIỮ phần tử
+           (ẩn) vì app.js gắn sự kiện theo id. -->
+      <div hidden>
+        <button id="playbookBtn" hidden></button>
+        <button id="refreshBtn" hidden></button>
+        <button id="donationBtn" hidden></button>
+      </div>
 
       <div class="side-spacer"></div>
 
@@ -321,6 +291,25 @@
             <button class="acc-item" id="accTheme" role="menuitem">
               <svg id="themeIco" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
               <span id="accThemeLb">Chế độ sáng</span>
+            </button>
+            <div class="acc-menu-divider"></div>
+            <!-- Chuyển từ sidebar sang (giữ nguyên id — app.js/ui.js gắn sự kiện theo id).
+                 data-new = khoá tag "New" (ui.js, mục MENU GỌN). -->
+            <button class="acc-item" id="changelogBtn" role="menuitem" data-new="changelog">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              Changelog
+            </button>
+            <button class="acc-item" id="pfBtn" role="menuitem">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Product Feedback
+            </button>
+            <button class="acc-item" id="claudeBtn" role="menuitem" data-new="claude">
+              <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5"/></svg>
+              Kết nối Claude
+            </button>
+            <button class="acc-item" id="adminBtn" role="menuitem" hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+              Quản trị
             </button>
             <div class="acc-menu-divider"></div>
             <button class="acc-item acc-item-danger" id="logoutBtn" role="menuitem">
@@ -921,7 +910,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=45"></script>
+  <script src="ui.js?v=46"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=13"></script>
 

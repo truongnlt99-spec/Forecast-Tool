@@ -2484,6 +2484,36 @@
     var EXTRA_CHANGELOG = [
       {
         date: '16/10/2026',
+        title: 'Kết nối Claude — hỏi & cập nhật deal bằng chat',
+        body:
+          '<h5>Claude làm được gì</h5>' +
+          '<ul>' +
+            '<li>Đọc deal <b>của chính bạn</b>: danh sách deal, chi tiết 1 deal, CR theo tháng (đúng quy tắc Scorecard).</li>' +
+            '<li>Sửa ô nhập tay: ngày go-live, <b>% Active / % Output</b> các kỳ T1, T4… (ô đã kéo từ CRM/BigQuery vẫn khoá như trên web).</li>' +
+            '<li>Gửi đề xuất <b>gia hạn / dừng triển khai</b>, gửi & xem <b>Product Feedback</b>.</li>' +
+            '<li>Trước mỗi lần ghi dữ liệu Claude sẽ tóm tắt thay đổi và <b>hỏi bạn xác nhận</b>.</li>' +
+          '</ul>' +
+          '<h5>Cách kết nối (khoảng 1 phút)</h5>' +
+          '<ul>' +
+            '<li>Bấm avatar góc phải → <b>Kết nối Claude</b> → <b>Tạo link kết nối</b> → <b>Copy</b> (link chỉ hiện 1 lần).</li>' +
+            '<li>Mở <b>claude.ai → Settings → Connectors → Add custom connector</b>, đặt tên <b>CS Console</b>, dán link vào ô URL → <b>Add</b>.</li>' +
+            '<li>Trong khung chat mới, bấm biểu tượng công cụ và bật connector <b>CS Console</b>.</li>' +
+            '<li>Link chứa khoá bí mật — không gửi cho người khác. Lỡ lộ thì vào lại <b>Kết nối Claude</b> bấm <b>Thu hồi</b>.</li>' +
+          '</ul>' +
+          '<h5>Câu hỏi mẫu để thử ngay</h5>' +
+          '<ul>' +
+            '<li><i>"Mình là ai trên CS Console?"</i> — kiểm tra kết nối đúng tài khoản.</li>' +
+            '<li><i>"Tháng này CR của mình bao nhiêu? Tách tử số, mẫu số giúp mình."</i></li>' +
+            '<li><i>"Liệt kê các deal của mình chưa go-live, sắp theo ngày dự kiến."</i></li>' +
+            '<li><i>"Deal nào của mình có kỳ đo T1 trong tháng này mà còn thiếu % Active / % Output?"</i></li>' +
+            '<li><i>"Cho mình xem chi tiết deal &lt;tên khách hàng&gt;."</i></li>' +
+            '<li><i>"Cập nhật % Active T1 của deal &lt;tên khách hàng&gt; thành 85."</i> — Claude sẽ hỏi xác nhận trước khi lưu.</li>' +
+            '<li><i>"Tạo đề xuất gia hạn deal &lt;tên khách hàng&gt; tới 30/11/2026, lý do khách chậm chuẩn bị dữ liệu."</i></li>' +
+            '<li><i>"Gửi feedback: muốn có nút xuất Excel ở màn Forecast."</i> / <i>"Các feedback mình đã gửi đang ở trạng thái nào?"</i></li>' +
+          '</ul>',
+      },
+      {
+        date: '16/10/2026',
         title: 'Career path — commit quý, % loading và lên level',
         body:
           '<ul>' +
@@ -2536,6 +2566,9 @@
           '</ul>',
       },
     ];
+
+    // Khoá của bản changelog mới nhất — mục MENU GỌN dùng để gắn tag "New".
+    window.__csLatestChangelog = EXTRA_CHANGELOG[0].date + '|' + EXTRA_CHANGELOG[0].title;
 
     function clInjectExtra() {
       if (!clBody.querySelector('[data-extra-cl]')) {
@@ -3053,5 +3086,71 @@
         });
       });
     }
+  })();
+
+  /* -------------------------------------------------------
+     MENU GỌN — các nút hệ thống nằm trong menu hồ sơ (#accMenu).
+     Tag "New" trên mục chưa xem (Changelog khi có bản mới, Kết nối Claude,
+     Career path) + chữ New trên nút hồ sơ khi trong menu còn mục chưa xem.
+     Đã bấm vào mục = đã xem (lưu localStorage theo trình duyệt).
+     ------------------------------------------------------- */
+  (function () {
+    var LS_SEEN = 'cs_tool_seen_new';
+    // Đổi giá trị (vd 'v2') để gắn New lại cho 1 mục khi có thay đổi lớn.
+    var NEW_KEYS = {
+      changelog: window.__csLatestChangelog || 'none',
+      claude: 'v1',
+      career: 'v1',
+    };
+    var seen = {};
+    try { seen = JSON.parse(localStorage.getItem(LS_SEEN) || '{}') || {}; } catch (e) { seen = {}; }
+    function isNew(k) { return seen[k] !== NEW_KEYS[k]; }
+    function markSeen(k) {
+      if (!isNew(k)) return;
+      seen[k] = NEW_KEYS[k];
+      try { localStorage.setItem(LS_SEEN, JSON.stringify(seen)); } catch (e) {}
+      render();
+    }
+    function setTag(el, on) {
+      var t = el.querySelector('.new-tag');
+      if (on && !t) {
+        t = document.createElement('span');
+        t.className = 'new-tag'; t.textContent = 'New';
+        el.appendChild(t);
+      } else if (!on && t) t.remove();
+    }
+
+    var strip = $('profileStrip');
+    var badge = null;
+    if (strip) {
+      badge = document.createElement('span');
+      badge.className = 'ps-new'; badge.textContent = 'New'; badge.hidden = true;
+      strip.appendChild(badge);
+    }
+    var menuItems = document.querySelectorAll('#accMenu [data-new]');
+    var cpBtns = document.querySelectorAll('.cp-nav-btn');
+
+    function render() {
+      var any = false;
+      menuItems.forEach(function (el) {
+        var on = isNew(el.getAttribute('data-new'));
+        setTag(el, on);
+        if (on) any = true;
+      });
+      cpBtns.forEach(function (el) { setTag(el, isNew('career')); });
+      if (badge) badge.hidden = !any;
+    }
+
+    menuItems.forEach(function (el) {
+      el.addEventListener('click', function () { markSeen(el.getAttribute('data-new')); });
+    });
+    cpBtns.forEach(function (el) {
+      el.addEventListener('click', function () { markSeen('career'); });
+    });
+    // Bấm 1 mục trong menu (mở popup) thì đóng menu lại.
+    ['changelogBtn', 'pfBtn', 'claudeBtn', 'adminBtn'].forEach(function (id) {
+      var b = $(id); if (b) b.addEventListener('click', function () { closeMenu(); });
+    });
+    render();
   })();
 })();
