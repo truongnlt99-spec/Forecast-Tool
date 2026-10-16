@@ -255,6 +255,8 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
   left join deal_inputs i on i.deal_id = r.deal_id
   left join cs_members  m on m.username = r.co_owner
   where r.is_active
+    -- Chỉ tính deal "Chính sách mới"; deal CRM chưa gắn cơ chế (trống) vẫn giữ (quyết định 16/10/2026)
+    and r.co_che_com is distinct from 'Chính sách cũ'
 ),
 s2 as (   -- Z, AA, AB, AC
   select s1.*,
