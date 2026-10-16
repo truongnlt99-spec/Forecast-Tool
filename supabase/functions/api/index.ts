@@ -16,6 +16,9 @@
  *   POST { token, action:'adminListFeedback', status } / 'adminUpdateFeedback' {id,status,reply}
  *   POST { token, action:'adminListTodo' } / 'adminSaveTodo' {item} / 'adminDeleteTodo' {id}
  *   POST { token, action:'adminListCs' }                   (admin* chỉ email trong app_admins)
+ *   POST { token, action:'careerGet', quarter? }           → commit + số thực tế quý + % loading
+ *   POST { token, action:'careerSaveCommit', quarter, targetLevel, cr, s1, s4 }
+ *   POST { token, action:'careerAchieve', quarter, newSalary? }   (Đạt → lên level ngay)
  *   POST { token, multiYearRows:[...] }
  *   POST { token, rows:[...] }
  *
@@ -203,8 +206,260 @@ async function sha256Hex_(s: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ---------------------------------------------------------------------
+// CAREER PATH THEO QUÝ — commit CR / SRR_1 / SRR_4, % loading, bấm Đạt (lên level)
+// Số thực tế tính Ở ĐÂY (máy chủ) từ dữ liệu đã lưu, vì bấm Đạt đổi level + lương ngay:
+// không tin số trình duyệt gửi lên. Bảng/ghi dữ liệu: supabase/04_career_path.sql.
+// ---------------------------------------------------------------------
+// Mốc KPI (CR/SRR_1/SRR_4) + khung lương — CHÉP TỪ bảng LEVELS trong app.js (policy 6.1/6.2).
+// tests/career.test.mjs so khớp 2 nơi; policy đổi thì sửa cả 2.
+const CAREER_LEVELS: Record<string, { lo: number; hi: number; kpi: { cr: number; s1: number; s4: number } }> = {
+  "CS level 1": { lo: 10000000, hi: 13000000, kpi: { cr: 75, s1: 78, s4: 75 } },
+  "CS level 2": { lo: 11000000, hi: 14000000, kpi: { cr: 75, s1: 78, s4: 76 } },
+  "CS level 3": { lo: 12000000, hi: 15000000, kpi: { cr: 78, s1: 80, s4: 78 } },
+  "CS level 4": { lo: 13000000, hi: 17000000, kpi: { cr: 78, s1: 80, s4: 79 } },
+  "CS level 5": { lo: 15000000, hi: 20000000, kpi: { cr: 81, s1: 82, s4: 81 } },
+  "CS level 6": { lo: 20000000, hi: 25000000, kpi: { cr: 85, s1: 85, s4: 83 } },
+  "CS level 7": { lo: 25000000, hi: 35000000, kpi: { cr: 87, s1: 85, s4: 85 } },
+};
+const CAREER_ORDER = Object.keys(CAREER_LEVELS);
+const CAREER_KEYS = ["cr", "s1", "s4"] as const;
+const CAREER_NAME = { cr: "CR", s1: "SRR_1", s4: "SRR_4" };
+type CareerKey = typeof CAREER_KEYS[number];
+type Row = Record<string, string>;
+
+// "4.375.000" / "92,5" / "50,00%" → số
+function numVN(v: unknown): number {
+  const n = Number(String(v ?? "").replace(/[%\s]/g, "").replace(/\./g, "").replace(",", "."));
+  return isFinite(n) ? n : 0;
+}
+function monthOf(d: string): string { // "dd/mm/yyyy" → "MM/YYYY"
+  const m = String(d || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? m[2].padStart(2, "0") + "/" + m[3] : "";
+}
+function mCmp(a: string, b: string): number {
+  const p = a.split("/"), q = b.split("/");
+  return (Number(p[1]) - Number(q[1])) || (Number(p[0]) - Number(q[0]));
+}
+function mShift(m: string, n: number): string {
+  const [mm, yy] = m.split("/").map(Number);
+  const t = yy * 12 + (mm - 1) + n;
+  return String(t % 12 + 1).padStart(2, "0") + "/" + Math.floor(t / 12);
+}
+// Quy tắc CR — giống crIn() trong app.js và tool cr_summary của MCP (quyết định 15–16/10/2026)
+function contractCounted(c: string): boolean {
+  const s = String(c || "").toLowerCase().trim();
+  if (!s || s === "renew" || s === "—") return false;
+  return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
+}
+function crIn(d: Row, m: string): { dat: boolean; noDen?: boolean } | null {
+  const crMonth = d["Tháng ghi nhận CR"];
+  const stop = String(d["Dừng triển khai"] || "").trim().toLowerCase();
+  if (!/^\d{2}\/\d{4}$/.test(crMonth || "") || !contractCounted(d["Loại hợp đồng"]) || (stop && stop !== "false")) return null;
+  const g = monthOf(d["Ngày go-live thực tế"]);
+  if (g) {
+    if (mCmp(g, crMonth) < 0) return m === g ? { dat: true, noDen: true } : null;
+    if (g === crMonth) return m === g ? { dat: true } : null;
+    if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
+    return { dat: m === g };
+  }
+  if (mCmp(m, crMonth) < 0) return null;
+  return { dat: false };
+}
+// SRR: giống countsForSrr() trong app.js — loại HĐ được tính + không phải PS/PaS
+function countsForSrr(d: Row): boolean {
+  const b = String(d["Bộ giải pháp"] || "").trim().toUpperCase();
+  return contractCounted(d["Loại hợp đồng"]) && b !== "PS" && b !== "PAS";
+}
+
+function currentMonth(): string { // giờ Việt Nam
+  const d = new Date(Date.now() + 7 * 3600_000);
+  return String(d.getUTCMonth() + 1).padStart(2, "0") + "/" + d.getUTCFullYear();
+}
+function quarterOfMonth(m: string): string { // "11/2026" → "Q4/2026"
+  const [mm, yy] = m.split("/");
+  return "Q" + Math.ceil(Number(mm) / 3) + "/" + yy;
+}
+function quarterMonths(q: string): string[] {
+  const [qq, yy] = q.slice(1).split("/");
+  const first = String((Number(qq) - 1) * 3 + 1).padStart(2, "0") + "/" + yy;
+  return [0, 1, 2].map((i) => mShift(first, i));
+}
+// Giai đoạn của quý so với tháng hiện tại:
+//  future → chưa tới · commit → tháng 1–2 (chốt/sửa commit) · achieve → tháng 3 (vẫn sửa
+//  commit được) + tháng đầu quý sau (chỉ bấm Đạt) · closed → quá hạn bấm Đạt
+function careerPhase(q: string, now = currentMonth()) {
+  const months = quarterMonths(q), deadline = mShift(months[2], 1);
+  const canEdit = months.includes(now);
+  const canAchieveWindow = now === months[2] || now === deadline;
+  let phase = "closed";
+  if (mCmp(now, months[0]) < 0) phase = "future";
+  else if (canAchieveWindow) phase = "achieve";
+  else if (canEdit) phase = "commit";
+  return { phase, canEdit, canAchieveWindow, deadline, months };
+}
+
+// Chỉ tính các tháng ĐÃ TỚI của quý (giữa quý không cộng sẵn mẫu số / kỳ đo của tháng sau)
+function careerActuals(deals: Row[], q: string, now = currentMonth()) {
+  const all = quarterMonths(q), months = all.filter((m) => mCmp(m, now) <= 0);
+  // SRR theo policy: Σ DT phần mềm có CHS_CS ≥ 50 ÷ Σ DT phần mềm có kỳ đo trong các tháng
+  const srr = (ky: "T1" | "T4", only: string[]) => {
+    let n = 0, nOk = 0, sumAll = 0, sumOk = 0;
+    for (const d of deals) {
+      if (!only.includes(d["Tháng đo " + ky]) || !countsForSrr(d)) continue;
+      const chs = String(d["CHS_CS " + ky] || "").trim();
+      const v = numVN(d["Giá trị phần mềm bộ (VNĐ)"]);
+      n++; sumAll += v;
+      if (chs !== "" && numVN(chs) >= 50) { nOk++; sumOk += v; }
+    }
+    return { v: sumAll > 0 ? Math.round(sumOk / sumAll * 10000) / 100 : null, n, nOk, sumAll, sumOk };
+  };
+  // CR quý = cộng dồn tử/mẫu của từng tháng (deal trễ nằm trong mẫu số mọi tháng tới khi go-live)
+  const cr = (only: string[]) => {
+    let phai = 0, dat = 0, n = 0;
+    for (const m of only) {
+      for (const d of deals) {
+        const x = crIn(d, m);
+        if (!x) continue;
+        const v = numVN(d["DT phải go-live"]);
+        n++;
+        if (!x.noDen) phai += v;
+        if (x.dat) dat += v;
+      }
+    }
+    return { v: phai > 0 ? Math.round(dat / phai * 10000) / 100 : null, n, phai, dat };
+  };
+  return {
+    cr: cr(months), s1: srr("T1", months), s4: srr("T4", months),
+    byMonth: all.map((m) => mCmp(m, now) > 0 ? { month: m, future: true }
+      : { month: m, cr: cr([m]), s1: srr("T1", [m]), s4: srr("T4", [m]) }),
+  };
+}
+
+// % loading = thực tế ÷ commit. Chỉ số trống (quý không có deal tính) được bỏ qua khi xét Đạt.
+function careerEvaluate(commit: Record<string, unknown> | null, act: ReturnType<typeof careerActuals>) {
+  const items: Record<string, { actual: number | null; commit: number | null; loading: number | null; met: boolean | null }> = {};
+  let present = 0, met = 0;
+  for (const k of CAREER_KEYS) {
+    const a = act[k].v, c = commit ? Number(commit[k]) : null;
+    const ok = a != null && c != null && a >= c;
+    if (a != null) { present++; if (ok) met++; }
+    items[k] = { actual: a, commit: c, loading: a == null || !c ? null : Math.round(a / c * 1000) / 10, met: a == null ? null : ok };
+  }
+  return { items, present, met, allMet: !!commit && present > 0 && met === present };
+}
+
+function trimKeys(rows: Row[]): Row[] {
+  return (rows || []).map((r) => {
+    const o: Row = {};
+    for (const [k, v] of Object.entries(r)) o[k.trim()] = v == null ? "" : String(v);
+    return o;
+  });
+}
+
+// deno-lint-ignore no-explicit-any
+type CareerList = { commits: any[]; levelHistory: any[] };
+async function careerLoad_(email: string) {
+  const [profile, list, deals] = await Promise.all([
+    rpc_<{ level?: string; salary?: string } | null>("api_get_profile", { p_email: email }),
+    rpc_<CareerList | null>("api_career_list", { p_email: email }),
+    rpc_<Row[] | null>("api_get_deals_json", { p_email: email }),
+  ]);
+  return { profile, list: list || { commits: [], levelHistory: [] }, deals: trimKeys(deals || []) };
+}
+
+function careerView_(q: string, data: Awaited<ReturnType<typeof careerLoad_>>) {
+  const level = String(data.profile?.level || "");
+  const idx = CAREER_ORDER.indexOf(level);
+  const now = currentMonth(), curQ = quarterOfMonth(now);
+  const commit = data.list.commits.find((c) => c.quarter === q) || null;
+  const ph = careerPhase(q, now);
+  const actuals = careerActuals(data.deals, q, now);
+  const evaluation = careerEvaluate(commit, actuals);
+  const statusOf = (c: { status: string; quarter: string }) =>
+    c.status === "open" && careerPhase(c.quarter, now).phase === "closed" ? "missed" : c.status;
+  const status = commit ? statusOf(commit) : "none";
+  // Quý chọn được: quý hiện tại, quý trước (tháng đầu quý mới vẫn còn hạn bấm Đạt), các quý đã commit
+  const quarters = Array.from(new Set([curQ, quarterOfMonth(mShift(now, -1)), ...data.list.commits.map((c) => c.quarter)]))
+    .sort((a, b) => mCmp(quarterMonths(b)[0], quarterMonths(a)[0]));
+  const levelUp = !!commit && CAREER_ORDER.indexOf(commit.targetLevel) > idx;
+  return {
+    quarter: q, currentQuarter: curQ, now, quarters,
+    eligible: idx >= 0, level, salary: data.profile?.salary || "",
+    levels: CAREER_LEVELS, order: CAREER_ORDER, nextLevels: idx >= 0 ? CAREER_ORDER.slice(idx + 1) : [],
+    ...ph, status, commit, actuals, evaluation, levelUp,
+    canAchieve: idx >= 0 && status === "open" && ph.canAchieveWindow && evaluation.allMet,
+    commits: data.list.commits.map((c) => ({
+      quarter: c.quarter, status: statusOf(c), baseLevel: c.baseLevel, targetLevel: c.targetLevel, achievedAt: c.achievedAt,
+    })),
+    levelHistory: data.list.levelHistory,
+  };
+}
+
+// deno-lint-ignore no-explicit-any
+async function careerAction_(body: any, email: string): Promise<Record<string, unknown>> {
+  const isQ = (s: unknown): s is string => typeof s === "string" && /^Q[1-4]\/\d{4}$/.test(s);
+  const data = await careerLoad_(email);
+  const level = String(data.profile?.level || "");
+  const idx = CAREER_ORDER.indexOf(level);
+  switch (body.action) {
+    case "careerGet":
+      return careerView_(isQ(body.quarter) ? body.quarter : quarterOfMonth(currentMonth()), data);
+    case "careerSaveCommit": {
+      if (idx < 0) throw new Error("Career path hiện chỉ áp dụng cho CS level 1–7");
+      const q = body.quarter;
+      if (!isQ(q) || !careerPhase(q).canEdit) throw new Error("Chỉ chốt/sửa commit được trong quý đang chạy");
+      const old = data.list.commits.find((c) => c.quarter === q);
+      if (old && old.status === "achieved") throw new Error("Quý " + q + " đã bấm Đạt — không sửa commit được nữa");
+      const target = String(body.targetLevel || level);
+      const ti = CAREER_ORDER.indexOf(target);
+      if (ti < idx) throw new Error("Level mục tiêu không hợp lệ");
+      const vals = { cr: 0, s1: 0, s4: 0 };
+      for (const k of CAREER_KEYS) {
+        const v = Number(body[k]);
+        if (!isFinite(v) || v <= 0 || v > 100) throw new Error(CAREER_NAME[k] + " phải là số lớn hơn 0 và tối đa 100");
+        const floor = CAREER_LEVELS[target].kpi[k];
+        if (ti > idx && v < floor) throw new Error(CAREER_NAME[k] + " commit tối thiểu " + floor + "% (mốc KPI của " + target + ")");
+        vals[k as CareerKey] = Math.round(v * 100) / 100;
+      }
+      await rpc_("api_career_save_commit", {
+        p_email: email, p_quarter: q, p_base_level: level, p_target_level: target,
+        p_cr: vals.cr, p_s1: vals.s1, p_s4: vals.s4,
+      });
+      return careerView_(q, await careerLoad_(email));
+    }
+    case "careerAchieve": {
+      const q = body.quarter;
+      if (!isQ(q)) throw new Error("Quý không hợp lệ");
+      const v = careerView_(q, data);
+      if (!v.eligible) throw new Error("Career path hiện chỉ áp dụng cho CS level 1–7");
+      if (!v.commit) throw new Error("Chưa có commit cho quý " + q);
+      if (v.status !== "open") throw new Error("Quý " + q + " không còn mở để bấm Đạt");
+      if (!v.canAchieveWindow) throw new Error("Chỉ bấm Đạt được từ tháng cuối quý tới hết tháng đầu quý sau");
+      if (!v.evaluation.allMet) throw new Error("Số thực tế chưa đạt commit — chưa bấm Đạt được");
+      let newLevel: string | null = null, newSalary: number | null = null;
+      if (v.levelUp) {
+        const t = CAREER_LEVELS[v.commit.targetLevel];
+        newSalary = Number(String(body.newSalary ?? "").replace(/[^\d]/g, "")) || null;
+        if (!newSalary || newSalary < t.lo || newSalary > t.hi) {
+          throw new Error("Lương mới phải trong khung " + t.lo.toLocaleString("vi-VN") + " – " + t.hi.toLocaleString("vi-VN") + " đ");
+        }
+        newLevel = v.commit.targetLevel;
+      }
+      const snapshot = { at: new Date().toISOString(), level, actuals: v.actuals, evaluation: v.evaluation };
+      await rpc_("api_career_achieve", {
+        p_email: email, p_quarter: q, p_new_level: newLevel, p_new_salary: newSalary, p_snapshot: snapshot,
+      });
+      return careerView_(q, await careerLoad_(email));
+    }
+    default:
+      throw new Error("action không hỗ trợ: " + body.action);
+  }
+}
+
 // deno-lint-ignore no-explicit-any
 async function extraAction_(body: any, email: string): Promise<Record<string, unknown>> {
+  if (/^career[A-Z]/.test(String(body.action))) return careerAction_(body, email);
   switch (body.action) {
     case "whoami": {
       const [isAdmin, profile] = await Promise.all([
@@ -369,7 +624,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- Kết nối Claude (MCP) + Quản trị: lỗi trả { ok:false, error } như saveRequest ----
-    if (typeof body.action === "string" && (body.action === "whoami" || /^(mcp|admin)[A-Z]/.test(body.action))) {
+    if (typeof body.action === "string" && (body.action === "whoami" || /^(mcp|admin|career)[A-Z]/.test(body.action))) {
       try {
         return json_({ ok: true, ...(await extraAction_(body, email)), sessionToken });
       } catch (e) {

@@ -594,6 +594,10 @@
     var lv = lvChip ? lvChip.textContent.trim() : '';
     $('pmLevel').value = PM_LEVELS[lv] ? lv : '';
     pmOnLevel();
+    // Đã có level → khoá: level chỉ đổi qua Career path (bấm Đạt cuối quý) hoặc do admin.
+    // Backend (api_register, 04_career_path.sql) cũng chặn, đây chỉ để CS thấy rõ.
+    $('pmLevel').disabled = !!PM_LEVELS[lv];
+    if (PM_LEVELS[lv]) $('pmLevelHint').textContent = PM_LEVELS[lv].title + ' · Level chỉ đổi qua Career path hoặc nhờ admin';
     $('pmErr').textContent = '';
     // avatar hiện tại
     var email = currentEmailFromUI();
@@ -712,12 +716,14 @@
   var TITLES = {
     overview:  ['Overview', 'Sức khỏe portfolio'],
     forecast:  ['Forecast', 'Nhập số kỳ đo, nhập xong nhớ bấm Lưu'],
-    dashboard: ['Scorecard', 'Performance · commission tháng']
+    dashboard: ['Scorecard', 'Performance · commission tháng'],
+    career:    ['Career path', 'Commit quý · % loading · lên level']
   };
   function syncTitle() {
     var active = document.querySelector('.tab.active');
     var key = active ? active.getAttribute('data-tab') : 'overview';
-    var t = TITLES[key] || TITLES.overview;
+    var isCareer = key === 'overview' && /^#\/?overview\/career-path/.test(location.hash || '');
+    var t = isCareer ? TITLES.career : (TITLES[key] || TITLES.overview);
     var ttl = $('pageTitle'), sub = $('pageSub');
     if (ttl) ttl.textContent = t[0];
     if (sub) sub.textContent = t[1];
@@ -726,7 +732,7 @@
     // ở đây chỉ bật/tắt cho đúng tab, không đụng vào sự kiện.
     var wrap = $('headSearch'), ov = $('ovSearch'), fc = $('fcSearch');
     if (wrap && ov && fc) {
-      wrap.classList.toggle('off', key === 'dashboard');
+      wrap.classList.toggle('off', key === 'dashboard' || isCareer);
       ov.style.display = key === 'overview' ? '' : 'none';
       fc.style.display = key === 'forecast' ? '' : 'none';
     }
@@ -2477,6 +2483,18 @@
     // (tương tự cách app.js quản lý mảng CHANGELOG của nó).
     var EXTRA_CHANGELOG = [
       {
+        date: '16/10/2026',
+        title: 'Career path — commit quý, % loading và lên level',
+        body:
+          '<ul>' +
+            '<li>Mục <b>Overview → Career path</b>: đầu quý chọn giữ level hoặc lên level mục tiêu, nhập commit <b>CR, SRR_1, SRR_4</b> của quý. Lên level thì commit không được thấp hơn mốc KPI của level đó.</li>' +
+            '<li>Tháng 1–3 của quý sửa commit được, mọi lần sửa đều lưu lịch sử (vẫn xem được bản chốt lần đầu).</li>' +
+            '<li>Bất kỳ lúc nào cũng xem được <b>% loading</b> = số thực tế quý ÷ commit, kèm bảng tách theo từng tháng. Số thực tế cộng dồn tử/mẫu các tháng đã qua, đúng quy tắc CR/SRR của Scorecard.</li>' +
+            '<li>Từ tháng cuối quý tới hết tháng đầu quý sau: đủ số thì bấm <b>Đạt</b> để hoàn tất quý. Commit có lên level thì nhập lương mới (trong khung của level mới) — level và lương cập nhật vào hồ sơ ngay.</li>' +
+            '<li>Level trong popup <i>Cập nhật thông tin</i> được khoá: chỉ đổi qua Career path hoặc nhờ admin.</li>' +
+          '</ul>',
+      },
+      {
         date: '09/08/2026',
         title: 'Product Feedback — góp ý & theo dõi tính năng',
         body:
@@ -2570,5 +2588,325 @@
 
     new MutationObserver(clInjectExtra).observe(clBody, { childList: true });
     clInjectExtra();
+  })();
+
+  /* -------------------------------------------------------
+     CAREER PATH THEO QUÝ — sub-view của Overview (#/overview/career-path)
+     Backend (Edge Function api): careerGet / careerSaveCommit / careerAchieve.
+     Số thực tế quý, % loading, mốc sàn theo level và điều kiện bấm Đạt đều do
+     MÁY CHỦ tính (bấm Đạt đổi level + lương ngay) — ở đây chỉ vẽ + gửi form.
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    var view = $('cpView');
+    var ovBody = view && view.parentElement && view.parentElement.querySelector('.tab-panel-body:not(.cp-view)');
+    if (!view || !ovBody || !CFG.API_URL) return;
+
+    var ROUTE = '#/overview/career-path';
+    var NAME = { cr: 'CR', s1: 'SRR_1', s4: 'SRR_4' };
+    var KEYS = ['cr', 's1', 's4'];
+    var st = { data: null, quarter: null, editing: false, busy: false, loadedAt: 0, err: '' };
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function pct(v) { return v == null ? '—' : Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + '%'; }
+    function money(n) { return n == null || n === '' ? '—' : Number(n).toLocaleString('vi-VN') + ' đ'; }
+    function tr(n) { return (Number(n || 0) / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' tr'; }
+    function qLabel(q) { return String(q || '').replace(/^Q(\d)\/(\d{4})$/, 'Quý $1/$2'); }
+    function toast(msg, kind) {
+      var el = $('toast'); if (!el) return;
+      el.textContent = msg;
+      el.className = 'toast show' + (kind ? ' ' + kind : '');
+      setTimeout(function () { el.className = 'toast'; }, 4200);
+    }
+    function post(payload, done) {
+      payload.token = localStorage.getItem('cs_tool_token');
+      fetch(CFG.API_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = null; }
+          if (d && d.sessionToken) { try { localStorage.setItem('cs_tool_token', d.sessionToken); } catch (e) {} }
+          if (d && d.ok) done(null, d); else done((d && d.error) || 'Backend chưa hỗ trợ Career path', null); })
+        .catch(function (e) { done(e.message || 'Lỗi mạng', null); });
+    }
+
+    /* ---------- hiện / ẩn theo URL ---------- */
+    function isOn() { return document.body.className === 'app-mode' && (location.hash || '').indexOf(ROUTE) === 0; }
+    function sync() {
+      var on = isOn();
+      view.style.display = on ? '' : 'none';
+      ovBody.style.display = on ? 'none' : '';
+      document.querySelectorAll('.cp-nav-btn').forEach(function (b) { b.classList.toggle('active', on); });
+      if (on && !st.busy && Date.now() - st.loadedAt > 60000) load(st.quarter);
+    }
+    document.querySelectorAll('.cp-nav-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (location.hash === ROUTE) sync(); else location.hash = ROUTE;
+      });
+    });
+    // app.js nghe hashchange để chuyển tab Overview → chạy sau nó
+    window.addEventListener('hashchange', function () { setTimeout(sync, 0); });
+    new MutationObserver(function () { setTimeout(sync, 0); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    sync();
+
+    function load(q) {
+      st.busy = true;
+      if (!st.data) view.innerHTML = '<div class="table-card"><div class="pf-loading">Đang tải Career path…</div></div>';
+      post({ action: 'careerGet', quarter: q || undefined }, function (err, d) {
+        st.busy = false;
+        if (err) { st.err = err; render(); return; }
+        st.err = ''; st.data = d; st.quarter = d.quarter; st.loadedAt = Date.now();
+        render();
+      });
+    }
+
+    /* ---------- vẽ ---------- */
+    var STATUS = {
+      none: ['Chưa commit', 'cp-chip-neutral'], open: ['Đang chạy', 'cp-chip-run'],
+      achieved: ['Đã đạt', 'cp-chip-ok'], missed: ['Không đạt', 'cp-chip-bad'],
+    };
+    function render() {
+      var d = st.data;
+      if (!d) {
+        view.innerHTML = '<div class="table-card"><div class="cp-err">Không tải được Career path: ' + esc(st.err) +
+          ' <button class="ad-btn" id="cpRetry">Thử lại</button></div></div>';
+        $('cpRetry').addEventListener('click', function () { load(st.quarter); });
+        return;
+      }
+      if (!d.eligible) {
+        view.innerHTML = '<div class="table-card"><div class="chart-title">Career path</div>' +
+          '<p class="cp-note">Career path hiện áp dụng cho <b>CS level 1–7</b>. Level của bạn (' + esc(d.level || 'chưa khai báo') +
+          ') chưa thuộc nhóm áp dụng.</p></div>';
+        return;
+      }
+      var s = STATUS[d.status] || STATUS.none;
+      view.innerHTML =
+        (st.err ? '<div class="cp-err">' + esc(st.err) + '</div>' : '') +
+        '<div class="table-card cp-head">' +
+          '<div class="cp-head-row">' +
+            '<div><div class="chart-title">Career path · ' + esc(qLabel(d.quarter)) +
+              ' <span class="cp-chip ' + s[1] + '">' + s[0] + '</span></div>' +
+              '<div class="cp-note">' + esc(phaseText(d)) + '</div></div>' +
+            '<label class="cp-qsel">Quý <select id="cpQuarter">' + d.quarters.map(function (q) {
+              return '<option value="' + esc(q) + '"' + (q === d.quarter ? ' selected' : '') + '>' + esc(qLabel(q)) + '</option>';
+            }).join('') + '</select></label>' +
+          '</div>' +
+          '<div class="cp-me">Level hiện tại <b>' + esc(d.level) + '</b> · Lương <b>' + esc(money(d.salary)) + '</b></div>' +
+        '</div>' +
+        commitHtml(d) +
+        loadingHtml(d) +
+        monthsHtml(d) +
+        achieveHtml(d) +
+        historyHtml(d);
+      bind(d);
+    }
+
+    function phaseText(d) {
+      var m = d.months || [];
+      if (d.phase === 'future') return 'Quý chưa bắt đầu.';
+      if (d.phase === 'commit') return 'Tháng ' + (m.indexOf(d.now) + 1) + '/3 của quý — chốt / sửa commit được tới hết tháng ' + m[2] + '. Nút Đạt mở từ tháng ' + m[2] + '.';
+      if (d.phase === 'achieve' && d.canEdit) return 'Tháng cuối quý — vẫn sửa commit được; đủ số thì bấm Đạt (hạn tới hết tháng ' + d.deadline + ').';
+      if (d.phase === 'achieve') return 'Quý đã kết thúc — còn hạn bấm Đạt tới hết tháng ' + d.deadline + '.';
+      return 'Quý đã đóng.';
+    }
+    function commitHtml(d) {
+      var c = d.commit, canEdit = d.canEdit && d.status !== 'achieved';
+      if ((!c && canEdit) || (st.editing && canEdit)) return formHtml(d);
+      if (!c) return '<div class="table-card"><div class="chart-title">Commit</div><p class="cp-note">Không có commit cho ' + esc(qLabel(d.quarter)) + '.</p></div>';
+      var up = c.targetLevel !== c.baseLevel;
+      var hist = c.history || [], first = hist[0];
+      return '<div class="table-card">' +
+        '<div class="cp-head-row"><div class="chart-title">Commit ' + esc(qLabel(d.quarter)) + '</div>' +
+          (canEdit ? '<button class="ad-btn" id="cpEdit">Sửa commit</button>' : '') + '</div>' +
+        '<div class="cp-target">' + (up ? 'Mục tiêu: <b>lên ' + esc(c.targetLevel) + '</b> (từ ' + esc(c.baseLevel) + ')' : 'Mục tiêu: <b>giữ ' + esc(c.targetLevel) + '</b>') + '</div>' +
+        '<div class="cp-commit-vals">' + KEYS.map(function (k) {
+          return '<div><span>' + NAME[k] + '</span><b>' + pct(c[k]) + '</b></div>';
+        }).join('') + '</div>' +
+        (first && hist.length > 1
+          ? '<details class="cp-hist"><summary>Bản chốt lần đầu (' + esc(first.at) + '): ' +
+              KEYS.map(function (k) { return NAME[k] + ' ' + pct(first[k]); }).join(' · ') + ' — đã sửa ' + (hist.length - 1) + ' lần</summary>' +
+              '<ul>' + hist.map(function (h) {
+                return '<li>' + esc(h.at) + ' — ' + (h.targetLevel !== h.baseLevel ? 'lên ' + esc(h.targetLevel) : 'giữ ' + esc(h.targetLevel)) + ': ' +
+                  KEYS.map(function (k) { return NAME[k] + ' ' + pct(h[k]); }).join(' · ') + '</li>';
+              }).join('') + '</ul></details>'
+          : (first ? '<div class="cp-note">Chốt lúc ' + esc(first.at) + '</div>' : '')) +
+      '</div>';
+    }
+
+    function formHtml(d) {
+      var c = d.commit;
+      var target = (c && c.targetLevel) || d.level;
+      var opts = [d.level].concat(d.nextLevels).map(function (lv) {
+        return '<option value="' + esc(lv) + '"' + (lv === target ? ' selected' : '') + '>' +
+          (lv === d.level ? 'Giữ ' + esc(lv) : 'Lên ' + esc(lv)) + '</option>';
+      }).join('');
+      return '<div class="table-card">' +
+        '<div class="chart-title">' + (c ? 'Sửa commit ' : 'Lên commit ') + esc(qLabel(d.quarter)) + '</div>' +
+        '<p class="cp-note">Số commit là % bạn cam kết đạt cho cả quý. Chọn lên level thì mỗi số phải ≥ mốc KPI của level đó.</p>' +
+        '<div class="cp-form">' +
+          '<label>Level mục tiêu<select id="cpTarget">' + opts + '</select></label>' +
+          KEYS.map(function (k) {
+            return '<label>' + NAME[k] + ' (%)<input type="number" id="cpIn_' + k + '" min="0.01" max="100" step="0.01" value="' +
+              (c ? esc(c[k]) : '') + '"><span class="cp-floor" id="cpFloor_' + k + '"></span></label>';
+          }).join('') +
+        '</div>' +
+        '<div class="cp-actions"><button class="ad-btn ad-primary" id="cpSave">' + (c ? 'Lưu commit' : 'Chốt commit') + '</button>' +
+          (c ? '<button class="ad-btn" id="cpCancel">Huỷ</button>' : '') +
+          '<span class="cp-err-inline" id="cpFormErr"></span></div>' +
+      '</div>';
+    }
+
+    function loadingHtml(d) {
+      var ev = d.evaluation.items, a = d.actuals;
+      var sub = {
+        cr: a.cr.phai > 0 ? 'Đạt ' + tr(a.cr.dat) + ' / phải ' + tr(a.cr.phai) : 'Chưa có deal phải go-live trong quý',
+        s1: a.s1.n ? a.s1.nOk + '/' + a.s1.n + ' deal CHS_T1 ≥ 50' : 'Chưa có kỳ đo T1 trong quý',
+        s4: a.s4.n ? a.s4.nOk + '/' + a.s4.n + ' deal CHS_T4 ≥ 50' : 'Chưa có kỳ đo T4 trong quý',
+      };
+      return '<div class="kpi-row cp-kpis">' + KEYS.map(function (k) {
+        var it = ev[k], hasCommit = it.commit != null;
+        var big = hasCommit ? (it.loading == null ? '—' : pct(it.loading)) : pct(it.actual);
+        var cls = it.met == null ? 'cp-chip-neutral' : it.met ? 'cp-chip-ok' : 'cp-chip-bad';
+        var w = it.loading == null ? 0 : Math.max(0, Math.min(100, it.loading));
+        return '<div class="kpi-card">' +
+          '<div class="kpi-label">' + NAME[k] + ' quý' + (hasCommit ? ' · % loading' : '') +
+            (hasCommit && it.met != null ? '<span class="cp-chip ' + cls + '">' + (it.met ? 'Đạt' : 'Chưa đạt') + '</span>' : '') + '</div>' +
+          '<div class="kpi-value">' + big + '</div>' +
+          (hasCommit ? '<div class="cp-bar"><span class="' + (it.met ? 'ok' : '') + '" style="width:' + w + '%"></span></div>' : '') +
+          '<div class="kpi-sub">Thực tế ' + pct(it.actual) + (hasCommit ? ' · Commit ' + pct(it.commit) : '') + '</div>' +
+          '<div class="kpi-sub">' + esc(sub[k]) + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    function monthsHtml(d) {
+      var cell = function (x, k) {
+        if (k === 'cr') return x.cr.phai > 0 ? pct(x.cr.v) + ' <span class="cp-dim">(' + tr(x.cr.dat) + ' / ' + tr(x.cr.phai) + ')</span>'
+          : (x.cr.dat > 0 ? '<span class="cp-dim">tử ' + tr(x.cr.dat) + '</span>' : '—');
+        return x[k].n ? pct(x[k].v) + ' <span class="cp-dim">(' + x[k].nOk + '/' + x[k].n + ')</span>' : '—';
+      };
+      return '<div class="table-card"><div class="table-head"><div class="chart-title">Theo từng tháng</div>' +
+        '<div class="table-hint">Số quý = cộng dồn tử / mẫu các tháng đã qua</div></div>' +
+        '<div class="table-scroll"><table class="deal-table"><thead><tr><th>Tháng</th><th>CR</th><th>SRR_1</th><th>SRR_4</th></tr></thead><tbody>' +
+        d.actuals.byMonth.map(function (x) {
+          if (x.future) return '<tr><td>' + esc(x.month) + '</td><td colspan="3" class="cp-dim">Chưa tới</td></tr>';
+          return '<tr><td>' + esc(x.month) + '</td><td>' + cell(x, 'cr') + '</td><td>' + cell(x, 's1') + '</td><td>' + cell(x, 's4') + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }
+
+    function achieveHtml(d) {
+      var c = d.commit;
+      if (!c) return '';
+      if (d.status === 'achieved') {
+        return '<div class="table-card cp-done"><div class="chart-title">✓ Đã hoàn tất ' + esc(qLabel(d.quarter)) + '</div>' +
+          '<p class="cp-note">Bấm Đạt lúc ' + esc(c.achievedAt) +
+          (c.newSalary ? ' · Lên <b>' + esc(c.targetLevel) + '</b>, lương mới <b>' + esc(money(c.newSalary)) + '</b>' : '') + '</p></div>';
+      }
+      if (d.status === 'missed') {
+        return '<div class="table-card"><div class="chart-title">Không đạt</div><p class="cp-note">Đã quá hạn bấm Đạt (hết tháng ' + esc(d.deadline) + ').</p></div>';
+      }
+      if (!d.canAchieveWindow) return '';
+      var why = '';
+      if (!d.canAchieve) {
+        var miss = KEYS.filter(function (k) { return d.evaluation.items[k].met === false; }).map(function (k) { return NAME[k]; });
+        why = d.evaluation.present === 0 ? 'Quý chưa có số thực tế nào để xét.' : 'Chưa đạt commit: ' + miss.join(', ') + '.';
+      }
+      var lv = d.levelUp ? d.levels[c.targetLevel] : null;
+      return '<div class="table-card cp-achieve">' +
+        '<div class="chart-title">Hoàn tất quý</div>' +
+        '<p class="cp-note">' + (d.levelUp
+          ? 'Commit có <b>lên ' + esc(c.targetLevel) + '</b>: bấm Đạt sẽ cập nhật level và lương mới vào hồ sơ ngay.'
+          : 'Bấm Đạt để hoàn tất Career path của quý (giữ level ' + esc(d.level) + ').') +
+          ' Chỉ số chưa có deal tính trong quý được bỏ qua.</p>' +
+        (lv ? '<div class="cp-form"><label>Lương mới (đ)<input type="number" id="cpSalary" min="' + lv.lo + '" max="' + lv.hi + '" step="100000" value="' + lv.lo + '">' +
+          '<span class="cp-floor">Khung ' + esc(money(lv.lo)) + ' – ' + esc(money(lv.hi)) + '</span></label></div>' : '') +
+        '<div class="cp-actions"><button class="ad-btn ad-primary" id="cpAchieve"' + (d.canAchieve ? '' : ' disabled') + '>Đạt — hoàn tất quý</button>' +
+          '<span class="cp-err-inline" id="cpAchErr">' + esc(why) + '</span></div>' +
+      '</div>';
+    }
+
+    function historyHtml(d) {
+      if (!d.commits.length && !d.levelHistory.length) return '';
+      return '<div class="table-card"><div class="chart-title">Lịch sử</div>' +
+        (d.commits.length ? '<div class="table-scroll"><table class="deal-table"><thead><tr><th>Quý</th><th>Mục tiêu</th><th>Trạng thái</th><th>Hoàn tất</th></tr></thead><tbody>' +
+          d.commits.map(function (c) {
+            var s = STATUS[c.status] || STATUS.none;
+            return '<tr><td>' + esc(qLabel(c.quarter)) + '</td><td>' + (c.targetLevel !== c.baseLevel ? 'Lên ' : 'Giữ ') + esc(c.targetLevel) + '</td>' +
+              '<td><span class="cp-chip ' + s[1] + '">' + s[0] + '</span></td><td>' + esc(c.achievedAt || '—') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '') +
+        (d.levelHistory.length ? '<h4 class="pf-h" style="margin:20px 0 6px">Lịch sử level</h4><ul class="cp-lv-hist">' +
+          d.levelHistory.map(function (l) {
+            return '<li>' + esc(l.at) + ' — ' + esc(l.oldLevel) + ' → <b>' + esc(l.newLevel) + '</b> · lương ' + esc(money(l.oldSalary)) + ' → <b>' +
+              esc(money(l.newSalary)) + '</b>' + (l.reason ? ' <span class="cp-dim">(' + esc(l.reason) + ')</span>' : '') + '</li>';
+          }).join('') + '</ul>' : '') +
+      '</div>';
+    }
+
+    /* ---------- sự kiện ---------- */
+    function bind(d) {
+      var sel = $('cpQuarter');
+      if (sel) sel.addEventListener('change', function () { st.editing = false; load(sel.value); });
+      var edit = $('cpEdit');
+      if (edit) edit.addEventListener('click', function () { st.editing = true; render(); });
+      var cancel = $('cpCancel');
+      if (cancel) cancel.addEventListener('click', function () { st.editing = false; render(); });
+
+      var target = $('cpTarget');
+      function floors() {
+        var lv = target.value, up = lv !== d.level;
+        KEYS.forEach(function (k) {
+          var f = $('cpFloor_' + k), inp = $('cpIn_' + k);
+          var min = up ? d.levels[lv].kpi[k] : null;
+          if (f) f.textContent = up ? 'Tối thiểu ' + min + '% (KPI ' + lv + ')' : '';
+          if (inp) inp.min = up ? String(min) : '0.01';
+        });
+      }
+      if (target) { target.addEventListener('change', floors); floors(); }
+
+      var save = $('cpSave');
+      if (save) save.addEventListener('click', function () {
+        var body = { action: 'careerSaveCommit', quarter: d.quarter, targetLevel: target.value };
+        var errEl = $('cpFormErr');
+        for (var i = 0; i < KEYS.length; i++) {
+          var k = KEYS[i], v = $('cpIn_' + k).value.trim().replace(',', '.');
+          if (!v) { errEl.textContent = 'Nhập đủ ' + NAME[k] + '.'; return; }
+          body[k] = Number(v);
+        }
+        save.disabled = true; errEl.textContent = 'Đang lưu…';
+        post(body, function (err, res) {
+          save.disabled = false;
+          if (err) { errEl.textContent = err; return; }
+          st.editing = false; st.data = res; st.loadedAt = Date.now();
+          render(); toast('Đã lưu commit ' + qLabel(d.quarter), 'ok');
+        });
+      });
+
+      var ach = $('cpAchieve');
+      if (ach) ach.addEventListener('click', function () {
+        var errEl = $('cpAchErr');
+        // bấm 2 lần trong 4 giây mới chạy (giống nút nguy hiểm ở Quản trị)
+        if (ach.getAttribute('data-armed') !== '1') {
+          ach.setAttribute('data-armed', '1'); ach.textContent = 'Bấm lần nữa để xác nhận';
+          setTimeout(function () { if (ach.getAttribute('data-armed') === '1') { ach.removeAttribute('data-armed'); ach.textContent = 'Đạt — hoàn tất quý'; } }, 4000);
+          return;
+        }
+        ach.removeAttribute('data-armed');
+        var body = { action: 'careerAchieve', quarter: d.quarter };
+        if ($('cpSalary')) body.newSalary = $('cpSalary').value;
+        ach.disabled = true; ach.textContent = 'Đang ghi…'; errEl.textContent = '';
+        post(body, function (err, res) {
+          if (err) { ach.disabled = false; ach.textContent = 'Đạt — hoàn tất quý'; errEl.textContent = err; return; }
+          st.data = res; st.loadedAt = Date.now(); render();
+          toast('Đã hoàn tất ' + qLabel(d.quarter) + (d.levelUp ? ' — level mới đã cập nhật' : ''), 'ok');
+          // lên level: nạp lại để app.js đọc profile mới (mốc KPI, % com, lương cứng theo level mới)
+          if (d.levelUp) setTimeout(function () { location.reload(); }, 1500);
+        });
+      });
+    }
   })();
 })();
