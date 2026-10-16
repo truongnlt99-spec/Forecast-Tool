@@ -39,3 +39,8 @@ Không đặt `package.json` ở gốc repo (Vercel đang deploy tĩnh). Sửa l
 
 Quy trình bắt buộc: `docs/XU-LY-FEEDBACK.md`. Tóm tắt: chỉ mở PR (không push `main`), không sửa `app.js`/SQL
 chính sách; không chắc → tạo todo cho admin qua MCP CS Console.
+
+## 6. Career path
+
+Thiết kế + các bước triển khai: `docs/CAREER-PATH.md`. Mốc KPI/khung lương chép ở 2 nơi (`LEVELS` trong `app.js`
+và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.test.mjs` so khớp, sửa một chỗ thì sửa cả hai.

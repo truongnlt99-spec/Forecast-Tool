@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -170,15 +170,16 @@
             <span class="nav-fly">Overview</span>
           </button>
 
-          <!-- Sub-button "Career path" — sắp ra mắt. Dùng class nav-sub-btn (KHÔNG
-               phải fc-view-btn) để app.js không gắn nhầm sự kiện. -->
+          <!-- Sub-button "Career path" — ui.js điều khiển 100% (route #/overview/career-path).
+               Dùng class cp-nav-btn (KHÔNG phải fc-view-btn / fc-req-btn) để app.js và màn
+               Request không gắn nhầm sự kiện. -->
           <div class="nav-sub"><div><div class="nav-sub-inner">
-            <button type="button" class="nav-sub-btn nav-sub-soon" disabled>Career path<span class="nav-sub-badge">Sắp ra mắt</span></button>
+            <button type="button" class="cp-nav-btn">Career path</button>
           </div></div></div>
 
           <div class="nav-group-fly">
             <div class="nav-group-fly-title">Overview</div>
-            <button type="button" class="nav-sub-btn nav-sub-soon" disabled>Career path · Sắp ra mắt</button>
+            <button type="button" class="cp-nav-btn">Career path</button>
           </div>
         </div>
 
@@ -433,6 +434,8 @@
           </div>
 
         </div>
+        <!-- CAREER PATH (sub-view của Overview) — ui.js dựng nội dung, ẩn/hiện thay khối Overview ở trên -->
+        <div class="tab-panel-body cp-view" id="cpView" style="display:none;"></div>
         </section>
 
         <!-- TAB: FORECAST -->
@@ -918,7 +921,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=41"></script>
+  <script src="ui.js?v=42"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=13"></script>
 
