@@ -21,7 +21,7 @@ create table if not exists career_commits (
   target_level       text not null,              -- = base_level nếu giữ level
   cr                 numeric not null check (cr > 0 and cr <= 100),   -- % 0–100
   s1                 numeric not null check (s1 > 0 and s1 <= 100),
-  s4                 numeric not null check (s4 > 0 and s4 <= 100),
+  s4                 numeric check (s4 > 0 and s4 <= 100),            -- null = không commit SRR_4 (chỉ khi tạo bù)
   status             text not null default 'open' check (status in ('open', 'achieved')),
   achieved_at        timestamptz,
   achieved_snapshot  jsonb,                      -- số thực tế + % loading lúc bấm Đạt
@@ -56,6 +56,9 @@ create table if not exists level_history (
   changed_at  timestamptz not null default now()
 );
 create index if not exists level_history_email_idx on level_history (lower(email));
+
+-- Bản đầu tạo s4 NOT NULL → nới cho DB đã chạy file này (tạo bù Q3 có thể không commit SRR_4)
+alter table career_commits alter column s4 drop not null;
 
 alter table career_commits        enable row level security;
 alter table career_commit_history enable row level security;
@@ -98,7 +101,7 @@ begin
     raise exception 'Quý % đã bấm Đạt — không sửa commit được nữa', p_quarter;
   end if;
   if found and c.base_level = p_base_level and c.target_level = p_target_level
-     and c.cr = p_cr and c.s1 = p_s1 and c.s4 = p_s4 then
+     and c.cr = p_cr and c.s1 = p_s1 and c.s4 is not distinct from p_s4 then
     return api_career_list(em);   -- không đổi gì → không ghi thêm lịch sử
   end if;
   insert into career_commits (email, quarter, base_level, target_level, cr, s1, s4)

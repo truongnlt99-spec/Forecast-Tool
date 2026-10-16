@@ -2822,7 +2822,7 @@
           (canEdit ? '<button class="ad-btn" id="cpEdit">Sửa commit</button>' : '') + '</div>' +
         '<div class="cp-target">' + (up ? 'Mục tiêu: <b>lên ' + esc(c.targetLevel) + '</b> (từ ' + esc(c.baseLevel) + ')' : 'Mục tiêu: <b>giữ ' + esc(c.targetLevel) + '</b>') + '</div>' +
         '<div class="cp-commit-vals">' + KEYS.map(function (k) {
-          return '<div><span>' + NAME[k] + '</span><b>' + pct(c[k]) + '</b></div>';
+          return '<div><span>' + NAME[k] + '</span><b>' + (c[k] == null ? '<span class="cp-dim">Không commit</span>' : pct(c[k])) + '</b></div>';
         }).join('') + '</div>' +
         (first && hist.length > 1
           ? '<details class="cp-hist"><summary>Bản chốt lần đầu (' + esc(first.at) + '): ' +
@@ -2850,8 +2850,11 @@
           (d.backfill ? '<label>Level đầu quý<select id="cpBase">' + baseOpts + '</select></label>' : '') +
           '<label>Level mục tiêu<select id="cpTarget" data-sel="' + esc(target) + '"></select></label>' +
           KEYS.map(function (k) {
-            return '<label>' + NAME[k] + ' (%)<input type="number" id="cpIn_' + k + '" min="0.01" max="100" step="0.01" value="' +
-              (c ? esc(c[k]) : '') + '"><span class="cp-floor" id="cpFloor_' + k + '"></span></label>';
+            // tạo bù: SRR_4 không bắt buộc (quý đó có thể chưa có kỳ đo T4)
+            var opt = d.backfill && k === 's4';
+            return '<label>' + NAME[k] + ' (%)' + (opt ? ' · không bắt buộc' : '') +
+              '<input type="number" id="cpIn_' + k + '" min="0.01" max="100" step="0.01"' + (opt ? ' placeholder="Bỏ trống nếu không commit"' : '') + ' value="' +
+              (c && c[k] != null ? esc(c[k]) : '') + '"><span class="cp-floor" id="cpFloor_' + k + '"></span></label>';
           }).join('') +
         '</div>' +
         '<div class="cp-actions"><button class="ad-btn ad-primary" id="cpSave">' + (c ? 'Lưu commit' : 'Chốt commit') + '</button>' +
@@ -2877,7 +2880,8 @@
             (hasCommit && it.met != null ? '<span class="cp-chip ' + cls + '">' + (it.met ? 'Đạt' : 'Chưa đạt') + '</span>' : '') + '</div>' +
           '<div class="kpi-value">' + big + '</div>' +
           (hasCommit ? '<div class="cp-bar"><span class="' + (it.met ? 'ok' : '') + '" style="width:' + w + '%"></span></div>' : '') +
-          '<div class="kpi-sub">Thực tế ' + pct(it.actual) + (hasCommit ? ' · Commit ' + pct(it.commit) : '') + '</div>' +
+          '<div class="kpi-sub">Thực tế ' + pct(it.actual) + (hasCommit ? ' · Commit ' + pct(it.commit)
+            : d.commit ? ' · Không commit — không xét khi bấm Đạt' : '') + '</div>' +
           '<div class="kpi-sub">' + esc(sub[k]) + '</div>' +
         '</div>';
       }).join('') + '</div>';
@@ -2991,6 +2995,7 @@
         var errEl = $('cpFormErr');
         for (var i = 0; i < KEYS.length; i++) {
           var k = KEYS[i], v = $('cpIn_' + k).value.trim().replace(',', '.');
+          if (!v && d.backfill && k === 's4') { body.s4 = null; continue; }
           if (!v) { errEl.textContent = 'Nhập đủ ' + NAME[k] + '.'; return; }
           body[k] = Number(v);
         }
