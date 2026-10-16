@@ -172,6 +172,24 @@ test('UI Career path: commit → % loading → Đạt lên level', { skip: !chro
       assert.equal(await page.locator('#cpChart .cp-line-plan').count(), 1);
       await page.hover('#cpChart .cp-hit >> nth=1');
       assert.match(await page.textContent('#cpTip'), /Q1\/2027 · CS level 4 · Mục tiêu/);
+      // Commit nằm chung thẻ "Career path · Quý" (không còn thẻ Commit riêng)
+      assert.equal(await page.locator('.cp-head .cp-sec #cpEdit').count(), 1);
+      assert.equal(await page.locator('#cpView .table-card:has(.cp-commit-vals)').count(), 1);
+      assert.match(await page.textContent('.cp-head .chart-title'), /Career path · Quý 4\/2026/);
+
+      // Thu gọn / mở menu trái → biểu đồ vẽ lại theo bề ngang mới, không dư khoảng trống
+      const fit = () => page.evaluate(() => {
+        const b = document.getElementById('cpChart'), svg = b.querySelector('svg');
+        return [b.clientWidth, Number(svg.getAttribute('width'))];
+      });
+      const w0 = await fit();
+      assert.equal(w0[1], w0[0]);
+      await page.click('#sideToggle');
+      await page.waitForFunction((w) => { const b = document.getElementById('cpChart'), svg = b.querySelector('svg');
+        return b.clientWidth > w && Number(svg.getAttribute('width')) === b.clientWidth; }, w0[0], { timeout: 5000 });
+      await page.click('#sideToggle');
+      await page.waitForFunction((w) => { const b = document.getElementById('cpChart'), svg = b.querySelector('svg');
+        return b.clientWidth === w && Number(svg.getAttribute('width')) === w; }, w0[0], { timeout: 5000 });
 
       // Sửa commit → lưu lịch sử, hiện bản chốt đầu quý
       await page.click('#cpEdit');

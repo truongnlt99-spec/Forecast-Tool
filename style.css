@@ -1345,8 +1345,9 @@ html[data-theme="light"] .income-hero::after{
 }
 
 /* Career path — biểu đồ thăng tiến + tạo bù */
-.cp-chart{position:relative; margin-top:6px}
-.cp-chart svg{display:block}
+.cp-chart{position:relative; margin-top:6px; min-width:0; overflow:hidden}
+/* max-width: khung hẹp lại thì SVG co theo ngay, ui.js vẽ lại đúng bề ngang mới ngay sau đó */
+.cp-chart svg{display:block; max-width:100%; height:auto}
 .cp-grid{stroke:var(--stroke-soft); stroke-width:1}
 .cp-axis{fill:var(--tx-3); font:500 11px Inter}
 .cp-axis-now{fill:var(--tx); font-weight:700}
@@ -1386,3 +1387,32 @@ html[data-theme="light"] .income-hero::after{
   background:linear-gradient(100deg,#3D5CFF,#8A5BEE); border:2px solid var(--bg, #0B0D12);
 }
 .ps-new[hidden]{display:none}
+
+/* ---------- Career path: commit nằm chung thẻ đầu ---------- */
+.cp-sec{margin-top:16px; padding-top:16px; border-top:1px solid var(--stroke-soft)}
+.cp-sec-title{font:600 14px "Space Grotesk"; color:var(--tx)}
+
+/* ---------- Nút "Cộng phước" (cho vui) ---------- */
+.phuoc{margin:12px 0 0; display:flex; flex-direction:column; gap:6px}
+.phuoc[hidden]{display:none}
+.phuoc-btn{
+  position:relative; display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px;
+  border-radius:12px; border:1px solid color-mix(in srgb,#F5B544 45%,transparent); cursor:pointer;
+  background:linear-gradient(100deg,color-mix(in srgb,#F5B544 20%,transparent),color-mix(in srgb,#F08A5D 10%,transparent));
+  color:var(--tx); font:600 13px Inter; text-align:left; transition:transform .12s var(--ease), filter .15s;
+}
+.phuoc-btn:hover{filter:brightness(1.12)}
+.phuoc-btn:active{transform:scale(.96)}
+.phuoc-ico{font-size:18px; line-height:1; flex:0 0 auto}
+.phuoc-btn.pop .phuoc-ico{animation:phuocPop .35s var(--ease)}
+.phuoc-n{margin-left:auto; font:700 12px Inter; padding:2px 8px; border-radius:var(--r-pill);
+  background:color-mix(in srgb,#F5B544 28%,transparent); color:var(--tx)}
+.phuoc-sub{font-size:11.5px; color:var(--tx-3); padding:0 4px}
+.phuoc-fly{position:absolute; left:28px; top:4px; pointer-events:none; font:700 12px Inter; color:#F5B544;
+  animation:phuocFly .9s var(--ease) forwards; white-space:nowrap}
+@keyframes phuocPop{0%{transform:scale(1)}50%{transform:scale(1.35) rotate(-8deg)}100%{transform:scale(1)}}
+@keyframes phuocFly{0%{opacity:0; transform:translateY(0)}15%{opacity:1}100%{opacity:0; transform:translateY(-34px)}}
+@media (prefers-reduced-motion:reduce){.phuoc-btn.pop .phuoc-ico,.phuoc-fly{animation:none}}
+.app-wrapper.collapsed .phuoc-lb,.app-wrapper.collapsed .phuoc-sub{display:none}
+.app-wrapper.collapsed .phuoc-btn{justify-content:center; padding:10px 0; flex-direction:column; gap:4px}
+.app-wrapper.collapsed .phuoc-n{margin:0; font-size:10px; padding:1px 6px}

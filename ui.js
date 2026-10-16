@@ -2731,8 +2731,9 @@
             }).join('') + '</select></label>' +
           '</div>' +
           '<div class="cp-me">Level hiện tại <b>' + esc(d.level) + '</b> · Lương <b>' + esc(money(d.salary)) + '</b></div>' +
+          // Commit của quý nằm chung thẻ với phần đầu (trước đây là 2 thẻ riêng)
+          '<div class="cp-sec">' + commitHtml(d) + '</div>' +
         '</div>' +
-        commitHtml(d) +
         loadingHtml(d) +
         monthsHtml(d) +
         achieveHtml(d) +
@@ -2768,6 +2769,8 @@
       var pts = d.track || [];
       if (!box || !pts.length) return;
       var old = box.querySelector('svg'); if (old) box.removeChild(old);
+      if (cpRO) { cpRO.disconnect(); cpRO.observe(box); }
+      cpLastW = box.clientWidth;
       var W = Math.max(300, box.clientWidth), H = 230, L = 84, R = 28, T = 26, B = 30;
       var li = pts.map(function (p) { return d.order.indexOf(p.level); });
       var lo = Math.max(0, Math.min.apply(null, li) - 1), hi = Math.min(d.order.length - 1, Math.max.apply(null, li) + 1);
@@ -2817,11 +2820,19 @@
       });
       box.insertBefore(svg, tip);
     }
-    var cpResizeT = null;
-    window.addEventListener('resize', function () {
+    // Vẽ lại khi bề ngang khung biểu đồ đổi — kể cả khi thu gọn / mở rộng menu trái
+    // (không bắn sự kiện resize của cửa sổ). Trình duyệt cũ thiếu ResizeObserver → dùng resize.
+    var cpResizeT = null, cpLastW = 0;
+    function cpRedraw() {
       clearTimeout(cpResizeT);
-      cpResizeT = setTimeout(function () { if (st.data && isOn()) drawChart(st.data); }, 150);
-    });
+      cpResizeT = setTimeout(function () {
+        var box = $('cpChart');
+        if (!st.data || !isOn() || !box || box.clientWidth === cpLastW) return;
+        drawChart(st.data);
+      }, 60);
+    }
+    var cpRO = window.ResizeObserver ? new ResizeObserver(cpRedraw) : null;
+    if (!cpRO) window.addEventListener('resize', cpRedraw);
 
     function backfillBannerHtml(d) {
       var pend = (d.backfillPending || []).filter(function (q) { return q !== d.quarter; });
@@ -2847,11 +2858,11 @@
     function commitHtml(d) {
       var c = d.commit, canEdit = d.canEdit && d.status !== 'achieved';
       if ((!c && canEdit) || (st.editing && canEdit)) return formHtml(d);
-      if (!c) return '<div class="table-card"><div class="chart-title">Commit</div><p class="cp-note">Không có commit cho ' + esc(qLabel(d.quarter)) + '.</p></div>';
+      if (!c) return '<div class="cp-sec-title">Commit</div><p class="cp-note">Không có commit cho ' + esc(qLabel(d.quarter)) + '.</p>';
       var up = c.targetLevel !== c.baseLevel;
       var hist = c.history || [], first = hist[0];
-      return '<div class="table-card">' +
-        '<div class="cp-head-row"><div class="chart-title">Commit ' + esc(qLabel(d.quarter)) + '</div>' +
+      return '' +
+        '<div class="cp-head-row"><div class="cp-sec-title">Commit</div>' +
           '<div class="cp-btns">' + (canEdit ? '<button class="ad-btn" id="cpEdit">Sửa commit</button>' : '') +
           (d.canDelete ? '<button class="ad-btn ad-danger" id="cpDelete">Xoá commit</button>' : '') + '</div></div>' +
           (d.canDelete && d.status === 'achieved'
@@ -2868,8 +2879,7 @@
                 return '<li>' + esc(h.at) + ' — ' + (h.targetLevel !== h.baseLevel ? 'lên ' + esc(h.targetLevel) : 'giữ ' + esc(h.targetLevel)) + ': ' +
                   KEYS.map(function (k) { return NAME[k] + ' ' + pct(h[k]); }).join(' · ') + '</li>';
               }).join('') + '</ul></details>'
-          : (first ? '<div class="cp-note">Chốt lúc ' + esc(first.at) + '</div>' : '')) +
-      '</div>';
+          : (first ? '<div class="cp-note">Chốt lúc ' + esc(first.at) + '</div>' : ''));
     }
 
     function formHtml(d) {
@@ -2879,8 +2889,8 @@
       var baseOpts = d.order.slice(0, d.order.indexOf(d.level) + 1).map(function (lv) {
         return '<option value="' + esc(lv) + '"' + (lv === base ? ' selected' : '') + '>' + esc(lv) + '</option>';
       }).join('');
-      return '<div class="table-card">' +
-        '<div class="chart-title">' + (c ? 'Sửa commit ' : 'Lên commit ') + esc(qLabel(d.quarter)) + '</div>' +
+      return '' +
+        '<div class="cp-sec-title">' + (c ? 'Sửa commit' : 'Lên commit') + '</div>' +
         '<p class="cp-note">Số commit là % bạn cam kết đạt cho cả quý. Chọn lên level thì mỗi số phải ≥ mốc KPI của level đó.' +
           (d.backfill ? ' <b>Tạo bù:</b> chọn level của bạn lúc <b>đầu quý</b> (nếu đã lên level trong quý thì chọn level cũ).' : '') + '</p>' +
         '<div class="cp-form' + (d.backfill ? ' cp-form-5' : '') + '">' +
@@ -2896,8 +2906,7 @@
         '</div>' +
         '<div class="cp-actions"><button class="ad-btn ad-primary" id="cpSave">' + (c ? 'Lưu commit' : 'Chốt commit') + '</button>' +
           (c ? '<button class="ad-btn" id="cpCancel">Huỷ</button>' : '') +
-          '<span class="cp-err-inline" id="cpFormErr"></span></div>' +
-      '</div>';
+          '<span class="cp-err-inline" id="cpFormErr"></span></div>';
     }
 
     function loadingHtml(d) {
@@ -3152,5 +3161,65 @@
       var b = $(id); if (b) b.addEventListener('click', function () { closeMenu(); });
     });
     render();
+  })();
+
+  /* -------------------------------------------------------
+     CỘNG PHƯỚC — nút cho vui ở cuối menu trái: chỉ đếm số lần bấm (của mình + cả team),
+     KHÔNG ảnh hưởng số liệu nào. Bấm liên tục được: gom các lần bấm rồi gửi 1 lần
+     (action phuocAdd, n ≤ 200). Backend chưa có (hoặc lỗi) thì nút không hiện.
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    var box = $('phuocBox'), btn = $('phuocBtn'), mineEl = $('phuocMine'), subEl = $('phuocSub');
+    if (!box || !btn || !CFG.API_URL) return;
+    var srv = { mine: 0, total: 0 }, pending = 0, sending = false, flushT = null;
+
+    function post(payload, done) {
+      payload.token = localStorage.getItem('cs_tool_token');
+      fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+        .then(function (r) { return r.text(); })
+        .then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = null; }
+          if (d && d.sessionToken) { try { localStorage.setItem('cs_tool_token', d.sessionToken); } catch (e) {} }
+          if (d && d.ok) done(null, d); else done((d && d.error) || 'Backend chưa hỗ trợ', null); })
+        .catch(function (e) { done(e.message || 'Lỗi mạng', null); });
+    }
+    function fmt(n) { return Number(n || 0).toLocaleString('vi-VN'); }
+    function paint() {
+      mineEl.textContent = fmt(srv.mine + pending);
+      subEl.textContent = 'Cả team đã cộng ' + fmt(srv.total + pending) + ' phước';
+    }
+    function apply(d) { srv.mine = Number(d.mine) || 0; srv.total = Number(d.total) || 0; }
+    function flush() {
+      if (sending || !pending) return;
+      var n = Math.min(pending, 200);
+      sending = true;
+      post({ action: 'phuocAdd', n: n }, function (err, d) {
+        sending = false;
+        if (err) { pending = 0; paint(); return; }   // lỗi: bỏ các lần chưa gửi, giữ số máy chủ
+        pending -= n; apply(d); paint();
+        if (pending) flushT = setTimeout(flush, 300);
+      });
+    }
+    var LOVE = ['+1 phước', '+1 phước 🍀', '+1 may mắn', '+1 deal go-live 🙏', '+1 phước ✨'];
+    btn.addEventListener('click', function () {
+      pending++; paint();
+      btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+      var f = document.createElement('span');
+      f.className = 'phuoc-fly'; f.textContent = LOVE[Math.floor(Math.random() * LOVE.length)];
+      btn.appendChild(f);
+      setTimeout(function () { f.remove(); }, 950);
+      clearTimeout(flushT); flushT = setTimeout(flush, 700);
+    });
+    // Chờ đăng nhập (có token) rồi mới tải số
+    (function load(tries) {
+      if (!localStorage.getItem('cs_tool_token')) {
+        if (tries < 60) setTimeout(function () { load(tries + 1); }, 3000);
+        return;
+      }
+      post({ action: 'phuocGet' }, function (err, d) {
+        if (err) return;
+        apply(d); paint(); box.hidden = false;
+      });
+    })(0);
   })();
 })();

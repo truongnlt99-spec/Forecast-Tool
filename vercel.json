@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/mcp/:key", "destination": "https://lheaoklvumzapmwuhysr.supabase.co/functions/v1/mcp/:key" }
+  ]
+}

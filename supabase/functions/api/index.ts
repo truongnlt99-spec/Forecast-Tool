@@ -20,6 +20,7 @@
  *   POST { token, action:'careerSaveCommit', quarter, targetLevel, cr, s1, s4 }
  *   POST { token, action:'careerAchieve', quarter, newSalary? }   (Đạt → lên level ngay)
  *   POST { token, action:'careerDeleteCommit', quarter }    (xoá commit; đã Đạt lên level → trả level/lương cũ)
+ *   POST { token, action:'phuocGet' } / { action:'phuocAdd', n }  → { mine, total } (nút "Cộng phước", cho vui)
  *   POST { token, multiYearRows:[...] }
  *   POST { token, rows:[...] }
  *
@@ -32,6 +33,8 @@
  *   RESEND_API_KEY   tuỳ chọn — có thì gửi email báo admin khi có feedback mới
  *   PF_ADMIN_EMAIL   tuỳ chọn — mặc định truong.nguyen@base.vn
  *   MAIL_FROM        tuỳ chọn — địa chỉ gửi (domain đã xác minh trên Resend)
+ *   MCP_PUBLIC_BASE  tuỳ chọn — đầu link kết nối Claude, mặc định https://csconsole.vercel.app/mcp/
+ *                    (vercel.json / netlify.toml chuyển tiếp /mcp/* sang Edge Function mcp)
  * (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY Supabase tự cấp sẵn.)
  *
  * PHẢI tắt "Verify JWT" cho function này: frontend không gửi header
@@ -53,6 +56,9 @@ const SESSION_SECRET = Deno.env.get("SESSION_SECRET") || "";
 const SESSION_TTL_DAYS = 30;
 const PF_ADMIN_EMAIL = Deno.env.get("PF_ADMIN_EMAIL") || "truong.nguyen@base.vn";
 const PF_BUCKET = "feedback";
+// Link kết nối Claude đưa cho người dùng: domain CS Console (vercel.json chuyển tiếp /mcp/* sang
+// Edge Function mcp) thay cho link supabase.co. Khoá cũ vẫn dùng được ở cả 2 link.
+const MCP_PUBLIC_BASE = Deno.env.get("MCP_PUBLIC_BASE") || "https://csconsole.vercel.app/mcp/";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -525,6 +531,13 @@ async function careerAction_(body: any, email: string): Promise<Record<string, u
 async function extraAction_(body: any, email: string): Promise<Record<string, unknown>> {
   if (/^career[A-Z]/.test(String(body.action))) return careerAction_(body, email);
   switch (body.action) {
+    case "phuocGet":
+      return await rpc_<Record<string, unknown>>("api_phuoc_get", { p_email: email });
+    case "phuocAdd": {
+      const n = Math.floor(Number(body.n));
+      if (!(n >= 1 && n <= 200)) throw new Error("Số lần cộng phước không hợp lệ");
+      return await rpc_<Record<string, unknown>>("api_phuoc_add", { p_email: email, p_n: n });
+    }
     case "whoami": {
       const [isAdmin, profile] = await Promise.all([
         rpc_<boolean>("api_is_admin", { p_email: email }),
@@ -538,7 +551,7 @@ async function extraAction_(body: any, email: string): Promise<Record<string, un
       const info = await rpc_<Record<string, unknown>>("api_mcp_create_key", {
         p_email: email, p_hash: await sha256Hex_(key), p_label: String(body.label || ""),
       });
-      return { key: info, url: Deno.env.get("SUPABASE_URL") + "/functions/v1/mcp/" + key };
+      return { key: info, url: MCP_PUBLIC_BASE + key };
     }
     case "mcpListKeys":
       return { items: await rpc_("api_mcp_list_keys", { p_email: email }) };
@@ -688,7 +701,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- Kết nối Claude (MCP) + Quản trị: lỗi trả { ok:false, error } như saveRequest ----
-    if (typeof body.action === "string" && (body.action === "whoami" || /^(mcp|admin|career)[A-Z]/.test(body.action))) {
+    if (typeof body.action === "string" && (body.action === "whoami" || /^(mcp|admin|career|phuoc)[A-Z]/.test(body.action))) {
       try {
         return json_({ ok: true, ...(await extraAction_(body, email)), sessionToken });
       } catch (e) {
