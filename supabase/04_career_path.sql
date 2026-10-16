@@ -60,6 +60,13 @@ create index if not exists level_history_email_idx on level_history (lower(email
 -- Bản đầu tạo s4 NOT NULL → nới cho DB đã chạy file này (tạo bù Q3 có thể không commit SRR_4)
 alter table career_commits alter column s4 drop not null;
 
+-- XOÁ MỀM: commit bị xoá vẫn nằm lại (giữ dấu vết), chỉ ẩn khỏi màn hình. Tạo lại commit cùng quý
+-- → dùng lại đúng dòng đó (unique email+quarter), round_started_at = lúc tạo lại; lịch sử sửa của
+-- lượt trước vẫn trong career_commit_history nhưng không hiện (lọc theo round_started_at).
+alter table career_commits add column if not exists deleted_at timestamptz;
+alter table career_commits add column if not exists deleted_by text;
+alter table career_commits add column if not exists round_started_at timestamptz;
+
 alter table career_commits        enable row level security;
 alter table career_commit_history enable row level security;
 alter table level_history         enable row level security;
@@ -80,9 +87,10 @@ create or replace function api_career_list(p_email text) returns json stable lan
           select json_agg(json_build_object(
             'baseLevel', h.base_level, 'targetLevel', h.target_level,
             'cr', h.cr, 's1', h.s1, 's4', h.s4, 'at', vn_ts(h.changed_at)) order by h.changed_at, h.id)
-          from career_commit_history h where h.commit_id = c.id), '[]'::json))
+          from career_commit_history h
+          where h.commit_id = c.id and h.changed_at >= coalesce(c.round_started_at, '-infinity')), '[]'::json))
         order by split_part(c.quarter, '/', 2) desc, c.quarter desc)
-      from career_commits c where lower(c.email) = lower(trim(p_email))), '[]'::json),
+      from career_commits c where lower(c.email) = lower(trim(p_email)) and c.deleted_at is null), '[]'::json),
     'levelHistory', coalesce((
       select json_agg(json_build_object(
         'oldLevel', l.old_level, 'newLevel', l.new_level,
@@ -97,6 +105,16 @@ returns json language plpgsql as $$
 declare em text := lower(trim(p_email)); c career_commits%rowtype;
 begin
   select * into c from career_commits where email = em and quarter = p_quarter for update;
+  if found and c.deleted_at is not null then
+    -- tạo lại sau khi xoá mềm: dùng lại dòng cũ, bắt đầu lượt mới
+    update career_commits set base_level = p_base_level, target_level = p_target_level,
+           cr = p_cr, s1 = p_s1, s4 = p_s4, status = 'open', achieved_at = null, achieved_snapshot = null,
+           new_salary = null, deleted_at = null, deleted_by = null, round_started_at = now(), updated_at = now()
+    where id = c.id returning * into c;
+    insert into career_commit_history (commit_id, base_level, target_level, cr, s1, s4)
+    values (c.id, c.base_level, c.target_level, c.cr, c.s1, c.s4);
+    return api_career_list(em);
+  end if;
   if found and c.status = 'achieved' then
     raise exception 'Quý % đã bấm Đạt — không sửa commit được nữa', p_quarter;
   end if;
@@ -122,7 +140,7 @@ create or replace function api_career_achieve(p_email text, p_quarter text, p_ne
 returns json language plpgsql as $$
 declare em text := lower(trim(p_email)); c career_commits%rowtype; m cs_members%rowtype;
 begin
-  select * into c from career_commits where email = em and quarter = p_quarter for update;
+  select * into c from career_commits where email = em and quarter = p_quarter and deleted_at is null for update;
   if not found then raise exception 'Chưa có commit cho quý %', p_quarter; end if;
   if c.status = 'achieved' then raise exception 'Quý % đã bấm Đạt rồi', p_quarter; end if;
 
@@ -140,7 +158,7 @@ begin
   return api_career_list(em);
 end $$;
 
--- ---------- GHI: xoá commit 1 quý (Edge Function đã kiểm tra quý còn trong hạn) ----------
+-- ---------- GHI: xoá (mềm) commit 1 quý (Edge Function đã kiểm tra quý còn trong hạn) ----------
 -- Commit đã Đạt có lên level (new_salary có giá trị) → trả level + lương về như trước khi Đạt
 -- (lấy từ level_history của quý đó) và ghi thêm 1 dòng lịch sử. Hồ sơ đã đổi level khác sau đó
 -- (vd admin sửa) thì không tự trả về được → báo lỗi để admin xử lý.
@@ -148,7 +166,7 @@ create or replace function api_career_delete_commit(p_email text, p_quarter text
 returns json language plpgsql as $$
 declare em text := lower(trim(p_email)); c career_commits%rowtype; m cs_members%rowtype; l level_history%rowtype;
 begin
-  select * into c from career_commits where email = em and quarter = p_quarter for update;
+  select * into c from career_commits where email = em and quarter = p_quarter and deleted_at is null for update;
   if not found then raise exception 'Không có commit quý % để xoá', p_quarter; end if;
   if c.status = 'achieved' and c.new_salary is not null then
     select * into l from level_history
@@ -162,7 +180,7 @@ begin
     insert into level_history (email, old_level, new_level, old_salary, new_salary, reason, quarter, changed_by)
     values (em, m.level, l.old_level, m.salary, l.old_salary, 'Xoá commit ' || p_quarter || ' (huỷ Đạt)', p_quarter, em);
   end if;
-  delete from career_commits where id = c.id;   -- lịch sử sửa commit xoá theo (on delete cascade)
+  update career_commits set deleted_at = now(), deleted_by = em, updated_at = now() where id = c.id;
   return api_career_list(em);
 end $$;
 

@@ -16,7 +16,8 @@ Mục **Overview → Career path** (`#/overview/career-path`). Áp dụng cho **
    của level mới → `cs_members.level` + `salary` đổi ngay, ghi `level_history`. Quá hạn → *Không đạt*.
 4. **Xoá commit** (tạo lộn): được khi quý còn hạn sửa commit hoặc còn hạn bấm Đạt — kể cả đã bấm Đạt. Commit đã Đạt
    có lên level thì khi xoá, level + lương trả về như trước khi Đạt (theo `level_history`) và ghi thêm 1 dòng lịch sử;
-   nếu hồ sơ đã bị đổi level khác sau đó thì chặn, nhờ admin xử lý. Xoá xong tạo lại commit như bình thường.
+   nếu hồ sơ đã bị đổi level khác sau đó thì chặn, nhờ admin xử lý. Xoá là **xoá mềm**: dòng commit vẫn giữ trong DB (`deleted_at`, `deleted_by`) để tra cứu, chỉ ẩn khỏi màn hình;
+   tạo lại commit cùng quý dùng lại dòng đó (lịch sử sửa của lượt trước vẫn lưu nhưng không hiện).
 5. Level trong popup *Cập nhật thông tin* bị khoá (`api_register` từ chối đổi level khi đã có level).
    Muốn sửa level tay: admin sửa trực tiếp bảng `cs_members` trên Supabase.
 
