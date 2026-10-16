@@ -2101,6 +2101,346 @@
   })();
 
   /* -------------------------------------------------------
+     13. KẾT NỐI CLAUDE (MCP) + QUẢN TRỊ (chỉ admin)
+     ---------------------------------------------------------
+     Toàn bộ ở ui.js. Backend (Edge Function api) — mọi action đều tự
+     kiểm tra quyền theo email đăng nhập:
+       - whoami → { isAdmin }: hiện nút "Quản trị" nếu là admin
+       - mcpCreateKey { label } → { url } (link chỉ hiện 1 lần) /
+         mcpListKeys → { items } / mcpRevokeKey { id }
+       - adminListFeedback / adminUpdateFeedback { id, status, reply }
+       - adminListTodo / adminSaveTodo { item } / adminDeleteTodo { id }
+       - adminListCs
+     Nút xoá/thu hồi bấm 2 lần (lần 1 đổi chữ thành "Bấm lần nữa…").
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    var claudeBtn = $('claudeBtn'), claudeModal = $('claudeModal'), claudeBody = $('claudeBody');
+    var adminBtn = $('adminBtn'), adminModal = $('adminModal'), adminBody = $('adminBody');
+    if (!claudeBtn || !claudeModal || !claudeBody) return;
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    var toastTimer;
+    function toast(msg, kind) {
+      var el = $('toast'); if (!el) return;
+      el.textContent = msg;
+      el.className = 'toast show' + (kind ? ' ' + kind : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { el.className = 'toast'; }, 4200);
+    }
+    function post(payload, done) {
+      payload.token = localStorage.getItem('cs_tool_token');
+      fetch(CFG.API_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = null; }
+          if (d && d.sessionToken) { try { localStorage.setItem('cs_tool_token', d.sessionToken); } catch (e) {} }
+          if (d && d.ok) done(null, d); else done((d && d.error) || 'Backend chưa hỗ trợ tính năng này', null); })
+        .catch(function (e) { done(e.message || 'Lỗi mạng', null); });
+    }
+    // Nút nguy hiểm: bấm 2 lần trong 4 giây mới chạy
+    function twoStep(btn, label, fn) {
+      btn.addEventListener('click', function () {
+        if (btn.getAttribute('data-armed') === '1') { btn.removeAttribute('data-armed'); fn(); return; }
+        btn.setAttribute('data-armed', '1'); var old = btn.textContent; btn.textContent = label;
+        setTimeout(function () { if (btn.getAttribute('data-armed') === '1') { btn.removeAttribute('data-armed'); btn.textContent = old; } }, 4000);
+      });
+    }
+    function bindModal(btn, modal, closeId, onOpen) {
+      btn.addEventListener('click', function () { modal.classList.add('open'); onOpen(); });
+      var x = $(closeId); if (x) x.addEventListener('click', function () { modal.classList.remove('open'); });
+      modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('open'); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.remove('open'); });
+    }
+
+    // ---- Hiện nút Quản trị khi đã đăng nhập & là admin (chờ token tối đa ~3 phút) ----
+    (function checkAdmin(tries) {
+      if (!adminBtn || !CFG.API_URL) return;
+      if (!localStorage.getItem('cs_tool_token')) {
+        if (tries < 60) setTimeout(function () { checkAdmin(tries + 1); }, 3000);
+        return;
+      }
+      post({ action: 'whoami' }, function (err, d) {
+        if (!err && d && d.isAdmin) adminBtn.hidden = false;
+      });
+    })(0);
+
+    /* ===================== KẾT NỐI CLAUDE ===================== */
+    bindModal(claudeBtn, claudeModal, 'claudeClose', renderClaude);
+
+    function renderClaude() {
+      claudeBody.innerHTML =
+        '<ol class="mc-steps">' +
+          '<li>Bấm <b>Tạo link kết nối</b> bên dưới rồi <b>Copy</b> link (link chỉ hiện <b>1 lần</b>).</li>' +
+          '<li>Mở <b>claude.ai → Settings → Connectors → Add custom connector</b>.</li>' +
+          '<li>Đặt tên <b>CS Console</b>, dán link vào ô <b>URL</b> → <b>Add</b>. Trong khung chat, bật connector CS Console.</li>' +
+          '<li>Hỏi thử: <i>"Tháng này CR của mình bao nhiêu?"</i>, <i>"Deal nào của mình chưa go-live?"</i></li>' +
+        '</ol>' +
+        '<div class="mc-warn">⚠ Link chứa <b>khoá bí mật</b> — ai có link sẽ xem và sửa được dữ liệu <b>của bạn</b> trên console. ' +
+          'Không gửi link cho người khác. Lỡ lộ thì bấm <b>Thu hồi</b> và tạo link mới.</div>' +
+        '<div class="pf-field"><label>Tên gợi nhớ <span class="pf-hint">(vd "Laptop công ty")</span></label>' +
+          '<div class="mc-row"><input type="text" id="mcLabel" maxlength="60" placeholder="Claude trên laptop">' +
+          '<button class="ad-btn ad-primary" id="mcCreate">Tạo link kết nối</button></div></div>' +
+        '<div id="mcNew"></div>' +
+        '<h4 class="pf-h" style="margin-top:18px">Link đang dùng</h4>' +
+        '<div class="pf-list" id="mcList"><div class="pf-loading">Đang tải…</div></div>' +
+        '<div class="mc-tools"><b>Claude làm được gì:</b> xem deal mình phụ trách, tính CR theo tháng, sửa ngày go-live / % Active / % Output ' +
+          '(ô đã kéo từ CRM/BigQuery vẫn bị khoá như trên web), gửi đề xuất gia hạn / dừng triển khai, gửi & xem Product Feedback. ' +
+          'Claude sẽ hỏi bạn xác nhận trước mỗi lần ghi dữ liệu.' +
+          (adminBtn && !adminBtn.hidden ? '<br><b>Admin:</b> thêm xem & trả lời toàn bộ feedback, quản lý todo, xem danh sách CS.' : '') +
+        '</div>';
+      $('mcCreate').addEventListener('click', onCreate);
+      loadKeys();
+    }
+    function onCreate() {
+      var btn = $('mcCreate'); btn.disabled = true; btn.textContent = 'Đang tạo…';
+      post({ action: 'mcpCreateKey', label: ($('mcLabel').value || '').trim() }, function (err, d) {
+        btn.disabled = false; btn.textContent = 'Tạo link kết nối';
+        if (err) { toast('⚠ ' + err, 'err'); return; }
+        $('mcLabel').value = '';
+        $('mcNew').innerHTML =
+          '<div class="mc-url"><code id="mcUrl">' + esc(d.url) + '</code>' +
+          '<button class="ad-btn ad-primary" id="mcCopy">Copy</button></div>' +
+          '<div class="pf-hint" style="font-size:11.5px">Link chỉ hiện lần này — đóng cửa sổ là không xem lại được (tạo link mới nếu cần).</div>';
+        $('mcCopy').addEventListener('click', function () {
+          var t = d.url;
+          (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject())
+            .then(function () { toast('✓ Đã copy link', 'ok'); })
+            .catch(function () {
+              var r = document.createRange(); r.selectNodeContents($('mcUrl'));
+              var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+              toast('Đã bôi đen link — nhấn Ctrl/Cmd + C để copy');
+            });
+        });
+        loadKeys();
+      });
+    }
+    function loadKeys() {
+      var el = $('mcList'); if (!el) return;
+      post({ action: 'mcpListKeys' }, function (err, d) {
+        if (err) { el.innerHTML = '<div class="pf-empty">Không tải được: ' + esc(err) + '</div>'; return; }
+        var items = d.items || [];
+        if (!items.length) { el.innerHTML = '<div class="pf-empty">Chưa có link nào.</div>'; return; }
+        el.innerHTML = items.map(function (k) {
+          return '<div class="pf-item"><div class="pf-item-top"><span class="pf-item-title">' + esc(k.label || 'Không tên') + '</span>' +
+            '<button class="ad-btn ad-danger" data-revoke="' + esc(k.id) + '">Thu hồi</button></div>' +
+            '<div class="pf-item-meta">Tạo ' + esc(k.createdAt) + ' · ' +
+            (k.lastUsedAt ? 'Dùng gần nhất ' + esc(k.lastUsedAt) : 'Chưa dùng') + '</div></div>';
+        }).join('');
+        el.querySelectorAll('[data-revoke]').forEach(function (b) {
+          twoStep(b, 'Bấm lần nữa để thu hồi', function () {
+            b.disabled = true;
+            post({ action: 'mcpRevokeKey', id: b.getAttribute('data-revoke') }, function (e2) {
+              if (e2) { b.disabled = false; toast('⚠ ' + e2, 'err'); return; }
+              toast('✓ Đã thu hồi link — Claude dùng link này sẽ bị từ chối', 'ok'); loadKeys();
+            });
+          });
+        });
+      });
+    }
+
+    /* ===================== QUẢN TRỊ ===================== */
+    if (!adminBtn || !adminModal || !adminBody) return;
+    var tab = 'feedback', fbFilter = 'Received', todoFilter = 'open';
+    var fbItems = [], todoItems = [], csItems = [], csQuery = '';
+    var FB_STATUS = {
+      'Received': 'pfs-received', 'In Progress': 'pfs-progress', "Won't Do": 'pfs-wontdo', 'Completed': 'pfs-done'
+    };
+    bindModal(adminBtn, adminModal, 'adminClose', function () { renderAdmin(); });
+
+    function renderAdmin() {
+      var tabs = [['feedback', 'Feedback'], ['todo', 'Todo'], ['cs', 'Danh sách CS']];
+      adminBody.innerHTML =
+        '<div class="ad-tabs">' + tabs.map(function (t) {
+          return '<button type="button" class="chip-btn' + (tab === t[0] ? ' active' : '') + '" data-tab-ad="' + t[0] + '">' + t[1] + '</button>';
+        }).join('') + '</div><div id="adPane"><div class="pf-loading">Đang tải…</div></div>';
+      adminBody.querySelectorAll('[data-tab-ad]').forEach(function (b) {
+        b.addEventListener('click', function () { tab = b.getAttribute('data-tab-ad'); renderAdmin(); });
+      });
+      if (tab === 'feedback') loadFeedback();
+      else if (tab === 'todo') loadTodo();
+      else loadCs();
+    }
+    function pane() { return $('adPane'); }
+    function failPane(err) { var p = pane(); if (p) p.innerHTML = '<div class="pf-empty">Không tải được: ' + esc(err) + '</div>'; }
+
+    // ---------- Feedback ----------
+    function loadFeedback() {
+      post({ action: 'adminListFeedback' }, function (err, d) {
+        if (err) return failPane(err);
+        fbItems = d.items || []; drawFeedback();
+      });
+    }
+    function drawFeedback() {
+      var p = pane(); if (!p) return;
+      var counts = { all: fbItems.length };
+      Object.keys(FB_STATUS).forEach(function (k) { counts[k] = fbItems.filter(function (x) { return x.status === k; }).length; });
+      var list = fbFilter === 'all' ? fbItems : fbItems.filter(function (x) { return x.status === fbFilter; });
+      p.innerHTML =
+        '<div class="pf-filters">' + [['all', 'Tất cả']].concat(Object.keys(FB_STATUS).map(function (k) { return [k, k]; })).map(function (c) {
+          return '<button type="button" class="chip-btn' + (fbFilter === c[0] ? ' active' : '') + '" data-fbf="' + esc(c[0]) + '">' +
+            esc(c[1]) + ' · ' + (counts[c[0]] || 0) + '</button>';
+        }).join('') + '</div>' +
+        '<div class="pf-list">' + (list.length ? list.map(function (it) {
+          var atts = (it.attachments || []).filter(Boolean);
+          return '<div class="pf-item" data-fb="' + esc(it.id) + '">' +
+            '<div class="pf-item-top"><span class="pf-item-title">' + esc(it.title || '(không tiêu đề)') + '</span>' +
+              '<span class="pf-chip ' + (FB_STATUS[it.status] || 'pfs-received') + '">' + esc(it.status) + '</span></div>' +
+            '<div class="pf-item-meta"><b>' + esc(it.senderName || it.senderEmail) + '</b> · ' + esc(it.senderEmail) +
+              ' · ' + esc(it.category || '') + (it.expected ? ' · Kỳ vọng: ' + esc(it.expected) : '') +
+              (it.ts ? ' · ' + esc(it.ts) : '') + ' · ' + esc(it.id) + '</div>' +
+            (it.description ? '<div class="pf-item-desc">' + esc(it.description) + '</div>' : '') +
+            (atts.length ? '<div class="pf-item-atts">' + atts.map(function (a, i) {
+              return '<a href="' + esc(a) + '" target="_blank" rel="noopener noreferrer">📎 File ' + (i + 1) + '</a>';
+            }).join(' · ') + '</div>' : '') +
+            '<div class="ad-edit">' +
+              '<textarea rows="2" data-reply placeholder="Phản hồi cho người gửi (hiện trong Product Feedback của họ)">' + esc(it.response) + '</textarea>' +
+              '<div class="mc-row"><select data-status>' + Object.keys(FB_STATUS).map(function (k) {
+                return '<option' + (k === it.status ? ' selected' : '') + '>' + esc(k) + '</option>'; }).join('') + '</select>' +
+                '<button class="ad-btn ad-primary" data-save>Lưu</button>' +
+                (it.repliedAt ? '<span class="pf-hint" style="font-size:11px">Phản hồi lúc ' + esc(it.repliedAt) + '</span>' : '') +
+              '</div></div>' +
+          '</div>';
+        }).join('') : '<div class="pf-empty">Không có feedback ở trạng thái này.</div>') + '</div>';
+      p.querySelectorAll('[data-fbf]').forEach(function (b) {
+        b.addEventListener('click', function () { fbFilter = b.getAttribute('data-fbf'); drawFeedback(); });
+      });
+      p.querySelectorAll('[data-fb]').forEach(function (card) {
+        var btn = card.querySelector('[data-save]');
+        btn.addEventListener('click', function () {
+          btn.disabled = true; btn.textContent = 'Đang lưu…';
+          post({ action: 'adminUpdateFeedback', id: card.getAttribute('data-fb'),
+                 status: card.querySelector('[data-status]').value,
+                 reply: card.querySelector('[data-reply]').value.trim() }, function (err) {
+            btn.disabled = false; btn.textContent = 'Lưu';
+            if (err) { toast('⚠ ' + err, 'err'); return; }
+            toast('✓ Đã cập nhật feedback', 'ok'); loadFeedback();
+          });
+        });
+      });
+    }
+
+    // ---------- Todo ----------
+    function loadTodo() {
+      post({ action: 'adminListTodo' }, function (err, d) {
+        if (err) return failPane(err);
+        todoItems = d.items || []; drawTodo();
+      });
+    }
+    function saveTodo(item, okMsg) {
+      post({ action: 'adminSaveTodo', item: item }, function (err) {
+        if (err) { toast('⚠ ' + err, 'err'); loadTodo(); return; }
+        if (okMsg) toast(okMsg, 'ok');
+        loadTodo();
+      });
+    }
+    function drawTodo() {
+      var p = pane(); if (!p) return;
+      var nOpen = todoItems.filter(function (x) { return !x.done; }).length;
+      var list = todoItems.filter(function (x) { return todoFilter === 'all' || (todoFilter === 'open' ? !x.done : x.done); });
+      p.innerHTML =
+        '<div class="pf-item" style="margin-bottom:12px"><div class="ad-edit" style="margin-top:0">' +
+          '<textarea rows="2" id="tdNew" placeholder="Việc mới cần làm…"></textarea>' +
+          '<div class="mc-row"><input type="text" id="tdNote" placeholder="Ghi chú (tuỳ chọn)">' +
+          '<input type="text" id="tdOwner" placeholder="Đầu mối (tuỳ chọn)" style="flex:0 1 180px">' +
+          '<button class="ad-btn ad-primary" id="tdAdd">Thêm</button></div></div></div>' +
+        '<div class="pf-filters">' + [['open', 'Chưa xong · ' + nOpen], ['done', 'Đã xong · ' + (todoItems.length - nOpen)], ['all', 'Tất cả · ' + todoItems.length]].map(function (c) {
+          return '<button type="button" class="chip-btn' + (todoFilter === c[0] ? ' active' : '') + '" data-tdf="' + c[0] + '">' + c[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="pf-list">' + (list.length ? list.map(function (t) {
+          return '<div class="pf-item ad-todo' + (t.done ? ' done' : '') + '" data-td="' + t.id + '">' +
+            '<input type="checkbox"' + (t.done ? ' checked' : '') + ' title="Đánh dấu xong">' +
+            '<div class="ad-todo-main" data-view>' +
+              '<div class="pf-item-title" style="white-space:pre-wrap">' + (t.stt ? '#' + esc(t.stt) + ' · ' : '') + esc(t.noiDung) + '</div>' +
+              (t.note ? '<div class="pf-item-desc">📝 ' + esc(t.note) + '</div>' : '') +
+              '<div class="pf-item-meta">' + (t.dauMoi ? 'Đầu mối: ' + esc(t.dauMoi) + ' · ' : '') + 'Cập nhật ' + esc(t.updatedAt) + '</div>' +
+            '</div>' +
+            '<div class="ad-acts"><button class="ad-btn" data-edit>Sửa</button><button class="ad-btn ad-danger" data-del>Xoá</button></div>' +
+          '</div>';
+        }).join('') : '<div class="pf-empty">Không có việc nào.</div>') + '</div>';
+
+      $('tdAdd').addEventListener('click', function () {
+        var nd = ($('tdNew').value || '').trim();
+        if (!nd) { toast('Nhập nội dung việc trước', 'err'); return; }
+        $('tdAdd').disabled = true;
+        saveTodo({ noiDung: nd, note: $('tdNote').value.trim(), dauMoi: $('tdOwner').value.trim() }, '✓ Đã thêm việc');
+      });
+      p.querySelectorAll('[data-tdf]').forEach(function (b) {
+        b.addEventListener('click', function () { todoFilter = b.getAttribute('data-tdf'); drawTodo(); });
+      });
+      p.querySelectorAll('[data-td]').forEach(function (row) {
+        var id = row.getAttribute('data-td');
+        var t = todoItems.filter(function (x) { return String(x.id) === id; })[0];
+        row.querySelector('input[type=checkbox]').addEventListener('change', function (e) {
+          saveTodo({ id: id, done: e.target.checked }, e.target.checked ? '✓ Đã xong' : 'Đã mở lại việc');
+        });
+        twoStep(row.querySelector('[data-del]'), 'Bấm lần nữa', function () {
+          post({ action: 'adminDeleteTodo', id: id }, function (err) {
+            if (err) { toast('⚠ ' + err, 'err'); return; }
+            toast('✓ Đã xoá việc', 'ok'); loadTodo();
+          });
+        });
+        row.querySelector('[data-edit]').addEventListener('click', function () {
+          var v = row.querySelector('[data-view]');
+          v.innerHTML = '<div class="ad-edit" style="margin-top:0">' +
+            '<textarea rows="3" data-e-nd>' + esc(t.noiDung) + '</textarea>' +
+            '<input type="text" data-e-note placeholder="Ghi chú" value="' + esc(t.note) + '">' +
+            '<input type="text" data-e-owner placeholder="Đầu mối" value="' + esc(t.dauMoi) + '">' +
+            '<div class="mc-row"><button class="ad-btn ad-primary" data-e-save>Lưu</button><button class="ad-btn" data-e-cancel>Huỷ</button></div></div>';
+          v.querySelector('[data-e-cancel]').addEventListener('click', drawTodo);
+          v.querySelector('[data-e-save]').addEventListener('click', function () {
+            var nd = v.querySelector('[data-e-nd]').value.trim();
+            if (!nd) { toast('Nội dung không được trống', 'err'); return; }
+            saveTodo({ id: id, noiDung: nd, note: v.querySelector('[data-e-note]').value.trim(),
+                       dauMoi: v.querySelector('[data-e-owner]').value.trim() }, '✓ Đã lưu');
+          });
+        });
+      });
+    }
+
+    // ---------- Danh sách CS ----------
+    function loadCs() {
+      post({ action: 'adminListCs' }, function (err, d) {
+        if (err) return failPane(err);
+        csItems = d.items || []; drawCs();
+      });
+    }
+    function fmtMoney(n) { return n == null || n === '' ? '—' : Number(n).toLocaleString('vi-VN'); }
+    function drawCs() {
+      var p = pane(); if (!p) return;
+      var q = csQuery.toLowerCase();
+      var list = csItems.filter(function (m) {
+        return !q || [m.hoTen, m.username, m.email, m.level].join(' ').toLowerCase().indexOf(q) !== -1;
+      });
+      var tot = list.reduce(function (s, m) { return s + (m.soDeal || 0); }, 0);
+      p.innerHTML =
+        '<div class="mc-row" style="margin-bottom:12px"><input type="search" class="ad-search" id="csQ" placeholder="Tìm tên, username, email, level…" value="' + esc(csQuery) + '">' +
+        '<span class="pf-hint" style="font-size:12px">' + list.length + ' người · ' + tot + ' deal</span></div>' +
+        '<div class="ad-table-wrap"><table class="ad-table"><thead><tr>' +
+          '<th>Họ tên</th><th>Username</th><th>Email</th><th>Level</th><th class="num">Lương</th>' +
+          '<th class="num">Deal</th><th class="num">Chưa go-live</th><th class="num">Thiếu U/O</th><th>Claude</th><th>Ghi chú</th>' +
+        '</tr></thead><tbody>' + list.map(function (m) {
+          return '<tr><td><b>' + esc(m.hoTen || '—') + '</b></td><td>' + esc(m.username) + '</td><td>' + esc(m.email) + '</td>' +
+            '<td>' + esc(m.level || '—') + '</td><td class="num">' + fmtMoney(m.salary) + '</td>' +
+            '<td class="num">' + (m.soDeal || 0) + '</td><td class="num">' + (m.chuaGoLive || 0) + '</td>' +
+            '<td class="num">' + (m.thieuUO || 0) + '</td><td>' + (m.mcpConnected ? '✓' : '') + '</td>' +
+            '<td>' + (m.isAdmin ? 'Admin' : '') + (m.daDangKy ? '' : (m.isAdmin ? ' · ' : '') + 'Chưa đăng ký') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      var inp = $('csQ');
+      inp.addEventListener('input', function () {
+        csQuery = inp.value; var pos = inp.selectionStart; drawCs();
+        var n = $('csQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {}
+      });
+    }
+  })();
+
+  /* -------------------------------------------------------
      CHANGELOG — chèn thêm 1 entry mới vào #changelogBody mà
      KHÔNG đụng app.js. renderChangelog() trong app.js ghi đè
      toàn bộ innerHTML mỗi lần bấm nút Changelog, nên dùng

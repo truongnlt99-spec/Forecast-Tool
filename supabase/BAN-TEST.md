@@ -87,3 +87,18 @@ Có chốt an toàn: lượt nào thấy < 50% số deal đang active thì dừn
    (Supabase → Project Settings → API Keys → Secret keys). Không dán key vào code hay chat.
 4. Chọn hàm `dongBoDeals` → **Run** → Allow quyền → xem Execution log (`Xong: cập nhật N deal...`).
 5. Ổn thì chọn `caiDatTrigger` → **Run** (cài lịch mỗi giờ). Lỗi sẽ được Google gửi email.
+
+## 7. Kết nối Claude (MCP) + Quản trị
+
+- **Edge Function `mcp`** (Verify JWT **tắt**): `https://lheaoklvumzapmwuhysr.supabase.co/functions/v1/mcp/<khoá>`.
+  Mỗi người tự tạo link ở CS Console → **Kết nối Claude** (tối đa 5 link, thu hồi được). DB chỉ lưu SHA-256
+  của khoá (`mcp_keys`), link chỉ hiện 1 lần. Dán link vào claude.ai → Settings → Connectors → Add custom connector.
+- **Người dùng thường** (11 tool): `whoami`, `list_my_deals`, `get_deal`, `cr_summary`, `update_deal_inputs`,
+  `update_multiyear_inputs`, `request_extend`, `request_stop`, `cancel_request`, `submit_feedback`, `list_my_feedback`.
+  Chỉ thấy/sửa deal mình phụ trách; ô go-live "Đã kéo" và ô U/O BigQuery bị khoá như trên web.
+- **Admin** (email trong bảng `app_admins`, hiện chỉ truong.nguyen@base.vn) thêm 7 tool: `admin_list_feedback`,
+  `admin_reply_feedback`, `admin_list_todo`, `admin_add_todo`, `admin_update_todo`, `admin_delete_todo`, `admin_list_cs`.
+  Trên web, admin thấy thêm nút **Quản trị** (3 tab Feedback / Todo / Danh sách CS).
+- Thêm admin: `insert into app_admins values ('ten@base.vn');`. Todo xoá là xoá mềm (`deleted_at`).
+- Phản hồi feedback gửi email cho người gửi nếu đã đặt secret `RESEND_API_KEY` (chưa đặt thì chỉ hiện trong app).
+- SQL: `supabase/03_admin_mcp.sql`. Code: `supabase/functions/mcp/index.ts`, `supabase/functions/api/index.ts`.

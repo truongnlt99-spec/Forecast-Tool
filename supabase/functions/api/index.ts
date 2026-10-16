@@ -10,6 +10,12 @@
  *   POST { token, action:'submitFeedback', title, category, description, expectedDate, attachments }
  *   POST { token, action:'listFeedback' }
  *   POST { token, action:'saveRequest', dealId, reqType, glExtend, requestLink, remove }
+ *   POST { token, action:'whoami' }                       → { isAdmin, profile }
+ *   POST { token, action:'mcpCreateKey', label }           → { url } (link kết nối Claude, hiện 1 lần)
+ *   POST { token, action:'mcpListKeys' } / { action:'mcpRevokeKey', id }
+ *   POST { token, action:'adminListFeedback', status } / 'adminUpdateFeedback' {id,status,reply}
+ *   POST { token, action:'adminListTodo' } / 'adminSaveTodo' {item} / 'adminDeleteTodo' {id}
+ *   POST { token, action:'adminListCs' }                   (admin* chỉ email trong app_admins)
  *   POST { token, multiYearRows:[...] }
  *   POST { token, rows:[...] }
  *
@@ -190,6 +196,72 @@ async function sendMail_(to: string, subject: string, text: string): Promise<voi
 }
 
 // ---------------------------------------------------------------------
+// KẾT NỐI CLAUDE (MCP) + QUẢN TRỊ — logic + phân quyền nằm trong SQL (03_admin_mcp.sql)
+// ---------------------------------------------------------------------
+async function sha256Hex_(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// deno-lint-ignore no-explicit-any
+async function extraAction_(body: any, email: string): Promise<Record<string, unknown>> {
+  switch (body.action) {
+    case "whoami": {
+      const [isAdmin, profile] = await Promise.all([
+        rpc_<boolean>("api_is_admin", { p_email: email }),
+        rpc_("api_get_profile", { p_email: email }),
+      ]);
+      return { email, isAdmin: !!isAdmin, profile: profile ?? null };
+    }
+    case "mcpCreateKey": {
+      // Khoá ngẫu nhiên 32 byte; DB chỉ giữ SHA-256 → link chỉ hiện đúng 1 lần
+      const key = "csk_" + b64WebSafe(crypto.getRandomValues(new Uint8Array(32))).replace(/=+$/, "");
+      const info = await rpc_<Record<string, unknown>>("api_mcp_create_key", {
+        p_email: email, p_hash: await sha256Hex_(key), p_label: String(body.label || ""),
+      });
+      return { key: info, url: Deno.env.get("SUPABASE_URL") + "/functions/v1/mcp/" + key };
+    }
+    case "mcpListKeys":
+      return { items: await rpc_("api_mcp_list_keys", { p_email: email }) };
+    case "mcpRevokeKey":
+      await rpc_("api_mcp_revoke_key", { p_email: email, p_id: String(body.id || "") });
+      return {};
+    case "adminListFeedback":
+      return { items: await rpc_("api_admin_list_feedback", { p_email: email, p_status: body.status || null }) };
+    case "adminUpdateFeedback": {
+      const r = await rpc_<{ senderEmail?: string; title?: string; status?: string; response?: string }>(
+        "api_admin_update_feedback",
+        {
+          p_email: email, p_id: String(body.id || ""),
+          p_status: body.status == null ? null : String(body.status),
+          p_reply: body.reply == null ? null : String(body.reply),
+        },
+      );
+      if (r && r.senderEmail && body.notify !== false) {
+        await sendMail_(
+          r.senderEmail,
+          "[CS Tool] Feedback của bạn đã được cập nhật: " + (r.title || ""),
+          "Trạng thái: " + (r.status || "") + (r.response ? "\n\nPhản hồi từ team:\n" + r.response : "") +
+            "\n\nXem chi tiết trong CS Console → Product Feedback.",
+        );
+      }
+      return { item: r };
+    }
+    case "adminListTodo":
+      return { items: await rpc_("api_admin_list_todo", { p_email: email }) };
+    case "adminSaveTodo":
+      return { item: await rpc_("api_admin_save_todo", { p_email: email, p_item: body.item || {} }) };
+    case "adminDeleteTodo":
+      await rpc_("api_admin_delete_todo", { p_email: email, p_id: Number(body.id) });
+      return {};
+    case "adminListCs":
+      return { items: await rpc_("api_admin_list_cs", { p_email: email }) };
+    default:
+      throw new Error("action không hỗ trợ: " + body.action);
+  }
+}
+
+// ---------------------------------------------------------------------
 // ENTRYPOINT
 // ---------------------------------------------------------------------
 Deno.serve(async (req: Request) => {
@@ -201,9 +273,10 @@ Deno.serve(async (req: Request) => {
       const url = new URL(req.url);
       const email = await verifyToken_(url.searchParams.get("token") || "");
       if (!email) return json_({ ok: false, error: "invalid_token" });
-      const [profile, deals] = await Promise.all([
+      const [profile, deals, isAdmin] = await Promise.all([
         rpc_("api_get_profile", { p_email: email }),
         rpc_("api_get_deals_json", { p_email: email }),
+        rpc_<boolean>("api_is_admin", { p_email: email }),
       ]);
       return json_({
         ok: true,
@@ -211,6 +284,7 @@ Deno.serve(async (req: Request) => {
         sessionToken: await mintSessionToken_(email),
         profile: profile ?? null, // null = chưa đăng ký → frontend hiện form
         deals: deals ?? [],
+        isAdmin: !!isAdmin,
       });
     }
 
@@ -292,6 +366,15 @@ Deno.serve(async (req: Request) => {
     if (body.action === "listFeedback") {
       const items = await rpc_("api_list_feedback", { p_email: email });
       return json_({ ok: true, items: items ?? [], sessionToken });
+    }
+
+    // ---- Kết nối Claude (MCP) + Quản trị: lỗi trả { ok:false, error } như saveRequest ----
+    if (typeof body.action === "string" && (body.action === "whoami" || /^(mcp|admin)[A-Z]/.test(body.action))) {
+      try {
+        return json_({ ok: true, ...(await extraAction_(body, email)), sessionToken });
+      } catch (e) {
+        return json_({ ok: false, error: String((e as Error).message || e), sessionToken });
+      }
     }
 
     if (body.multiYearRows && body.multiYearRows.length) {

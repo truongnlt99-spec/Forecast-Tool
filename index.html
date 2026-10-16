@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -235,6 +235,17 @@
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
         <span class="nav-label">Product Feedback</span>
         <span class="nav-fly">Product Feedback</span>
+      </button>
+      <!-- Kết nối Claude (MCP) + Quản trị (chỉ admin) — ui.js điều khiển 100% -->
+      <button class="nav-item" id="claudeBtn" title="Kết nối Claude (MCP)" aria-label="Kết nối Claude">
+        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5"/></svg>
+        <span class="nav-label">Kết nối Claude</span>
+        <span class="nav-fly">Kết nối Claude</span>
+      </button>
+      <button class="nav-item" id="adminBtn" title="Quản trị" aria-label="Quản trị" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="nav-label">Quản trị</span>
+        <span class="nav-fly">Quản trị</span>
       </button>
       <button class="nav-item" id="donationBtn" title="Donation" aria-label="Donation">
         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
@@ -793,6 +804,28 @@
   </div>
 
   <!-- =====================================================
+       MODAL: KẾT NỐI CLAUDE (MCP) + QUẢN TRỊ (ui.js điều khiển 100%)
+       ===================================================== -->
+  <div class="modal-overlay" id="claudeModal">
+    <div class="modal-panel mc-panel">
+      <div class="modal-head">
+        <h3>🔌 Kết nối Claude</h3>
+        <button class="modal-x" id="claudeClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="claudeBody"></div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="adminModal">
+    <div class="modal-panel pf-panel">
+      <div class="modal-head">
+        <h3>🛡️ Quản trị</h3>
+        <button class="modal-x" id="adminClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="adminBody"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================
        MODAL: DONATION
        ===================================================== -->
   <div class="modal-overlay" id="donationModal">
@@ -885,7 +918,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=38"></script>
+  <script src="ui.js?v=39"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=12"></script>
 

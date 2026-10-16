@@ -30,6 +30,7 @@ create index if not exists mcp_keys_email_idx on mcp_keys (lower(email));
 alter table todolist add column if not exists created_at timestamptz not null default now();
 alter table todolist add column if not exists updated_at timestamptz;
 alter table todolist add column if not exists updated_by text;
+alter table todolist add column if not exists deleted_at timestamptz;   -- xoá mềm
 alter table product_feedback add column if not exists replied_at timestamptz;
 alter table product_feedback add column if not exists replied_by text;
 
@@ -99,7 +100,7 @@ begin
              'dauMoi', coalesce(dau_moi, ''), 'done', done,
              'updatedAt', coalesce(to_char(coalesce(updated_at, created_at) at time zone 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY HH24:MI'), ''))
            order by done, stt nulls last, id), '[]'::json)
-    from todolist);
+    from todolist where deleted_at is null);
 end $$;
 
 -- p_item: {id?, noiDung?, note?, dauMoi?, done?, stt?} — có id → sửa các khoá được gửi; không có → thêm mới
@@ -116,12 +117,12 @@ begin
       done     = case when p_item ? 'done'    then coalesce((p_item->>'done')::boolean, false) else done end,
       stt      = case when p_item ? 'stt' and (p_item->>'stt') ~ '^\d+$' then (p_item->>'stt')::int else stt end,
       updated_at = now(), updated_by = lower(p_email)
-    where id = tid returning * into t;
+    where id = tid and deleted_at is null returning * into t;
     if not found then raise exception 'Không tìm thấy việc #%', tid; end if;
   else
     if trim(coalesce(p_item->>'noiDung', '')) = '' then raise exception 'Cần nhập nội dung công việc'; end if;
     insert into todolist (stt, noi_dung, note, dau_moi, done, updated_at, updated_by)
-    values ((select coalesce(max(stt), 0) + 1 from todolist), trim(p_item->>'noiDung'),
+    values ((select coalesce(max(stt), 0) + 1 from todolist where deleted_at is null), trim(p_item->>'noiDung'),
             trim(coalesce(p_item->>'note', '')), trim(coalesce(p_item->>'dauMoi', '')),
             coalesce((p_item->>'done')::boolean, false), now(), lower(p_email))
     returning * into t;
@@ -133,7 +134,8 @@ end $$;
 create or replace function api_admin_delete_todo(p_email text, p_id int) returns void language plpgsql as $$
 begin
   perform admin_check(p_email);
-  delete from todolist where id = p_id;
+  update todolist set deleted_at = now(), updated_at = now(), updated_by = lower(p_email)
+  where id = p_id and deleted_at is null;
   if not found then raise exception 'Không tìm thấy việc #%', p_id; end if;
 end $$;
 
