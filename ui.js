@@ -1257,6 +1257,10 @@
         uoMiss:   qFindKey(keys, ['thiếu u/o bigquery']),
         dtPhai:   qFindKey(keys, ['dt phải go-live', 'dt phải golive', 'phải go-live']),
         acr:      qFindKey(keys, ['acr (vnđ', 'acr (']),
+        khoaUO:   qFindKey(keys, ['khoá u/o']),
+        khoaY2:   qFindKey(keys, ['khoá năm 2++']),
+        dg1:      qFindKey(keys, ['ngày đánh giá t1']),
+        dg4:      qFindKey(keys, ['ngày đánh giá t4']),
         monthT1:  qFindKey(keys, ['tháng đo t1']),
         monthT4:  qFindKey(keys, ['tháng đo t4']),
         tier:     qFindKey(keys, ['tier']),
@@ -1289,6 +1293,11 @@
         glExtend: qParseDate(g(K.glExtend)),
         stopped: !!(stopRaw != null && String(stopRaw).trim() !== '' && String(stopRaw).trim().toLowerCase() !== 'false'),
         reqLink: String(g(K.reqLink) || '').trim(),
+        // Khoá nhập U/O theo ngày đánh giá T1/T4 (máy chủ tính, xem supabase/06_khoa_uo_theo_ngay.sql)
+        khoaUO: String(g(K.khoaUO) || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+        khoaY2: String(g(K.khoaY2) || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+        dg1: String(g(K.dg1) || '').trim(),
+        dg4: String(g(K.dg4) || '').trim(),
         monthT1: qMNorm(g(K.monthT1)),
         monthT4: qMNorm(g(K.monthT4)),
         tierNum: (function (m) { return m ? +m[0] : null; })(String(g(K.tier) || '').match(/\d+/)),
@@ -1658,10 +1667,11 @@
       }
     }
 
-    /* ---- % Active/Output T1/T4 lấy từ BigQuery khi deal đã kéo đánh giá trên CRM ----
-       Cột "U/O từ BigQuery" liệt kê ô nào đã có số BigQuery (vd "aT1,oT1") → khoá ô đó + nhãn "CRM".
-       Cột "Thiếu U/O BigQuery" (vd "U T1, O T1"): đã kéo, đã tới tháng đánh giá mà BigQuery chưa có số
-       → tô đỏ ô thiếu (ô vẫn mở để CS nhập tạm). */
+    /* ---- Khoá ô % Active/Output theo NGÀY ĐÁNH GIÁ (16/10/2026) ----
+       Cột "Khoá U/O" (vd "aT1,oT1"): kỳ đó đã qua ngày đánh giá → khoá ô (máy chủ cũng chặn ghi).
+       Ngày đánh giá = ngày trên CRM, trống thì = ngày go-live + 1 / + 4 tháng (cột "Ngày đánh giá T1/T4").
+       Cột "U/O từ BigQuery": ô đang hiện số lấy từ CRM → nhãn "CRM" (chỉ để biết, không khoá).
+       Cột "Thiếu U/O BigQuery" (vd "U T1, O T1"): đã kéo, tới tháng đánh giá mà BigQuery chưa có số → tô đỏ. */
     var qUOFields = { aT1: 'U T1', oT1: 'O T1', aT4: 'U T4', oT4: 'O T4' };
     function qMarkCrmUO(tr) {
       if (!tr.id) return;
@@ -1670,40 +1680,42 @@
       Object.keys(qUOFields).forEach(function (f) {
         var inp = tr.querySelector('[data-f="' + f + '"]');
         if (!inp) return;
+        var ky = f.slice(1), dg = ky === 'T1' ? d.dg1 : d.dg4;
+        var locked = d.khoaUO.indexOf(f) !== -1;
         var fromBq = d.glFromCrm && d.uoBq.indexOf(f) !== -1;
         var missing = d.glFromCrm && d.uoMiss.indexOf(qUOFields[f]) !== -1;
-        var badge = inp.parentElement && inp.parentElement.querySelector('.fc-uo-bq-badge');
-        if (fromBq) {
+        var tip = locked ? 'Đã qua ngày đánh giá ' + ky + (dg ? ' (' + dg + ')' : '') + ' — khoá, không sửa được nữa'
+          : dg ? 'Kỳ ' + ky + ': nhập / sửa được tới hết ngày đánh giá ' + dg : '';
+        if (locked) {
           if (!inp.disabled) inp.disabled = true;
           inp.setAttribute('data-crm-locked', '1');
-          inp.title = 'Số lấy từ BigQuery (deal đã kéo đánh giá trên Base CRM) — không sửa tay được';
-          if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'fc-uo-bq-badge';
-            badge.textContent = 'CRM';
-            badge.title = inp.title;
-            badge.style.cssText = 'display:inline-block;margin-left:4px;padding:0 4px;border-radius:999px;' +
-              'font-size:10px;font-weight:600;background:#e7f6ec;color:#1a7f37;border:1px solid #a6dcb5;';
-            inp.insertAdjacentElement('afterend', badge);
-          }
-        } else {
-          if (inp.getAttribute('data-crm-locked')) { inp.disabled = false; inp.removeAttribute('data-crm-locked'); inp.title = ''; }
-          if (badge) badge.remove();
+        } else if (inp.getAttribute('data-crm-locked')) {
+          inp.disabled = false; inp.removeAttribute('data-crm-locked');
         }
+        var badge = inp.parentElement && inp.parentElement.querySelector('.fc-uo-bq-badge');
+        if (fromBq && !badge) {
+          badge = document.createElement('span');
+          badge.className = 'fc-uo-bq-badge';
+          badge.textContent = 'CRM';
+          badge.style.cssText = 'display:inline-block;margin-left:4px;padding:0 4px;border-radius:999px;' +
+            'font-size:10px;font-weight:600;background:#e7f6ec;color:#1a7f37;border:1px solid #a6dcb5;';
+          inp.insertAdjacentElement('afterend', badge);
+        } else if (!fromBq && badge) badge.remove();
+        if (badge) badge.title = 'Số lấy từ Base CRM / BigQuery' + (locked ? '' : ' — sửa được tới hết ngày đánh giá ' + (dg || ''));
         if (missing) {
           if (inp.getAttribute('data-uo-missing') !== '1') {
             inp.setAttribute('data-uo-missing', '1');
             inp.style.outline = '2px solid #d1242f';
             inp.style.background = '#ffebe9';
-            inp.title = 'Đã kéo đánh giá trên CRM nhưng BigQuery chưa có ' +
-              (f.charAt(0) === 'a' ? 'tỉ lệ sử dụng (điểm U) hoặc tỉ lệ = 0%' : 'điểm O') + ' — kiểm tra lại trên Base CRM';
           }
+          tip = 'Đã kéo đánh giá trên CRM nhưng BigQuery chưa có ' +
+            (f.charAt(0) === 'a' ? 'tỉ lệ sử dụng (điểm U) hoặc tỉ lệ = 0%' : 'điểm O') + ' — kiểm tra lại trên Base CRM' + (tip ? '. ' + tip : '');
         } else if (inp.getAttribute('data-uo-missing')) {
           inp.removeAttribute('data-uo-missing');
           inp.style.outline = '';
           inp.style.background = '';
-          if (!fromBq) inp.title = '';
         }
+        if (inp.title !== tip) inp.title = tip;
       });
     }
 
@@ -2511,6 +2523,18 @@
     // Thêm entry mới lên ĐẦU mảng này mỗi lần cập nhật tool
     // (tương tự cách app.js quản lý mảng CHANGELOG của nó).
     var EXTRA_CHANGELOG = [
+      {
+        date: '16/10/2026',
+        title: 'Khoá nhập %Active / %Output theo ngày đánh giá',
+        body:
+          '<ul>' +
+            '<li>Ô %Active/%Output kỳ <b>T1</b> khoá khi <b>đã qua ngày đánh giá T1</b>, kỳ <b>T4</b> khoá khi đã qua ngày đánh giá T4 — kể cả ô còn trống. Chưa tới ngày thì nhập / sửa bình thường.</li>' +
+            '<li>Ngày đánh giá lấy theo <i>Ngày đánh giá 1 tháng / 4 tháng</i> trên Base CRM; CRM chưa có thì tính = ngày go-live + 1 tháng / + 4 tháng. Rê chuột vào ô để xem hạn.</li>' +
+            '<li>Trước ngày đánh giá: CRM đã có số thì ô hiện số CRM (nhãn <b>CRM</b>), bạn vẫn sửa được và số bạn nhập được dùng. Qua ngày đánh giá: chốt số CRM (CRM chưa có thì giữ số bạn đã nhập).</li>' +
+            '<li>Năm 2++: kỳ T1/T4 Năm N khoá khi qua ngày đánh giá Năm 1 + (N−1) năm.</li>' +
+            '<li>Áp dụng cả khi sửa qua Claude (Kết nối Claude). Cần sửa ô đã khoá thì nhờ admin.</li>' +
+          '</ul>',
+      },
       {
         date: '16/10/2026',
         title: 'Forecast dễ nhập hơn + mở deal trên Base CRM',
@@ -3429,10 +3453,13 @@
       }
       tb.addEventListener('change', function (e) {
         var el = e.target;
-        if (!el.classList || !el.classList.contains('fc-in') || !el.getAttribute('data-f')) return;
-        var k = (el.getAttribute('data-id') || el.getAttribute('data-k') || '') + '|' + el.getAttribute('data-f');
+        // Năm 1: data-id + data-f; Năm 2++: data-key + data-field
+        var fld = el.classList && el.classList.contains('fc-in') && (el.getAttribute('data-f') || el.getAttribute('data-field'));
+        if (!fld) return;
+        var k = (el.getAttribute('data-id') || el.getAttribute('data-key') || '') + '|' + fld;
         setTimeout(function () {   // để app.js xử lý trước: sửa về như cũ thì app.js bỏ class fc-edited
-          if (el.classList.contains('fc-edited')) keys[k] = 1; else delete keys[k];
+          // Năm 2++ (mc-in): app.js không gắn fc-edited → mọi lần sửa đều tính là chưa lưu
+          if (el.classList.contains('fc-edited') || el.classList.contains('mc-in')) keys[k] = 1; else delete keys[k];
           paint();
         }, 0);
       });
@@ -3483,17 +3510,37 @@
       if (v) chsPill.textContent = '✕ Bỏ lọc ' + (opt ? opt.textContent : v);
     }
 
+    /* ---- Năm 2++: khoá ô kỳ đã qua ngày đánh giá (ngày đánh giá Năm 1 + (N−1) năm) ---- */
+    var mcTb = $('mcTbody');
+    function lockMulti() {
+      if (!mcTb) return;
+      var deals = window.csFcDealsById || {};
+      mcTb.querySelectorAll('tr[id^="mc-row-"]').forEach(function (tr) {
+        var p = tr.id.slice(7).split('|');            // id|năm|kỳ
+        var d = deals[p[0]];
+        var locked = !!(d && d.khoaY2 && d.khoaY2.indexOf(p[1] + '|' + p[2]) !== -1);
+        tr.querySelectorAll('.mc-in, .mc-use-hint').forEach(function (el) {
+          if (locked && !el.disabled) { el.disabled = true; el.setAttribute('data-y2-locked', '1'); }
+          else if (!locked && el.getAttribute('data-y2-locked')) { el.disabled = false; el.removeAttribute('data-y2-locked'); }
+          if (el.classList.contains('mc-in')) {
+            el.title = locked ? 'Kỳ ' + p[2] + ' Năm ' + p[1] + ' đã qua ngày đánh giá — khoá, không sửa được nữa' : '';
+          }
+        });
+      });
+    }
+
     var pending = false;
     function refresh() {
       if (pending) return;
       pending = true;
       setTimeout(function () {
         pending = false;
-        markNeed(); proxyDates(); syncChsPill();
+        markNeed(); proxyDates(); syncChsPill(); lockMulti();
       }, 0);
     }
     window.csFcUxRefresh = refresh;
     new MutationObserver(refresh).observe(tbody, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'class'] });
+    if (mcTb) new MutationObserver(refresh).observe(mcTb, { childList: true });
     tbody.addEventListener('input', function (e) { if (e.target.classList && e.target.classList.contains('fc-pct')) refresh(); });
     tbody.addEventListener('change', refresh);
     if (monthSel) monthSel.addEventListener('change', refresh);

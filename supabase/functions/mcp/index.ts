@@ -87,7 +87,7 @@ const COMPACT_KEYS = [
   "Giá trị phần mềm bộ (VNĐ)", "Ngày nhận deal", "Ngày go-live dự kiến", "Ngày go-live thực tế",
   "Nguồn go-live", "Ngày go-live gia hạn", "Dừng triển khai", "Trạng thái go-live",
   "Tháng ghi nhận CR", "DT phải go-live", "DT go-live đạt", "Tháng đo T1", "CHS_CS T1",
-  "Tháng đo T4", "CHS_CS T4", "Thiếu U/O BigQuery",
+  "Tháng đo T4", "CHS_CS T4", "Thiếu U/O BigQuery", "Ngày đánh giá T1", "Ngày đánh giá T4", "Khoá U/O",
 ];
 function compact(d: Deal): Deal {
   const o: Deal = {};
@@ -241,8 +241,8 @@ const TOOLS: Tool[] = [
     name: "update_deal_inputs",
     description:
       "Sửa số liệu Năm 1 của 1 deal mình phụ trách. Chỉ ô được truyền mới đổi; truyền null để xoá ô. " +
-      "go_live dạng dd/mm/yyyy; % nhập 0–100 (vd 85.5). Ô đã lấy từ Base CRM/BigQuery (go-live 'Đã kéo', " +
-      "U/O BigQuery) bị khoá giống trên web. Luôn xác nhận lại với người dùng trước khi ghi.",
+      "go_live dạng dd/mm/yyyy; % nhập 0–100 (vd 85.5). Khoá giống trên web: go-live 'Đã kéo' trên CRM; " +
+      "% Active/Output kỳ T1/T4 đã qua 'Ngày đánh giá T1/T4' (cột 'Khoá U/O'). Luôn xác nhận lại với người dùng trước khi ghi.",
     inputSchema: S({
       deal_id: str("Deal ID"),
       go_live: { type: ["string", "null"], description: "Ngày go-live thực tế dd/mm/yyyy (null = xoá)" },
@@ -288,6 +288,18 @@ const TOOLS: Tool[] = [
         active: "active" in a ? a.active : keep(cur?.active),
         output: "output" in a ? a.output : keep(cur?.output),
       };
+      // Khoá theo ngày đánh giá: Năm N kỳ T1/T4 = ngày đánh giá Năm 1 + (N−1) năm (giống trên web)
+      const dg = await rpc<string | null>("deal_ngay_dg", { p_deal_id: Number(id), p_ky: String(a.ky) });
+      if (typeof dg === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dg)) {
+        const lock = new Date(dg + "T00:00:00Z");
+        lock.setUTCFullYear(lock.getUTCFullYear() + Number(a.nam) - 1);
+        const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);   // giờ Việt Nam
+        const lockStr = lock.toISOString().slice(0, 10);
+        if (lockStr < today) {
+          throw new ToolError("Kỳ " + a.ky + " Năm " + a.nam + " của deal " + id + " đã qua ngày đánh giá (" +
+            lockStr.split("-").reverse().join("/") + ") — khoá, không sửa được nữa");
+        }
+      }
       const n = await rpc<number>("api_save_multiyear", { p_email: ctx.email, p_rows: [row] });
       if (!n) throw new ToolError("Deal " + id + " không thuộc bạn phụ trách (hoặc không tồn tại)");
       return { ok: true, ...row };
@@ -575,8 +587,8 @@ const TOOLS: Tool[] = [
 
 const INSTRUCTIONS =
   "CS Console (Base.vn) — dữ liệu deal triển khai của CS. Mỗi kết nối gắn với 1 tài khoản: chỉ thấy và sửa deal " +
-  "mình phụ trách. Ngày dạng dd/mm/yyyy, tháng dạng MM/YYYY, tiền VNĐ, % nhập 0–100. Ô go-live 'Đã kéo' và ô U/O " +
-  "lấy từ BigQuery bị khoá (không sửa tay). Trước khi gọi tool ghi (update_*, request_*, cancel_request, submit_feedback, " +
+  "mình phụ trách. Ngày dạng dd/mm/yyyy, tháng dạng MM/YYYY, tiền VNĐ, % nhập 0–100. Ô go-live 'Đã kéo' bị khoá; " +
+  "ô % Active/Output kỳ T1/T4 bị khoá khi đã qua ngày đánh giá kỳ đó (Năm 2–5: + số năm). Trước khi gọi tool ghi (update_*, request_*, cancel_request, submit_feedback, " +
   "admin_reply_feedback, admin_*_todo) hãy tóm tắt thay đổi và hỏi người dùng xác nhận — trừ khi đang chạy tác vụ tự động " +
   "đã được admin giao sẵn quy trình. Tool có tiền tố admin_ chỉ dành cho admin.";
 

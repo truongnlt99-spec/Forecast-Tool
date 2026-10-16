@@ -208,7 +208,7 @@ end $$;
 -- p_patch: {goLive?: 'dd/mm/yyyy' | '', aT1?, oT1?, aT4?, oT4?: số 0–100 | null}. Chỉ khoá được gửi mới đổi.
 create or replace function api_patch_deal_input(p_email text, p_deal_id bigint, p_patch jsonb)
 returns json language plpgsql as $$
-declare r deals_raw%rowtype; cur deal_inputs%rowtype; locked text[] := '{}'; k text;
+declare r deals_raw%rowtype; cur deal_inputs%rowtype; locked text[] := '{}'; k text; dg1 date; dg4 date;
 begin
   if not exists (select 1 from v_deal_owner o where o.deal_id = p_deal_id and o.email = lower(trim(p_email))) then
     raise exception 'Deal % không thuộc bạn phụ trách (hoặc không tồn tại)', p_deal_id;
@@ -219,17 +219,22 @@ begin
   end if;
   if r.custom_ngay_keo_danh_gia is not null then
     locked := locked || 'goLive'::text;
-    if r.ty_le_su_dung_1_thang > 0 then locked := locked || 'aT1'::text; end if;
-    if r.o1 is not null then locked := locked || 'oT1'::text; end if;
-    if r.ty_le_su_dung_4_thang > 0 then locked := locked || 'aT4'::text; end if;
-    if r.o4 is not null then locked := locked || 'oT4'::text; end if;
   end if;
+  -- U/O khoá theo ngày đánh giá T1/T4 (16/10/2026), không còn theo việc CRM đã có số
+  dg1 := deal_ngay_dg(p_deal_id, 'T1');
+  dg4 := deal_ngay_dg(p_deal_id, 'T4');
+  if dg1 < vn_today() then locked := locked || array['aT1', 'oT1']; end if;
+  if dg4 < vn_today() then locked := locked || array['aT4', 'oT4']; end if;
   for k in select jsonb_object_keys(coalesce(p_patch, '{}'::jsonb)) loop
     if k not in ('goLive', 'aT1', 'oT1', 'aT4', 'oT4') then
       raise exception 'Ô "%" không sửa được (chỉ goLive, aT1, oT1, aT4, oT4)', k;
     end if;
+    if k = 'goLive' and k = any(locked) then
+      raise exception 'Ngày go-live của deal % đã kéo đánh giá trên Base CRM — không sửa tay được', p_deal_id;
+    end if;
     if k = any(locked) then
-      raise exception 'Ô % của deal % đã lấy từ Base CRM/BigQuery — không sửa tay được', k, p_deal_id;
+      raise exception 'Ô % của deal % đã qua ngày đánh giá % (%) — khoá, không sửa được nữa', k, p_deal_id,
+        right(k, 2), to_char(case when right(k, 2) = 'T1' then dg1 else dg4 end, 'DD/MM/YYYY');
     end if;
   end loop;
   if p_patch ? 'goLive' and trim(coalesce(p_patch->>'goLive', '')) <> ''

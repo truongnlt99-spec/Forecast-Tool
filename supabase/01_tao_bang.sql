@@ -188,6 +188,30 @@ create or replace function u_point(tier int, a numeric) returns numeric immutabl
     when tier = 3 then case when a > 0.3 then 100 when a > 0.15 then 80 when a > 0.05 then 40 else 0 end
     else null end $$;
 
+-- NGÀY ĐÁNH GIÁ T1/T4 — mốc khoá nhập %Active/%Output (quyết định 16/10/2026):
+-- ngày trên CRM ("Ngày đánh giá 1 tháng" / "4 tháng") nếu có; CRM trống thì tự tính
+-- = ngày go-live thực tế (ưu tiên ngày kéo đánh giá trên CRM) + 1 / + 4 tháng.
+-- Qua ngày đó (ngày đánh giá < hôm nay) thì kỳ đó khoá, không sửa tay được nữa.
+create or replace function crm_date(t text) returns date immutable language plpgsql as $$
+declare s text := trim(coalesce(t, ''));
+begin
+  if s ~ '^\d{1,2}/\d{1,2}/\d{4}' then return to_date(substring(s from '^\d{1,2}/\d{1,2}/\d{4}'), 'DD/MM/YYYY'); end if;
+  if s ~ '^\d{4}-\d{2}-\d{2}' then return substring(s from '^\d{4}-\d{2}-\d{2}')::date; end if;
+  return null;
+exception when others then return null;   -- ngày sai (vd 31/02) → coi như trống
+end $$;
+
+create or replace function ngay_dg(crm text, go_live date, months int) returns date immutable language sql as $$
+  select coalesce(crm_date(crm), (go_live + make_interval(months => months))::date) $$;
+
+-- Ngày đánh giá của 1 deal theo kỳ ('T1' | 'T4') — dùng cho các hàm ghi (web, MCP)
+create or replace function deal_ngay_dg(p_deal_id bigint, p_ky text) returns date stable language sql as $$
+  select ngay_dg(case when p_ky = 'T4' then r.ngay_danh_gia_4_thang else r.ngay_danh_gia_1_thang end,
+                 coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual),
+                 case when p_ky = 'T4' then 4 else 1 end)
+  from deals_raw r left join deal_inputs i on i.deal_id = r.deal_id
+  where r.deal_id = p_deal_id $$;
+
 -- CHS_CS: Tier 4 = Điểm O; Tier 1–3 = 0.7·U + 0.3·O (cần đủ cả Active & Output)
 create or replace function chs(tier int, a numeric, o numeric) returns numeric immutable language sql as $$
   select case when o is null then null
@@ -230,19 +254,32 @@ s1 as (   -- A..L, M..T, U..W + X, Y (gộp theo Job)
     coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual) as m_, i.go_live_extend as n_,
     -- % Active/Output T1/T4: deal đã kéo đánh giá trên CRM → lấy tỉ lệ sử dụng tháng 1/tháng 4
     -- và O (thang 0–100) từ BigQuery, tool tự tính U/O/CHS; BigQuery chưa có số thì dùng số CS nhập
-    -- (quyết định 15/10/2026; BigQuery chỉ có 1 cột O nên O dùng chung cho T1 và T4)
-    case when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_1_thang is not null
+    -- (quyết định 15/10/2026; BigQuery chỉ có 1 cột O nên O dùng chung cho T1 và T4).
+    -- 16/10/2026: TRƯỚC ngày đánh giá kỳ đó, số CS nhập (nếu có) được ưu tiên hơn số CRM;
+    -- QUA ngày đánh giá thì khoá và chốt số CRM (CRM chưa có thì giữ số CS).
+    case when ngay_dg(r.ngay_danh_gia_1_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 1) >= vn_today()
+              and i.active_t1 is not null then i.active_t1
+         when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_1_thang is not null
          then case when r.ty_le_su_dung_1_thang > 0 then r.ty_le_su_dung_1_thang::numeric(7,4)
                    else coalesce(i.active_t1, 0::numeric(7,4)) end   -- 0% coi như chưa có: CS được nhập tay
          else i.active_t1 end as o_,
-    case when r.custom_ngay_keo_danh_gia is not null and r.o1 is not null
+    case when ngay_dg(r.ngay_danh_gia_1_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 1) >= vn_today()
+              and i.output_t1 is not null then i.output_t1
+         when r.custom_ngay_keo_danh_gia is not null and r.o1 is not null
          then (r.o1 / 100)::numeric(7,4) else i.output_t1 end as p_,
-    case when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_4_thang is not null
+    case when ngay_dg(r.ngay_danh_gia_4_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 4) >= vn_today()
+              and i.active_t4 is not null then i.active_t4
+         when r.custom_ngay_keo_danh_gia is not null and r.ty_le_su_dung_4_thang is not null
          then case when r.ty_le_su_dung_4_thang > 0 then r.ty_le_su_dung_4_thang::numeric(7,4)
                    else coalesce(i.active_t4, 0::numeric(7,4)) end   -- 0% coi như chưa có: CS được nhập tay
          else i.active_t4 end as q_,
-    case when r.custom_ngay_keo_danh_gia is not null and r.o4 is not null
+    case when ngay_dg(r.ngay_danh_gia_4_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 4) >= vn_today()
+              and i.output_t4 is not null then i.output_t4
+         when r.custom_ngay_keo_danh_gia is not null and r.o4 is not null
          then (r.o4 / 100)::numeric(7,4) else i.output_t4 end as r_,
+    ngay_dg(r.ngay_danh_gia_1_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 1) as dg1_,
+    ngay_dg(r.ngay_danh_gia_4_thang, coalesce(r.custom_ngay_keo_danh_gia, i.go_live_actual), 4) as dg4_,
+    i.active_t1 as cs_a1_, i.output_t1 as cs_o1_, i.active_t4 as cs_a4_, i.output_t4 as cs_o4_,
     coalesce(i.stopped, false) as stopped, i.link_request,
     case when r.job_id is null then null
          else sum(r.deal_value) over (partition by r.job_id) end as x_tong_gt,
@@ -493,12 +530,13 @@ select
   case when m_t4_y5 is null or chs_t4_y5 is null or chs_t4_y5 < 50 then 0 else ar_acr end as "ACR đủ đk COM T4 - Năm 5",
   case when custom_ngay_keo_danh_gia is not null then 'Đã kéo'
        when m_ is not null then 'Forecast' end as "Nguồn go-live",
-  -- Ô nào lấy từ BigQuery (UI khoá ô đó); ô BigQuery còn trống sau khi tới tháng đánh giá → cảnh báo (U = 0% cũng coi là thiếu)
+  -- Ô đang hiện số lấy từ BigQuery (UI gắn nhãn "CRM"); ô BigQuery còn trống sau khi tới tháng đánh giá → cảnh báo
+  -- (U = 0% cũng coi là thiếu). Trước ngày đánh giá mà CS đã nhập thì ô hiện số CS (không tính là BigQuery).
   nullif(concat_ws(',',
-    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_1_thang > 0 then 'aT1' end,
-    case when custom_ngay_keo_danh_gia is not null and o1 is not null then 'oT1' end,
-    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_4_thang > 0 then 'aT4' end,
-    case when custom_ngay_keo_danh_gia is not null and o4 is not null then 'oT4' end), '') as "U/O từ BigQuery",
+    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_1_thang > 0 and (dg1_ < vn_today() or cs_a1_ is null) then 'aT1' end,
+    case when custom_ngay_keo_danh_gia is not null and o1 is not null and (dg1_ < vn_today() or cs_o1_ is null) then 'oT1' end,
+    case when custom_ngay_keo_danh_gia is not null and ty_le_su_dung_4_thang > 0 and (dg4_ < vn_today() or cs_a4_ is null) then 'aT4' end,
+    case when custom_ngay_keo_danh_gia is not null and o4 is not null and (dg4_ < vn_today() or cs_o4_ is null) then 'oT4' end), '') as "U/O từ BigQuery",
   nullif(concat_ws(', ',
     case when custom_ngay_keo_danh_gia is not null and tier_num is distinct from 4
               and ((ty_le_su_dung_1_thang is null and custom_ngay_keo_danh_gia + interval '1 month' <= current_date)
@@ -509,7 +547,22 @@ select
               and ((ty_le_su_dung_4_thang is null and custom_ngay_keo_danh_gia + interval '4 months' <= current_date)
                    or ty_le_su_dung_4_thang = 0) then 'U T4' end,
     case when custom_ngay_keo_danh_gia is not null and o4 is null
-              and custom_ngay_keo_danh_gia + interval '4 months' <= current_date then 'O T4' end), '') as "Thiếu U/O BigQuery"
+              and custom_ngay_keo_danh_gia + interval '4 months' <= current_date then 'O T4' end), '') as "Thiếu U/O BigQuery",
+  -- Khoá nhập U/O theo ngày đánh giá (16/10/2026). Năm N: ngày đánh giá Năm 1 + (N−1) năm.
+  dg1_                   as "Ngày đánh giá T1",
+  dg4_                   as "Ngày đánh giá T4",
+  nullif(concat_ws(',',
+    case when dg1_ < vn_today() then 'aT1,oT1' end,
+    case when dg4_ < vn_today() then 'aT4,oT4' end), '') as "Khoá U/O",
+  nullif(concat_ws(',',
+    case when m_t1_y2 is not null and dg1_ + interval '1 year'  < vn_today() then '2|T1' end,
+    case when m_t4_y2 is not null and dg4_ + interval '1 year'  < vn_today() then '2|T4' end,
+    case when m_t1_y3 is not null and dg1_ + interval '2 years' < vn_today() then '3|T1' end,
+    case when m_t4_y3 is not null and dg4_ + interval '2 years' < vn_today() then '3|T4' end,
+    case when m_t1_y4 is not null and dg1_ + interval '3 years' < vn_today() then '4|T1' end,
+    case when m_t4_y4 is not null and dg4_ + interval '3 years' < vn_today() then '4|T4' end,
+    case when m_t1_y5 is not null and dg1_ + interval '4 years' < vn_today() then '5|T1' end,
+    case when m_t4_y5 is not null and dg4_ + interval '4 years' < vn_today() then '5|T4' end), '') as "Khoá Năm 2++"
 from s9
 order by ngay_tao_deal desc, deal_id desc;
 
@@ -523,3 +576,16 @@ alter function vn_today() set search_path = '';
 alter function month_anchor(date) set search_path = '';
 alter function u_point(int, numeric) set search_path = public;
 alter function chs(int, numeric, numeric) set search_path = public;
+alter function crm_date(text) set search_path = '';
+alter function ngay_dg(text, date, int) set search_path = public;
+alter function deal_ngay_dg(bigint, text) set search_path = public;
+-- deal_ngay_dg đọc dữ liệu deal → chỉ service_role (Edge Function api/mcp) gọi trực tiếp
+revoke all on function deal_ngay_dg(bigint, text) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'revoke all on function deal_ngay_dg(bigint, text) from anon, authenticated';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function deal_ngay_dg(bigint, text) to service_role';
+  end if;
+end $$;

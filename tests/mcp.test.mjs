@@ -14,9 +14,11 @@ const DEALS = [
   { 'Deal ID': '3', 'Tên khách hàng': 'C', 'Loại hợp đồng': 'Renew', 'Tháng ghi nhận CR': '09/2026',
     'Ngày go-live thực tế': '', 'DT phải go-live': '5.000.000', 'Dừng triển khai ': '' },
 ];
+let ngayDg = null;   // deal_ngay_dg giả: ngày đánh giá Năm 1 (yyyy-mm-dd)
 const fake = {
   rpc: async (fn, args) => {
     calls.push([fn, args]);
+    if (fn === 'deal_ngay_dg') return { data: ngayDg };
     if (fn === 'api_mcp_resolve') return { data: args.p_hash === (await sha256Hex(KEY)) ? currentEmail : null };
     if (fn === 'api_is_admin') return { data: args.p_email === 'admin@base.vn' };
     if (fn === 'api_get_deals_json') return { data: DEALS };
@@ -86,6 +88,21 @@ test('update_multiyear_inputs giữ ô không truyền', async () => {
   const row = calls.at(-1)[1].p_rows[0];
   assert.equal(row.active, 85);
   assert.equal(row.output, 50);
+});
+
+test('update_multiyear_inputs: kỳ Năm N đã qua ngày đánh giá (Năm 1 + N−1 năm) thì khoá', async () => {
+  const d = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const yearAgo = (s, y) => (Number(s.slice(0, 4)) - y) + s.slice(4);
+  ngayDg = yearAgo(d(-2), 1);              // Năm 2 = hôm kia → đã qua → khoá
+  let r = await tool('cs@base.vn', 'update_multiyear_inputs', { deal_id: '1', nam: 2, ky: 'T4', output: 50 });
+  assert.equal(r.result.isError, true);
+  assert.match(r.result.content[0].text, /đã qua ngày đánh giá/);
+  assert.equal(calls.at(-1)[0], 'deal_ngay_dg', 'không gọi ghi');
+  ngayDg = yearAgo(d(2), 1);               // Năm 2 = ngày kia → còn mở
+  r = await tool('cs@base.vn', 'update_multiyear_inputs', { deal_id: '1', nam: 2, ky: 'T4', output: 50 });
+  assert.notEqual(r.result.isError, true);
+  assert.equal(calls.at(-1)[0], 'api_save_multiyear');
+  ngayDg = null;
 });
 
 test('admin_add_todo gắn feedback + nguồn claude', async () => {
