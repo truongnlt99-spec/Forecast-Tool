@@ -61,3 +61,11 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
 - Trước ngày đánh giá số CS nhập ưu tiên hơn số CRM; qua ngày thì chốt số CRM (CRM trống giữ số CS).
 - Chặn ở 3 nơi: view (`"Khoá U/O"`, `"Khoá Năm 2++"` → ui.js khoá ô), `api_save_rows` / `api_save_multiyear` (bỏ qua ô khoá),
   `api_patch_deal_input` + MCP `update_multiyear_inputs` (báo lỗi). Sửa quy tắc thì sửa đủ các nơi này.
+
+## 9. Trợ lý CS: Vì sao? · Lịch đánh giá · Mô phỏng Career path (17/10/2026)
+
+- Toàn bộ ở `ui.js` mục **TRỢ LÝ CS** (cuối file), chỉ đọc dữ liệu (nghe response API GET + `careerGet`), không ghi gì.
+- Quy tắc CR có thêm bản thứ 4: `cxCrState()` (giữa `==CX PURE START==` / `==CX PURE END==`). Sửa quy tắc CR thì sửa cả
+  `crIn()` app.js, `qCrCompute()` ui.js mục 11, `cr_summary` MCP và `cxCrState()` — `tests/tro-ly-cs.test.mjs` so khớp với `crIn()`.
+- Lịch đánh giá dùng cùng quy tắc khoá ở mục 8 (ngày đánh giá < hôm nay giờ VN; Năm N = Năm 1 + (N−1) năm).
+- Dòng "CRM cập nhật lúc …" cần chạy `supabase/07_gio_dong_bo.sql` + deploy lại Edge Function `api` (chưa chạy thì dòng đó tự ẩn).

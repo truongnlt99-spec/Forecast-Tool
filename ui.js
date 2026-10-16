@@ -2524,6 +2524,17 @@
     // (tương tự cách app.js quản lý mảng CHANGELOG của nó).
     var EXTRA_CHANGELOG = [
       {
+        date: '17/10/2026',
+        title: 'Vì sao? · Lịch đánh giá · Mô phỏng Career path',
+        body:
+          '<ul>' +
+            '<li><b>Vì sao?</b> Bấm nút <b>?</b> cạnh tên deal (Forecast Năm 1) để xem deal đang nằm ở tử hay mẫu số CR tháng đang chọn và lý do (go-live sớm, trễ, loại HĐ không tính…). Nút <b>?</b> trên thẻ Tử / Mẫu số CR liệt kê từng deal tạo nên con số. Vẫn thấy sai thì bấm gửi feedback, form điền sẵn thông tin deal.</li>' +
+            '<li>Dưới tiêu đề trang có dòng <b>CRM cập nhật lúc …</b>: deal tạo / sửa trên CRM sau giờ đó sẽ lên ở lượt đồng bộ sau.</li>' +
+            '<li><b>Lịch đánh giá</b> (menu Forecast): mọi kỳ T1/T4 Năm 1–5, ngày khoá nhập %Active/%Output, kỳ nào còn thiếu số. Có kỳ sắp khoá trong 7 ngày mà chưa nhập thì có banner nhắc ở đầu Overview / Forecast; bấm <b>Nhập →</b> để tới đúng deal.</li>' +
+            '<li><b>Mô phỏng</b> ở trang Career path: tick các deal giả sử go-live trong tháng này để xem CR quý mới so với commit; <b>Chọn gợi ý</b> tự chọn deal lớn nhất tới khi đủ commit. Chỉ để tính thử, không lưu gì.</li>' +
+          '</ul>',
+      },
+      {
         date: '16/10/2026',
         title: 'Khoá nhập %Active / %Output theo ngày đánh giá',
         body:
@@ -3545,5 +3556,746 @@
     tbody.addEventListener('change', refresh);
     if (monthSel) monthSel.addEventListener('change', refresh);
     refresh();
+  })();
+  /* -------------------------------------------------------
+     TRỢ LÝ CS (17/10/2026) — 3 tính năng đắp thêm, không sửa app.js:
+      1. "VÌ SAO?" — nút ? cạnh tên deal (Forecast Năm 1) + nút "Vì sao?" trên 2 thẻ Tử/Mẫu số CR:
+         giải thích deal vào tử / mẫu số CR tháng đang xem theo đúng quy tắc (giống crIn() app.js,
+         qCrCompute() mục 11 và cr_summary MCP). Kèm dòng "Dữ liệu CRM cập nhật lúc …" trên header
+         (field syncedAt của API GET — supabase/07_gio_dong_bo.sql).
+      2. LỊCH ĐÁNH GIÁ — nút "Lịch đánh giá" dưới Forecast: mọi kỳ đánh giá T1/T4 Năm 1–5, ngày khoá
+         nhập %Active/%Output (ngày đánh giá < hôm nay giờ VN — mục 8 CLAUDE.md), còn thiếu số hay chưa.
+         Banner nhắc ở Overview / Forecast khi có kỳ sắp khoá (≤ 7 ngày) còn thiếu số.
+      3. MÔ PHỎNG CAREER PATH — thẻ trong #/overview/career-path: tick deal giả sử go-live trong tháng
+         này → CR quý mới so với commit. Lấy số thực tế quý của máy chủ (careerGet) + phần chênh do
+         các deal được tick (tính ở trình duyệt theo cùng quy tắc CR).
+     Dữ liệu: nghe response API GET (cả Overview lẫn sheet=Database — cùng danh sách deal) và
+     careerGet (bọc fetch như mục 0 / 11). Chỉ đọc, không ghi gì về máy chủ.
+     ------------------------------------------------------- */
+  (function () {
+    var CFG = window.CS_TOOL_CONFIG || {};
+    if (!CFG.API_URL) return;
+
+    /* ==CX PURE START== — hàm thuần, tests/tro-ly-cs.test.mjs nạp riêng đoạn này */
+    function cxMCmp(a, b) {
+      var p = a.split('/'), q = b.split('/');
+      return (p[1] - q[1]) || (p[0] - q[0]);
+    }
+    function cxMNorm(v) {
+      if (v == null || v === '') return '';
+      if (v instanceof Date) return isNaN(v) ? '' : String(v.getMonth() + 1).padStart(2, '0') + '/' + v.getFullYear();
+      var s = String(v).trim(), m = s.match(/^(\d{1,2})\s*\/\s*(\d{4})$/);
+      if (m) return String(+m[1]).padStart(2, '0') + '/' + m[2];
+      return cxMNorm(cxParseDate(s));
+    }
+    function cxMAdd(m, n) {
+      var p = m.split('/'), t = (+p[1]) * 12 + (+p[0] - 1) + n;
+      return String(t % 12 + 1).padStart(2, '0') + '/' + Math.floor(t / 12);
+    }
+    function cxParseDate(v) {
+      if (v == null || v === '') return null;
+      if (v instanceof Date) return isNaN(v) ? null : v;
+      var s = String(v).trim(), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+      m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+      return null;
+    }
+    function cxContractCounted(c) {
+      var s = String(c || '').toLowerCase().trim();
+      if (!s || s === 'renew' || s === '—') return false;
+      return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
+    }
+    // Tháng hạn go-live dùng tính CR: tháng gia hạn nếu có, không thì "Tháng ghi nhận CR".
+    function cxStart(d) { return d.glExtend ? cxMNorm(d.glExtend) : cxMNorm(d.crMonth); }
+    // Trạng thái CR của 1 deal ở tháng m → { den, num, code }. Cùng quy tắc với crIn() (app.js),
+    // qCrCompute() (mục 11) và cr_summary (MCP) — tests/tro-ly-cs.test.mjs so khớp với crIn().
+    function cxCrState(d, m) {
+      var no = function (code) { return { den: false, num: false, code: code }; };
+      if (d.stopped) return no('stopped');
+      if (!cxContractCounted(d.contract)) return no('contract');
+      var start = cxStart(d);
+      if (!start) return no('noMonth');
+      if (d.glActual) {
+        var g = cxMNorm(d.glActual);
+        if (cxMCmp(g, start) < 0) {                    // go-live SỚM: chỉ tử số tháng go-live
+          if (m === g) return { den: false, num: true, code: 'early' };
+          return no(cxMCmp(m, g) < 0 ? 'notYet' : 'doneEarly');
+        }
+        if (cxMCmp(m, start) < 0) return no('notYet');
+        if (cxMCmp(m, g) > 0) return no('done');
+        if (m === g) return { den: true, num: true, code: g === start ? 'onTime' : 'late' };
+        return { den: true, num: false, code: 'lateWaiting' };
+      }
+      if (cxMCmp(m, start) < 0) return no('notYet');
+      return { den: true, num: false, code: m === start ? 'dueNow' : 'overdue' };
+    }
+    // Tổng tử / mẫu CR cho danh sách tháng; sim = {dealId: Date} giả sử go-live ngày đó.
+    function cxCrSum(deals, months, sim) {
+      var phai = 0, dat = 0;
+      deals.forEach(function (d) {
+        var x = d;
+        if (sim && sim[d.id]) { x = {}; for (var k in d) x[k] = d[k]; x.glActual = sim[d.id]; }
+        months.forEach(function (m) {
+          var st = cxCrState(x, m);
+          if (st.den) phai += x.dtPhai || 0;
+          if (st.num) dat += x.dtPhai || 0;
+        });
+      });
+      return { phai: phai, dat: dat };
+    }
+    function cxAddYears(dt, n) {
+      var r = new Date(dt.getFullYear() + n, dt.getMonth(), dt.getDate());
+      if (r.getMonth() !== dt.getMonth()) r = new Date(dt.getFullYear() + n, dt.getMonth() + 1, 0); // 29/02 → 28/02
+      return r;
+    }
+    // Mọi kỳ đánh giá T1/T4 (Năm 1–5) của danh sách deal. Ngày đánh giá Năm N = Năm 1 + (N−1) năm,
+    // Năm 2++ chỉ có khi có "Tháng nhận Com … - Năm N". Khoá nhập khi ngày đánh giá < hôm nay.
+    // Tier 4 chỉ cần %Output (giống quy tắc ô cần nhập ở Forecast).
+    function cxEvalEvents(deals, today) {
+      var out = [];
+      deals.forEach(function (d) {
+        if (d.stopped) return;
+        ['T1', 'T4'].forEach(function (ky) {
+          var base = cxParseDate(ky === 'T1' ? d.dg1 : d.dg4);
+          if (!base) return;
+          for (var n = 1; n <= 5; n++) {
+            var y = (d.years || {})[n] && d.years[n][ky];
+            if (!y || (n > 1 && !y.comMonth)) continue;
+            var date = cxAddYears(base, n - 1);
+            var needA = d.tierNum !== 4;
+            var missA = needA && String(y.a == null ? '' : y.a).trim() === '';
+            var missO = String(y.o == null ? '' : y.o).trim() === '';
+            var days = Math.round((date - today) / 86400000);
+            var missing = missA || missO, locked = days < 0;
+            out.push({
+              id: d.id, company: d.company, sysId: d.sysId, year: n, ky: ky, date: date, days: days,
+              a: y.a, o: y.o, needA: needA, missA: missA, missO: missO, locked: locked,
+              status: locked ? (missing ? 'lockedMissing' : 'closed') : (missing ? (days <= 7 ? 'soon' : 'todo') : 'ready'),
+            });
+          }
+        });
+      });
+      out.sort(function (a, b) { return (a.date - b.date) || String(a.company).localeCompare(String(b.company)); });
+      return out;
+    }
+    /* ==CX PURE END== */
+
+    var $c = function (id) { return document.getElementById(id); };
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function fmtDate(d) { return d ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear() : '—'; }
+    function money(n) { return n == null ? '—' : Number(n).toLocaleString('vi-VN') + ' đ'; }
+    function tr(n) { return (Number(n || 0) / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' tr'; }
+    function pct(v) { return v == null ? '—' : Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%'; }
+    function parseMoney(v) { var s = String(v == null ? '' : v).replace(/[^\d]/g, ''); return s ? Number(s) : 0; }
+    function vnToday() { var t = new Date(Date.now() + 7 * 3600000); return new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()); }
+    function curMonth() { return cxMNorm(vnToday()); }
+
+    /* ---------- dữ liệu: chuẩn hoá dòng deal của API ---------- */
+    function rowGetter(raw) {
+      var low = {};
+      Object.keys(raw).forEach(function (k) { low[k.trim().toLowerCase()] = raw[k]; });
+      return function (names) {
+        for (var i = 0; i < names.length; i++) {
+          var v = low[names[i]];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+        }
+        return '';
+      };
+    }
+    function normalize(raw) {
+      var g = rowGetter(raw);
+      var stop = g(['dừng triển khai']).toLowerCase();
+      var d = {
+        id: g(['deal id']),
+        company: g(['tên công ty', 'tên khách hàng']) || '—',
+        sysId: g(['system id']),
+        contract: g(['loại hợp đồng']),
+        received: cxParseDate(g(['ngày nhận deal', 'ngày nhận'])),
+        ttgl: g(['ttgl (ngày)', 'ttgl']),
+        glPlan: cxParseDate(g(['ngày go-live dự kiến', 'go-live dự kiến'])),
+        glActual: cxParseDate(g(['ngày go-live thực tế', 'go-live thực tế'])),
+        glExtend: cxParseDate(g(['ngày go-live gia hạn', 'go-live gia hạn'])),
+        glSource: g(['nguồn go-live']),
+        stopped: !!(stop && stop !== 'false'),
+        crMonth: cxMNorm(g(['tháng ghi nhận cr', 'tháng ghi nhận'])),
+        dtPhai: parseMoney(g(['dt phải go-live'])),
+        tierNum: (function (m) { return m ? +m[0] : null; })(g(['tier']).match(/\d+/)),
+        dg1: g(['ngày đánh giá t1']), dg4: g(['ngày đánh giá t4']),
+        years: {},
+      };
+      for (var n = 1; n <= 5; n++) {
+        var sfx = n === 1 ? '' : ' - năm ' + n;
+        d.years[n] = {};
+        ['T1', 'T4'].forEach(function (ky) {
+          var k = ky.toLowerCase();
+          d.years[n][ky] = {
+            a: g(['% active ' + k + sfx]), o: g(['% output ' + k + sfx]),
+            comMonth: n === 1 ? '' : g(['tháng nhận com ' + k + sfx]),
+          };
+        });
+      }
+      return d;
+    }
+
+    var st = { deals: null, byId: {}, syncedAt: null, career: null, calFilter: null, sim: {} };
+    function setDeals(rows) {
+      st.deals = rows.map(normalize).filter(function (d) { return d.id; });
+      st.byId = {};
+      st.deals.forEach(function (d) { st.byId[d.id] = d; });
+    }
+    // Ô vừa lưu thành công (POST rows / multiYearRows) → cập nhật bản local để lịch và banner
+    // không còn báo "thiếu số" khi chưa tải lại trang.
+    function applySaved(body) {
+      (body.rows || []).forEach(function (r) {
+        var d = st.byId[String(r.dealId)]; if (!d) return;
+        var y = d.years[1];
+        if (r.aT1 !== undefined) y.T1.a = r.aT1 == null ? '' : String(r.aT1);
+        if (r.oT1 !== undefined) y.T1.o = r.oT1 == null ? '' : String(r.oT1);
+        if (r.aT4 !== undefined) y.T4.a = r.aT4 == null ? '' : String(r.aT4);
+        if (r.oT4 !== undefined) y.T4.o = r.oT4 == null ? '' : String(r.oT4);
+        if (r.goLive !== undefined) d.glActual = cxParseDate(r.goLive);
+      });
+      (body.multiYearRows || []).forEach(function (r) {
+        var d = st.byId[String(r.dealId)], n = +r.year, ky = String(r.period || '').toUpperCase() === 'T4' ? 'T4' : 'T1';
+        if (!d || !d.years[n]) return;
+        if (r.active !== undefined) d.years[n][ky].a = r.active == null ? '' : String(r.active);
+        if (r.output !== undefined) d.years[n][ky].o = r.output == null ? '' : String(r.output);
+      });
+    }
+
+    var _fetchCx = window.fetch;
+    window.fetch = function (input, init) {
+      var p = _fetchCx.call(window, input, init);
+      try {
+        var url = typeof input === 'string' ? input : ((input && input.url) || '');
+        if (url.indexOf(CFG.API_URL) !== 0) return p;
+        var method = ((init && init.method) || 'GET').toUpperCase(), body = null;
+        if (method === 'POST') { try { body = JSON.parse((init && init.body) || '{}'); } catch (e) { body = null; } }
+        if (method === 'POST' && !body) return p;
+        if (method === 'GET' && url.indexOf('token=') === -1) return p;   // ?warm=1
+        p = p.then(function (res) {
+          try {
+            res.clone().json().then(function (d) {
+              if (!d || !d.ok) return;
+              if (method === 'GET' && d.deals) {
+                setDeals(d.deals);
+                st.syncedAt = d.syncedAt || null;
+                refreshAll();
+              } else if (body && body.action === 'careerGet') {
+                st.career = d;
+                st.sim = {};
+                cpSimSoon();
+              } else if (body && (body.rows || body.multiYearRows)) {
+                applySaved(body);
+                refreshAll();
+              }
+            }).catch(function () {});
+          } catch (e) {}
+          return res;
+        });
+      } catch (e) {}
+      return p;
+    };
+
+    function refreshAll() {
+      renderFresh();
+      renderReminders();
+      if (calOn) renderCal();
+      decorateRowsSoon();
+      cpSimSoon();
+    }
+
+    /* =========================================================
+       1a. DỮ LIỆU CRM CẬP NHẬT LÚC …
+       ========================================================= */
+    function renderFresh() {
+      var el = $c('dataFresh');
+      if (!el) return;
+      var t = st.syncedAt && String(st.syncedAt).match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+      if (!t) { el.hidden = true; return; }
+      var at = new Date(+t[3], +t[2] - 1, +t[1], +t[4], +t[5]);
+      var nowVn = new Date(Date.now() + 7 * 3600000), nowLocal = new Date(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate(), nowVn.getUTCHours(), nowVn.getUTCMinutes());
+      var hours = (nowLocal - at) / 3600000;
+      el.hidden = false;
+      el.textContent = 'CRM cập nhật ' + t[4] + ':' + t[5] + ' ' + t[1] + '/' + t[2];
+      el.classList.toggle('data-fresh-old', hours > 30);
+      el.title = 'Lượt đồng bộ dữ liệu CRM gần nhất: ' + st.syncedAt + ' (giờ VN). Deal mới tạo hoặc vừa sửa trên CRM sau giờ này ' +
+        'sẽ lên CS Console ở lượt đồng bộ sau.' + (hours > 30 ? ' Đã hơn 30 giờ chưa đồng bộ — báo admin nếu thấy thiếu deal.' : '');
+    }
+
+    /* =========================================================
+       1b. "VÌ SAO?" — giải thích CR từng deal + bóc tách thẻ Tử / Mẫu số
+       ========================================================= */
+    var CONTRACTS_OK = 'New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày, Renew triển khai lại';
+    function reasonText(d, m, s) {
+      var start = cxStart(d), g = d.glActual ? cxMNorm(d.glActual) : '', gd = fmtDate(d.glActual), v = money(d.dtPhai);
+      switch (s.code) {
+        case 'stopped': return 'Deal đang ở trạng thái <b>Dừng triển khai</b> → không tính vào CR tháng nào.';
+        case 'contract': return 'Loại hợp đồng <b>' + esc(d.contract || 'trống') + '</b> không thuộc nhóm tính CR (chỉ tính ' + CONTRACTS_OK + ').';
+        case 'noMonth': return 'Deal chưa có <b>tháng ghi nhận CR</b> (thiếu ngày go-live dự kiến trên CRM) → chưa tính.';
+        case 'notYet': return g && cxMCmp(g, start) < 0
+          ? 'Deal go-live ' + gd + ' (tháng ' + g + ') → tháng ' + m + ' chưa tính.'
+          : 'Hạn go-live là tháng <b>' + start + '</b> → tháng ' + m + ' chưa tới hạn, chưa tính.';
+        case 'early': return 'Go-live <b>' + gd + '</b> sớm hơn tháng hạn ' + start + ' → chỉ cộng <b>' + v + '</b> vào <b>tử số</b> tháng ' + g +
+          ', <b>không vào mẫu số</b> tháng nào (quy tắc go-live sớm, 16/10/2026). Vì vậy CRM có thể đếm deal này ở tháng hạn còn CS Console thì không.';
+        case 'doneEarly': return 'Deal đã go-live sớm ở tháng ' + g + ' (trước hạn ' + start + ') → chỉ tính tử số tháng ' + g + '; tháng ' + m + ' không tính nữa, kể cả tháng hạn.';
+        case 'onTime': return 'Go-live <b>' + gd + '</b> đúng tháng hạn ' + start + ' → vào <b>cả tử và mẫu số</b> tháng ' + m + ' (' + v + ').';
+        case 'late': return 'Go-live trễ <b>' + gd + '</b> (hạn tháng ' + start + ') → tháng ' + m + ' vào <b>cả tử và mẫu số</b>; ' +
+          (cxMAdd(g, -1) === start ? 'tháng ' + start : 'các tháng ' + start + ' → ' + cxMAdd(g, -1)) + ' deal chỉ nằm ở mẫu số.';
+        case 'lateWaiting': return 'Hạn go-live tháng ' + start + ', go-live thực tế ' + gd + ' (tháng ' + g + ') → tháng ' + m + ' deal còn trễ: nằm ở <b>mẫu số</b>, chưa vào tử số.';
+        case 'done': return 'Deal đã go-live tháng ' + g + ' và được tính ở tháng đó → tháng ' + m + ' không tính nữa.';
+        case 'dueNow': return 'Hạn go-live tháng <b>' + m + '</b>, chưa có ngày go-live thực tế → đang nằm ở <b>mẫu số</b> (' + v + '). Go-live trong tháng ' + m + ' sẽ cộng ' + v + ' vào tử số.';
+        case 'overdue': return 'Quá hạn từ tháng ' + start + ', chưa go-live → nằm ở <b>mẫu số mọi tháng</b> tới khi go-live (tháng ' + m + ' cũng vậy).';
+      }
+      return '';
+    }
+    var VERDICT = {
+      both: ['Tử + Mẫu số', 'cp-chip-ok'], den: ['Chỉ mẫu số', 'cp-chip-run'], num: ['Chỉ tử số', 'cp-chip-ok'], none: ['Không tính', 'cp-chip-neutral'],
+    };
+    function verdictOf(s) { return s.den && s.num ? 'both' : s.den ? 'den' : s.num ? 'num' : 'none'; }
+    function fcMonth() { var sel = $c('fcFilterMonth'); return (sel && sel.value) || curMonth(); }
+
+    var modal = $c('cxModal'), mTitle = $c('cxModalTitle'), mBody = $c('cxModalBody');
+    function openModal(title, html) {
+      if (!modal) return;
+      mTitle.textContent = title; mBody.innerHTML = html;
+      modal.classList.add('open');
+    }
+    function closeModal() { if (modal) modal.classList.remove('open'); }
+    if (modal) {
+      $c('cxModalClose').addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+    }
+
+    function evalLine(d, ky) {
+      var ev = cxEvalEvents([d], vnToday()).filter(function (e) { return e.ky === ky && e.year === 1; })[0];
+      if (!ev) return '<dt>Ngày đánh giá ' + ky + '</dt><dd>—</dd>';
+      return '<dt>Ngày đánh giá ' + ky + '</dt><dd>' + fmtDate(ev.date) + ' · ' + evStatusHtml(ev) + '</dd>';
+    }
+    function openDealWhy(id) {
+      var d = st.byId[id];
+      if (!d) return;
+      var m = fcMonth(), s = cxCrState(d, m), vk = verdictOf(s), start = cxStart(d);
+      // dòng thời gian: từ tháng sớm nhất có liên quan tới tháng muộn nhất (tối đa 12 tháng)
+      var g = d.glActual ? cxMNorm(d.glActual) : '';
+      var from = start || m, to = m;
+      if (g && cxMCmp(g, from) < 0) from = g;
+      [g, start, curMonth()].forEach(function (x) { if (x && cxMCmp(x, to) > 0) to = x; });
+      if (cxMCmp(m, from) < 0) from = m;
+      var months = [], x = from;
+      while (cxMCmp(x, to) <= 0 && months.length < 12) { months.push(x); x = cxMAdd(x, 1); }
+      var tl = months.map(function (mm) {
+        var t = cxCrState(d, mm), k = verdictOf(t);
+        return '<div class="cx-tl-cell cx-tl-' + k + (mm === m ? ' cx-tl-cur' : '') + '" title="' + esc(VERDICT[k][0]) + '">' +
+          '<span>' + mm + '</span><b>' + (k === 'both' ? 'Tử+Mẫu' : k === 'den' ? 'Mẫu' : k === 'num' ? 'Tử' : '—') + '</b></div>';
+      }).join('');
+      var srcNote = d.glActual ? (d.glSource === 'Đã kéo' ? ' <span class="cx-dim">(CRM — đã kéo)</span>' : ' <span class="cx-dim">(CS nhập)</span>') : '';
+      var html =
+        '<div class="cx-deal-head"><b>' + esc(d.company) + '</b><div class="cx-dim">' + (d.sysId ? 'Sys ' + esc(d.sysId) + ' · ' : '') + 'Deal ' + esc(d.id) + '</div></div>' +
+        '<div class="cx-verdict"><div>CR tháng <b>' + m + '</b> <span class="cp-chip ' + VERDICT[vk][1] + '">' + VERDICT[vk][0] + '</span></div>' +
+          '<p>' + reasonText(d, m, s) + '</p>' +
+          (d.dtPhai === 0 && s.code !== 'contract' && s.code !== 'stopped' ? '<p class="cx-warn">DT phải go-live của deal này = 0 đ nên dù được tính cũng không làm đổi số tử / mẫu. Nếu thấy sai, kiểm tra Giá trị phần mềm / cơ chế com trên CRM.</p>' : '') +
+        '</div>' +
+        (months.length > 1 && s.code !== 'contract' && s.code !== 'stopped' && s.code !== 'noMonth'
+          ? '<div class="cx-sec-title">Theo từng tháng</div><div class="cx-tl">' + tl + '</div>' : '') +
+        '<div class="cx-sec-title">Số liệu dùng để tính</div>' +
+        '<dl class="cx-dl">' +
+          '<dt>Loại hợp đồng</dt><dd>' + esc(d.contract || '—') + (cxContractCounted(d.contract) ? ' <span class="cx-ok">✓ tính CR</span>' : ' <span class="cx-bad">✗ không tính CR</span>') + '</dd>' +
+          '<dt>Ngày nhận deal</dt><dd>' + fmtDate(d.received) + (d.ttgl ? ' · TTGL ' + esc(d.ttgl) + ' ngày' : '') + '</dd>' +
+          '<dt>Go-live dự kiến</dt><dd>' + fmtDate(d.glPlan) + '</dd>' +
+          (d.glExtend ? '<dt>Go-live gia hạn</dt><dd>' + fmtDate(d.glExtend) + ' <span class="cx-dim">→ tháng hạn tính theo ngày gia hạn</span></dd>' : '') +
+          '<dt>Tháng hạn (tính CR)</dt><dd>' + (start || '—') + '</dd>' +
+          '<dt>Go-live thực tế</dt><dd>' + fmtDate(d.glActual) + srcNote + '</dd>' +
+          '<dt>DT phải go-live</dt><dd>' + money(d.dtPhai) + '</dd>' +
+          (d.stopped ? '<dt>Dừng triển khai</dt><dd>Có</dd>' : '') +
+          evalLine(d, 'T1') + evalLine(d, 'T4') +
+        '</dl>' +
+        '<details class="cx-rules"><summary>Quy tắc tính CR</summary><ul>' +
+          '<li>Chỉ tính loại HĐ: ' + CONTRACTS_OK + '. Deal Dừng triển khai không tính.</li>' +
+          '<li>Deal nằm ở <b>mẫu số</b> từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế; tháng go-live tính cả <b>tử số</b>.</li>' +
+          '<li>Go-live <b>sớm</b> (trước tháng hạn): chỉ cộng tử số ở tháng go-live, không vào mẫu số tháng nào.</li>' +
+          '<li>Số tính theo dữ liệu <b>đã lưu</b>; ngày go-live đang gõ dở trên bảng chưa được tính ở đây.</li>' +
+        '</ul></details>' +
+        '<div class="cx-actions"><span class="cx-dim">Vẫn thấy sai?</span> <button type="button" class="ad-btn" id="cxReport">Gửi feedback kèm thông tin deal</button></div>';
+      openModal('Vì sao deal này được tính như vậy?', html);
+      var rep = $c('cxReport');
+      if (rep) rep.addEventListener('click', function () {
+        reportFeedback('CR deal ' + d.id + ' tháng ' + m + ' có vẻ chưa đúng',
+          'Deal ' + d.id + ' (' + d.company + ') — CR tháng ' + m + ': CS Console tính "' + VERDICT[vk][0] + '".\n' +
+          'Lý do console đưa ra: ' + reasonText(d, m, s).replace(/<[^>]+>/g, '') + '\n\nTheo em đúng ra phải là: ');
+      });
+    }
+    // Mở form Product Feedback (mục 12) và điền sẵn tiêu đề / mô tả nếu ô còn trống
+    function reportFeedback(title, desc) {
+      closeModal();
+      var btn = $c('pfBtn');
+      if (!btn) return;
+      btn.click();
+      var tries = 0;
+      (function fill() {
+        var t = $c('pfTitle'), ds = $c('pfDesc');
+        if (!t || !ds) { if (++tries < 20) setTimeout(fill, 50); return; }
+        if (!t.value) t.value = title;
+        if (!ds.value) ds.value = desc;
+        ds.focus();
+      })();
+    }
+
+    // Bóc tách thẻ Tử / Mẫu số CR tháng đang chọn
+    function openCrBreakdown() {
+      if (!st.deals) return;
+      var m = fcMonth();
+      var groups = { both: [], den: [], num: [], none: [] };
+      st.deals.forEach(function (d) {
+        var s = cxCrState(d, m);
+        if (s.code === 'notYet' || s.code === 'done' || s.code === 'doneEarly') return; // không liên quan tháng này
+        groups[verdictOf(s)].push({ d: d, s: s });
+      });
+      var sum = function (list) { return list.reduce(function (a, x) { return a + (x.d.dtPhai || 0); }, 0); };
+      var phai = sum(groups.both) + sum(groups.den), dat = sum(groups.both) + sum(groups.num);
+      var row = function (x) {
+        return '<li><button type="button" class="cx-link" data-cx-why="' + esc(x.d.id) + '">' + esc(x.d.company) + '</button>' +
+          ' <span class="cx-dim">Deal ' + esc(x.d.id) + ' · ' + tr(x.d.dtPhai) + '</span><div class="cx-why-txt">' + reasonText(x.d, m, x.s) + '</div></li>';
+      };
+      var sec = function (k, title, hint) {
+        var list = groups[k];
+        if (!list.length) return '';
+        return '<details class="cx-grp"' + (k === 'none' ? '' : ' open') + '><summary><span class="cp-chip ' + VERDICT[k][1] + '">' + VERDICT[k][0] + '</span> ' +
+          title + ' · ' + list.length + ' deal' + (k === 'none' ? '' : ' · ' + tr(sum(list))) + '</summary>' +
+          (hint ? '<p class="cx-dim">' + hint + '</p>' : '') + '<ul class="cx-list">' + list.map(row).join('') + '</ul></details>';
+      };
+      var html =
+        '<div class="cx-sum"><div><span>Tử số</span><b>' + money(dat) + '</b></div><div><span>Mẫu số</span><b>' + money(phai) + '</b></div>' +
+          '<div><span>CR tháng ' + m + '</span><b>' + (phai > 0 ? pct(Math.round(dat / phai * 1000) / 10) : '—') + '</b></div></div>' +
+        '<p class="cx-dim">Tính theo dữ liệu đã lưu. Bấm tên deal để xem chi tiết lý do.</p>' +
+        sec('both', 'go-live trong tháng', '') +
+        sec('den', 'chưa / trễ go-live', 'Các deal này đang kéo CR xuống: go-live trong tháng ' + m + ' sẽ chuyển sang Tử + Mẫu.') +
+        sec('num', 'go-live sớm', 'Go-live trước tháng hạn → chỉ cộng tử số, không vào mẫu số.') +
+        sec('none', 'không tính (loại HĐ / dừng / thiếu tháng CR)', '');
+      openModal('Vì sao CR tháng ' + m + ' ra số này?', html);
+      mBody.querySelectorAll('[data-cx-why]').forEach(function (b) {
+        b.addEventListener('click', function () { openDealWhy(b.getAttribute('data-cx-why')); });
+      });
+    }
+    ['fcCrNum', 'fcCrDen'].forEach(function (id) {
+      var v = $c(id), head = v && v.parentElement && v.parentElement.querySelector('.fc-press-head');
+      if (!head) return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'cx-why cx-why-cr'; b.textContent = '?';
+      b.setAttribute('aria-label', 'Vì sao CR tháng đang chọn ra số này?');
+      b.title = 'Giải thích deal nào nằm ở tử / mẫu số CR tháng đang chọn';
+      b.addEventListener('click', function (e) { e.stopPropagation(); openCrBreakdown(); });
+      head.insertBefore(b, head.lastElementChild);
+    });
+
+    // Nút ? cạnh tên deal trên bảng Forecast Năm 1 (app.js vẽ lại liên tục → gắn lại khi thiếu)
+    var fcTb = $c('fcTbody');
+    function decorateRows() {
+      if (!fcTb || !st.deals) return;
+      fcTb.querySelectorAll('tr[id^="fc-row-"]').forEach(function (trEl) {
+        var nameRow = trEl.querySelector('.deal-name-row');
+        if (!nameRow || nameRow.querySelector('.cx-why')) return;
+        var id = trEl.id.slice(7);
+        if (!st.byId[id]) return;
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'cx-why'; b.textContent = '?';
+        b.title = 'Vì sao deal này được / không được tính CR tháng đang chọn?';
+        b.setAttribute('aria-label', b.title);
+        b.addEventListener('click', function (e) { e.stopPropagation(); openDealWhy(id); });
+        nameRow.appendChild(b);
+      });
+    }
+    var decPending = false;
+    function decorateRowsSoon() {
+      if (decPending) return;
+      decPending = true;
+      setTimeout(function () { decPending = false; decorateRows(); }, 0);
+    }
+    if (fcTb) new MutationObserver(decorateRowsSoon).observe(fcTb, { childList: true });
+
+    /* =========================================================
+       2. LỊCH ĐÁNH GIÁ + BANNER NHẮC SẮP KHOÁ
+       ========================================================= */
+    var EV_ST = {
+      soon: ['Sắp khoá', 'cp-chip-bad'], todo: ['Chưa nhập', 'cp-chip-run'], ready: ['Đã đủ số', 'cp-chip-ok'],
+      closed: ['Đã chốt', 'cp-chip-neutral'], lockedMissing: ['Đã khoá · thiếu số', 'cp-chip-bad'],
+    };
+    function daysText(ev) {
+      if (ev.days < 0) return 'khoá từ ' + fmtDate(new Date(ev.date.getTime() + 86400000));
+      if (ev.days === 0) return 'hạn chót hôm nay';
+      return 'còn ' + ev.days + ' ngày';
+    }
+    function evStatusHtml(ev) {
+      return '<span class="cp-chip ' + EV_ST[ev.status][1] + '">' + EV_ST[ev.status][0] + '</span> <span class="cx-dim">' + daysText(ev) + '</span>';
+    }
+    function events() { return st.deals ? cxEvalEvents(st.deals, vnToday()) : []; }
+
+    var calBlock = $c('cxCalBlock');
+    var calOn = false;
+    var CAL_FILTERS = [
+      ['soon', 'Sắp khoá ≤ 7 ngày', function (e) { return e.status === 'soon'; }],
+      ['todo', 'Chưa nhập', function (e) { return e.status === 'soon' || e.status === 'todo'; }],
+      ['upcoming', 'Sắp tới', function (e) { return !e.locked; }],
+      ['missed', 'Đã khoá · thiếu số', function (e) { return e.status === 'lockedMissing' && e.days >= -120; }],
+      ['all', 'Tất cả', function () { return true; }],
+    ];
+    function renderCal() {
+      if (!calBlock) return;
+      if (!st.deals) { calBlock.innerHTML = '<div class="table-card"><div class="pf-loading">Đang tải dữ liệu…</div></div>'; return; }
+      var evs = events();
+      var counts = {};
+      CAL_FILTERS.forEach(function (f) { counts[f[0]] = evs.filter(f[2]).length; });
+      if (!st.calFilter) st.calFilter = counts.soon ? 'soon' : counts.todo ? 'todo' : 'upcoming';
+      var f = CAL_FILTERS.filter(function (x) { return x[0] === st.calFilter; })[0] || CAL_FILTERS[2];
+      var list = evs.filter(f[2]);
+      if (f[0] === 'missed') list.reverse();
+      var lastMonth = '';
+      var rows = list.map(function (e) {
+        var mm = cxMNorm(e.date), sep = '';
+        if (mm !== lastMonth) { lastMonth = mm; sep = '<tr class="cx-cal-month"><td colspan="7">Tháng ' + mm + '</td></tr>'; }
+        var cell = function (v, miss, need) {
+          if (!need) return '<span class="cx-dim" title="Tier 4 chỉ cần %Output">—</span>';
+          return miss ? '<span class="cx-miss">trống</span>' : esc(v) + '%';
+        };
+        return sep + '<tr class="cx-cal-row cx-st-' + e.status + '">' +
+          '<td>' + fmtDate(e.date) + '</td>' +
+          '<td><div class="deal-name">' + esc(e.company) + '</div><div class="deal-id">' + (e.sysId ? 'Sys ' + esc(e.sysId) + ' · ' : '') + 'Deal ' + esc(e.id) + '</div></td>' +
+          '<td>Năm ' + e.year + ' · ' + e.ky + '</td>' +
+          '<td class="num">' + cell(e.a, e.missA, e.needA) + '</td>' +
+          '<td class="num">' + cell(e.o, e.missO, true) + '</td>' +
+          '<td>' + evStatusHtml(e) + '</td>' +
+          '<td>' + (e.locked ? '' : '<button type="button" class="ad-btn cx-go" data-id="' + esc(e.id) + '" data-year="' + e.year + '">' + (e.status === 'ready' ? 'Xem' : 'Nhập') + ' →</button>') + '</td>' +
+        '</tr>';
+      }).join('');
+      calBlock.innerHTML =
+        '<div class="fc-block-body">' +
+        '<div class="table-card">' +
+          '<div class="table-head"><div class="chart-title">Lịch đánh giá %Active / %Output</div>' +
+            '<div class="table-hint">Năm 1–5 · ô tự khoá khi qua ngày đánh giá (giờ VN)</div></div>' +
+          '<p class="cp-note">Mỗi kỳ T1/T4 khoá nhập sau ngày đánh giá: ngày trên CRM, CRM trống thì = go-live + 1 / + 4 tháng; Năm N = Năm 1 + (N−1) năm. ' +
+            'Trước ngày đó số bạn nhập được ưu tiên; qua ngày thì chốt số CRM. Tier 4 chỉ cần %Output.</p>' +
+          '<div class="req-chips cx-cal-chips">' + CAL_FILTERS.map(function (x) {
+            return '<button type="button" class="chip-btn' + (x[0] === f[0] ? ' active' : '') + '" data-cxf="' + x[0] + '">' + x[1] + ' · ' + counts[x[0]] + '</button>';
+          }).join('') + '</div>' +
+          (list.length
+            ? '<div class="table-scroll"><table class="deal-table cx-cal-table"><thead><tr><th>Ngày đánh giá</th><th>Deal</th><th>Kỳ</th>' +
+              '<th class="num">%Active</th><th class="num">%Output</th><th>Trạng thái</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+            : '<div class="empty">' + (f[0] === 'soon' ? 'Không có kỳ nào sắp khoá mà còn thiếu số ✓' : 'Không có kỳ đánh giá nào trong mục này.') + '</div>') +
+        '</div></div>';
+      calBlock.querySelectorAll('[data-cxf]').forEach(function (b) {
+        b.addEventListener('click', function () { st.calFilter = b.getAttribute('data-cxf'); renderCal(); });
+      });
+      calBlock.querySelectorAll('.cx-go').forEach(function (b) {
+        b.addEventListener('click', function () { goToDeal(b.getAttribute('data-id'), +b.getAttribute('data-year')); });
+      });
+    }
+
+    var kpiStrip = document.querySelector('.fc-kpis-10');
+    var switching = false;
+    function calLayout() {
+      ['fcYear1Block', 'fcMultiBlock', 'fcRequestBlock'].forEach(function (id) { var el = $c(id); if (el) el.style.display = 'none'; });
+      if (kpiStrip) kpiStrip.style.display = 'none';
+      document.querySelectorAll('.fc-view-btn, .fc-req-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.cx-cal-btn').forEach(function (b) { b.classList.add('active'); });
+      if (calBlock) calBlock.style.display = '';
+    }
+    function showCal() {
+      var fcPanel = $c('panel-forecast');
+      if (fcPanel && getComputedStyle(fcPanel).display === 'none') {
+        var fcTab = document.querySelector('.tab[data-tab="forecast"]');
+        if (fcTab) {
+          switching = true; fcTab.click();
+          // hashchange do chuyển tab (màn Request mục 11 hiện lại dải KPI) chạy trước lượt này → vẽ lại bố cục lịch
+          setTimeout(function () { switching = false; if (calOn) calLayout(); }, 0);
+        }
+      }
+      calOn = true;
+      calLayout();
+      renderCal();
+    }
+    function hideCal() {
+      if (switching || !calOn) return;
+      calOn = false;
+      if (calBlock) calBlock.style.display = 'none';
+      if (kpiStrip) kpiStrip.style.display = '';
+      document.querySelectorAll('.cx-cal-btn').forEach(function (b) { b.classList.remove('active'); });
+    }
+    document.querySelectorAll('.cx-cal-btn').forEach(function (b) { b.addEventListener('click', showCal); });
+    // Năm 1 / Năm 2++ (app.js tự hiện block của nó) hoặc Request (mục 11 tự hiện block của nó) → ẩn lịch
+    document.querySelectorAll('.fc-view-btn').forEach(function (b) { b.addEventListener('click', hideCal); });
+    document.querySelectorAll('.fc-req-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!calOn) return;
+        calOn = false;
+        if (calBlock) calBlock.style.display = 'none';
+        document.querySelectorAll('.cx-cal-btn').forEach(function (x) { x.classList.remove('active'); });
+      });
+    });
+    window.addEventListener('hashchange', hideCal);
+
+    // "Nhập →": về đúng màn Năm 1 / Năm 2++ rồi lọc bảng theo Deal ID qua ô tìm kiếm của app.js
+    // (proxy-input: gán value + bắn 'input' để app.js tự lọc như khi người dùng gõ).
+    function goToDeal(id, year) {
+      hideCal();
+      var fcTab = document.querySelector('.tab[data-tab="forecast"]');
+      if (fcTab && !fcTab.classList.contains('active')) fcTab.click();
+      var vb = document.querySelector('.nav-sub .fc-view-btn[data-view="' + (year > 1 ? 'multi' : 'y1') + '"]');
+      if (vb) vb.click();
+      setTimeout(function () {
+        if (year === 1) { var chip = document.querySelector('.fc-chip[data-fck="all"]'); if (chip && !chip.classList.contains('active')) chip.click(); }
+        var s = $c('fcSearch');
+        if (s) { s.value = id; s.dispatchEvent(new Event('input', { bubbles: true })); }
+        setTimeout(function () {
+          var row = year === 1 ? $c('fc-row-' + id) : document.querySelector('#mcTbody tr');
+          if (!row) return;
+          if (row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          row.classList.add('fc-flash');
+          setTimeout(function () { row.classList.remove('fc-flash'); }, 2200);
+        }, 60);
+      }, 0);
+    }
+
+    // Banner nhắc ở đầu Overview + Forecast; bấm ✕ thì ẩn tới hết ngày (theo trình duyệt)
+    var LS_REMIND = 'cs_tool_cx_remind_hide';
+    function renderReminders() {
+      var soon = events().filter(function (e) { return e.status === 'soon'; });
+      var cnt = soon.length;
+      document.querySelectorAll('.cx-cal-count').forEach(function (el) { el.textContent = cnt; el.hidden = !cnt; });
+      var hidden = false;
+      try { hidden = localStorage.getItem(LS_REMIND) === fmtDate(vnToday()) + '|' + cnt; } catch (e) {}
+      ['panel-overview', 'panel-forecast'].forEach(function (pid) {
+        var body = document.querySelector('#' + pid + ' > .tab-panel-body');
+        if (!body) return;
+        var el = body.querySelector(':scope > .cx-remind');
+        if (!cnt || hidden) { if (el) el.remove(); return; }
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'cx-remind';
+          el.setAttribute('role', 'status');
+          body.insertBefore(el, body.firstChild);
+        }
+        var first = soon[0];
+        el.innerHTML = '<span class="cx-remind-ico" aria-hidden="true">⏰</span><div><b>' + cnt + ' kỳ đánh giá sắp khoá</b> trong 7 ngày tới còn thiếu %Active / %Output' +
+          ' — gần nhất: ' + esc(first.company) + ' (Năm ' + first.year + ' · ' + first.ky + ', ' + daysText(first) + ').</div>' +
+          '<button type="button" class="ad-btn ad-primary cx-remind-go">Xem lịch</button>' +
+          '<button type="button" class="modal-x cx-remind-x" aria-label="Ẩn tới mai" title="Ẩn tới mai">✕</button>';
+        el.querySelector('.cx-remind-go').addEventListener('click', function () { st.calFilter = 'soon'; showCal(); });
+        el.querySelector('.cx-remind-x').addEventListener('click', function () {
+          try { localStorage.setItem(LS_REMIND, fmtDate(vnToday()) + '|' + cnt); } catch (e) {}
+          renderReminders();
+        });
+      });
+    }
+
+    /* =========================================================
+       3. MÔ PHỎNG CAREER PATH — "nếu kéo go-live các deal này trong tháng"
+       ========================================================= */
+    function quarterMonths(q) {
+      var m = String(q || '').match(/^Q([1-4])\/(\d{4})$/);
+      if (!m) return [];
+      var first = String((+m[1] - 1) * 3 + 1).padStart(2, '0') + '/' + m[2];
+      return [first, cxMAdd(first, 1), cxMAdd(first, 2)];
+    }
+    var cpView = $c('cpView');
+    function simCandidates(now, qEnd) {
+      var den = [], early = [];
+      st.deals.forEach(function (d) {
+        if (d.glActual || d.stopped || !cxContractCounted(d.contract)) return;
+        var s = cxCrState(d, now), start = cxStart(d);
+        if (s.den) den.push(d);
+        else if (s.code === 'notYet' && start && cxMCmp(start, qEnd) <= 0) early.push(d);
+      });
+      var by = function (a, b) { return (b.dtPhai || 0) - (a.dtPhai || 0); };
+      return { den: den.sort(by), early: early.sort(by) };
+    }
+    function simResult(c, months) {
+      var today = vnToday(), sim = {};
+      Object.keys(st.sim).forEach(function (id) { if (st.sim[id]) sim[id] = today; });
+      var base = cxCrSum(st.deals, months), after = cxCrSum(st.deals, months, sim);
+      var phai = (c.actuals.cr.phai || 0) + after.phai - base.phai, dat = (c.actuals.cr.dat || 0) + after.dat - base.dat;
+      return { phai: phai, dat: dat, v: phai > 0 ? Math.round(dat / phai * 10000) / 100 : null, n: Object.keys(sim).length };
+    }
+    function renderSim() {
+      if (!cpView) return;
+      var old = $c('cxSim');
+      var c = st.career;
+      var months = c ? quarterMonths(c.quarter) : [];
+      var ok = c && c.eligible && st.deals && c.actuals && c.actuals.cr && c.quarter === c.currentQuarter && months.indexOf(c.now) !== -1;
+      if (!ok) { if (old) old.remove(); return; }
+      var anchor = cpView.querySelector('.cp-kpis');
+      if (!anchor) { if (old) old.remove(); return; }
+      var upTo = months.filter(function (m) { return cxMCmp(m, c.now) <= 0; });
+      var cand = simCandidates(c.now, months[2]);
+      var r = simResult(c, upTo);
+      var commit = c.commit && c.commit.cr != null && c.commit.cr !== '' ? Number(c.commit.cr) : null;
+      var cur = c.actuals.cr.v;
+      var need = commit != null ? Math.max(0, commit / 100 * (c.actuals.cr.phai || 0) - (c.actuals.cr.dat || 0)) : null;
+      var item = function (d, kind) {
+        var on = !!st.sim[d.id];
+        return '<label class="cx-sim-item' + (on ? ' on' : '') + '"><input type="checkbox" data-sim="' + esc(d.id) + '"' + (on ? ' checked' : '') + '>' +
+          '<span class="cx-sim-name">' + esc(d.company) + '<span class="cx-dim">Deal ' + esc(d.id) + ' · hạn ' + esc(cxStart(d)) + (kind === 'early' ? ' · kéo sớm = chỉ cộng tử' : '') + '</span></span>' +
+          '<b>' + tr(d.dtPhai) + '</b></label>';
+      };
+      var met = commit != null && r.v != null && r.v >= commit;
+      var html =
+        '<div class="table-head"><div class="chart-title">Mô phỏng: nếu go-live trong tháng ' + esc(c.now) + '</div>' +
+          '<div class="table-hint">Chỉ để tính thử — không lưu gì</div></div>' +
+        '<div class="cx-sim-top">' +
+          '<div><span>CR quý hiện tại</span><b>' + pct(cur) + '</b></div>' +
+          '<div class="cx-sim-arrow">→</div>' +
+          '<div><span>Nếu go-live ' + r.n + ' deal đã chọn</span><b class="' + (commit == null ? '' : met ? 'cx-ok' : 'cx-bad') + '">' + pct(r.v) + '</b></div>' +
+          (commit != null ? '<div><span>Commit CR</span><b>' + pct(commit) + '</b></div>' : '') +
+        '</div>' +
+        (commit != null
+          ? '<p class="cp-note">' + (cur != null && cur >= commit ? 'CR quý đã chạm commit ✓ — giữ nhịp go-live các deal tới hạn.'
+            : 'Còn thiếu khoảng <b>' + tr(need) + '</b> DT go-live (từ các deal đang nằm ở mẫu số) để chạm commit ' + pct(commit) + '.') +
+            ' <button type="button" class="ad-btn" id="cxSimAuto">Chọn gợi ý</button> <button type="button" class="ad-btn" id="cxSimClear">Bỏ chọn</button></p>'
+          : '<p class="cp-note">Chưa có commit CR cho quý này — mô phỏng chỉ so với CR hiện tại. <button type="button" class="ad-btn" id="cxSimClear">Bỏ chọn</button></p>') +
+        (cand.den.length ? '<div class="cx-sec-title">Đang nằm ở mẫu số (tới hạn / trễ, chưa go-live) · ' + cand.den.length + '</div><div class="cx-sim-list">' +
+          cand.den.map(function (d) { return item(d, 'den'); }).join('') + '</div>' : '') +
+        (cand.early.length ? '<div class="cx-sec-title">Hạn trong các tháng sau của quý · ' + cand.early.length + '</div><div class="cx-sim-list">' +
+          cand.early.map(function (d) { return item(d, 'early'); }).join('') + '</div>' : '') +
+        (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live trong quý.</div>' : '') +
+        '<p class="cx-dim">Giả sử deal được tick go-live hôm nay. Số thực tế quý lấy từ máy chủ, phần chênh tính theo cùng quy tắc CR (tới tháng ' + esc(c.now) + ').</p>';
+      var card = old;
+      if (!card) {
+        card = document.createElement('div');
+        card.id = 'cxSim'; card.className = 'table-card cx-sim';
+      }
+      if (card.previousElementSibling !== anchor) anchor.parentNode.insertBefore(card, anchor.nextSibling);
+      card.innerHTML = html;
+      card.querySelectorAll('[data-sim]').forEach(function (b) {
+        b.addEventListener('change', function () { st.sim[b.getAttribute('data-sim')] = b.checked; renderSim(); });
+      });
+      var auto = $c('cxSimAuto');
+      if (auto) auto.addEventListener('click', function () {
+        // tham lam: deal lớn nhất trước (mẫu số trước, rồi kéo sớm) cho tới khi chạm commit
+        st.sim = {};
+        var pool = cand.den.concat(cand.early);
+        for (var i = 0; i < pool.length; i++) {
+          if (simResult(c, upTo).v >= commit) break;
+          st.sim[pool[i].id] = true;
+        }
+        renderSim();
+      });
+      var clr = $c('cxSimClear');
+      if (clr) clr.addEventListener('click', function () { st.sim = {}; renderSim(); });
+    }
+    var simPending = false;
+    function cpSimSoon() {
+      if (simPending) return;
+      simPending = true;
+      setTimeout(function () { simPending = false; renderSim(); }, 0);
+    }
+    // Career path vẽ lại cả #cpView (innerHTML) → chèn lại thẻ mô phỏng khi nó biến mất
+    if (cpView) new MutationObserver(function () { if (!$c('cxSim')) cpSimSoon(); }).observe(cpView, { childList: true });
+
+    window.csAssist = { crState: cxCrState, crSum: cxCrSum, evalEvents: cxEvalEvents, openDealWhy: openDealWhy, openCrBreakdown: openCrBreakdown, showCal: showCal };
   })();
 })();

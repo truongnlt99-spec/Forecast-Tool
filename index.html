@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -198,6 +198,7 @@
             <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
             <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
             <button type="button" class="fc-req-btn">Request</button>
+            <button type="button" class="cx-cal-btn">Lịch đánh giá<span class="cx-cal-count" hidden></span></button>
           </div></div></div>
 
           <div class="nav-group-fly">
@@ -205,6 +206,7 @@
             <button type="button" class="fc-view-btn active" data-view="y1">Năm 1</button>
             <button type="button" class="fc-view-btn" data-view="multi">Năm 2++</button>
             <button type="button" class="fc-req-btn">Request</button>
+            <button type="button" class="cx-cal-btn">Lịch đánh giá<span class="cx-cal-count" hidden></span></button>
           </div>
         </div>
 
@@ -255,6 +257,8 @@
         <div class="topbar-brand">
           <h1 id="pageTitle">Overview</h1>
           <span class="topbar-mark" id="pageSub">Sức khỏe portfolio</span>
+          <!-- Giờ đồng bộ CRM gần nhất (ui.js mục TRỢ LÝ CS, field syncedAt của API) -->
+          <span class="data-fresh" id="dataFresh" hidden></span>
         </div>
 
         <!-- Toggle Năm 1 / Năm 2++ của Forecast KHÔNG còn đặt trên header nữa —
@@ -625,6 +629,9 @@
           </div>
           </div>
 
+          <!-- Màn LỊCH ĐÁNH GIÁ — ui.js (mục TRỢ LÝ CS) điều khiển 100%, mở bằng nút .cx-cal-btn -->
+          <div id="cxCalBlock" style="display:none;"></div>
+
         </div>
         </section>
 
@@ -807,6 +814,19 @@
   </div>
 
   <!-- =====================================================
+       MODAL: VÌ SAO DEAL ĐƯỢC TÍNH CR? (ui.js mục TRỢ LÝ CS điều khiển 100%)
+       ===================================================== -->
+  <div class="modal-overlay" id="cxModal">
+    <div class="modal-panel cx-panel">
+      <div class="modal-head">
+        <h3 id="cxModalTitle">Vì sao?</h3>
+        <button class="modal-x" id="cxModalClose" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="cxModalBody"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================
        MODAL: KẾT NỐI CLAUDE (MCP) + QUẢN TRỊ (ui.js điều khiển 100%)
        ===================================================== -->
   <div class="modal-overlay" id="claudeModal">
@@ -921,7 +941,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=50"></script>
+  <script src="ui.js?v=51"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=13"></script>
 
