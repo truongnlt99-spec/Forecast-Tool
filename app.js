@@ -93,13 +93,14 @@
   // Go-live trước tháng hạn → tính 1 lần ở tháng hạn (cả tử + mẫu). Deal dừng: không có tháng CR.
   function crIn(d, m, gl) {
     if (!d.crMonth || !contractCounted(d.contract)) return null;
-    if (mCmp(m, d.crMonth) < 0) return null;
     if (gl) {
       var g = mNorm(gl);
-      if (mCmp(g, d.crMonth) <= 0) return (m === d.crMonth) ? { dat: true } : null;
-      if (mCmp(m, g) > 0) return null;
+      // go-live sớm/đúng tháng hạn → tính tử + mẫu ở đúng tháng go-live thực tế (16/10/2026)
+      if (mCmp(g, d.crMonth) <= 0) return (m === g) ? { dat: true } : null;
+      if (mCmp(m, d.crMonth) < 0 || mCmp(m, g) > 0) return null;
       return { dat: m === g };
     }
+    if (mCmp(m, d.crMonth) < 0) return null;
     return { dat: false };
   }
   var RATING_LABEL = { out: 'OUT — Xuất sắc', goal: 'GOAL — Giỏi', kpi: 'KPI — Đạt', under: 'UNDER KPI', none: 'Không xếp loại' };

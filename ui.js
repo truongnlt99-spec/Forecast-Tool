@@ -1740,7 +1740,8 @@
     //  - chỉ loại HĐ: New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày,
     //    Renew triển khai lại (không tính "Renew" thuần)
     //  - deal nằm trong MẪU số từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế;
-    //    tháng go-live tính cả TỬ số; go-live trước hạn → tính 1 lần ở tháng hạn; deal dừng: loại.
+    //    tháng go-live tính cả TỬ số; go-live trước/đúng tháng hạn → tính 1 lần (tử + mẫu) ở
+    //    tháng go-live thực tế (16/10/2026); deal dừng: loại.
     function qContractCounted(c) {
       var s = String(c || '').toLowerCase().trim();
       if (!s || s === 'renew' || s === '—') return false;
@@ -1756,7 +1757,7 @@
         if (d.stopped || d.glExtend) touched = true;
         if (d.stopped || !qContractCounted(d.contract)) return;
         var start = d.glExtend ? qMNorm(d.glExtend) : d.crMonth;
-        if (!start || qMCmp(cur, start) < 0) return;
+        if (!start) return;
         // go-live: ưu tiên giá trị đang gõ trong ô input nếu hàng hiển thị
         var gl = d.glActual;
         var row = document.getElementById('fc-row-' + d.id);
@@ -1767,9 +1768,9 @@
         var isDat = false;
         if (gl) {
           var g = qMNorm(gl);
-          if (qMCmp(g, start) <= 0) { if (cur !== start) return; isDat = true; }
-          else { if (qMCmp(cur, g) > 0) return; isDat = (cur === g); }
-        }
+          if (qMCmp(g, start) <= 0) { if (cur !== g) return; isDat = true; }
+          else { if (qMCmp(cur, start) < 0 || qMCmp(cur, g) > 0) return; isDat = (cur === g); }
+        } else if (qMCmp(cur, start) < 0) return;
         phai += d.dtPhai || 0;
         if (isDat) dat += d.dtPhai || 0;
       });
