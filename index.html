@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=36">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -225,6 +225,17 @@
       </div>
 
       <div class="side-spacer"></div>
+
+      <!-- Nút "Cộng phước" — cho vui, chỉ đếm số lần bấm, KHÔNG ảnh hưởng số liệu nào.
+           ui.js (mục CỘNG PHƯỚC) hiện ra sau khi đăng nhập. -->
+      <div class="phuoc" id="phuocBox" hidden>
+        <button type="button" class="phuoc-btn" id="phuocBtn" title="Cộng phước — cho vui, không ảnh hưởng số liệu" aria-label="Cộng phước">
+          <span class="phuoc-ico" aria-hidden="true">🙏</span>
+          <span class="phuoc-lb">Cộng phước</span>
+          <span class="phuoc-n" id="phuocMine">0</span>
+        </button>
+        <div class="phuoc-sub" id="phuocSub"></div>
+      </div>
 
       <div class="side-collapse-wrap">
         <button class="side-collapse-btn" id="sideToggle" aria-label="Thu gọn menu" title="Thu gọn menu">
@@ -910,7 +921,7 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=46"></script>
+  <script src="ui.js?v=47"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=13"></script>
 

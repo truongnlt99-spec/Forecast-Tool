@@ -31,7 +31,7 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
   const port = srv.address().port;
   const state = {
     todo: [{ id: 1, stt: 1, noiDung: 'Việc <b>1</b>', note: '', dauMoi: '', done: false, updatedAt: '', feedbackId: 'PF1', nguon: 'claude', prUrl: '' }],
-    keys: [],
+    keys: [], phuoc: 5, phuocCalls: [],
     fb: [{ id: 'PF1', senderEmail: 'a@base.vn', senderName: 'An', title: 'Lỗi <img src=x onerror=alert(1)>',
       category: 'Lỗi', description: '', attachments: [], status: 'Received', response: '', aiStatus: 'da_tao_todo', aiNote: 'đã kiểm tra', aiTodoId: 1 }],
   };
@@ -61,6 +61,8 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
       const ok = (o) => route.fulfill({ json: { ok: true, sessionToken: 'CST1.x.y', ...o } });
       switch (b.action) {
         case 'whoami': return ok({ isAdmin: true });
+        case 'phuocGet': return ok({ mine: state.phuoc, total: state.phuoc + 100 });
+        case 'phuocAdd': state.phuocCalls.push(b.n); state.phuoc += b.n; return ok({ mine: state.phuoc, total: state.phuoc + 100 });
         case 'mcpCreateKey': state.keys.push({ id: 'k1', label: b.label, createdAt: 'now', lastUsedAt: '' });
           return ok({ url: 'https://p.supabase.co/functions/v1/mcp/csk_abc' });
         case 'mcpListKeys': return ok({ items: state.keys });
@@ -85,6 +87,16 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
     assert.ok(await page.isVisible('#navForecastGroup .nav-sub [data-view=multi]'), 'mục con Forecast mở sẵn');
     assert.ok(await page.isVisible('#navOverviewGroup .nav-sub .cp-nav-btn .new-tag'), 'Career path có tag New');
     assert.ok(await page.isVisible('#profileStrip .ps-new'), 'nút hồ sơ có chữ New');
+    // Cộng phước: bấm liên tục 3 lần → gom thành 1 lần gửi n=3, số hiện ngay
+    await page.waitForSelector('#phuocBox:not([hidden])');
+    assert.equal(await page.textContent('#phuocMine'), '5');
+    for (let i = 0; i < 3; i++) await page.click('#phuocBtn');
+    assert.equal(await page.textContent('#phuocMine'), '8');
+    await page.waitForFunction(() => /108/.test(document.getElementById('phuocSub').textContent));
+    await page.waitForTimeout(900);
+    assert.deepEqual(state.phuocCalls, [3]);
+    assert.equal(await page.textContent('#phuocMine'), '8');
+
     await page.click('#profileStrip');
     await page.waitForSelector('#changelogBtn .new-tag', { state: 'visible', timeout: 3000 });
     assert.ok(await page.isVisible('#claudeBtn .new-tag'));
@@ -101,6 +113,7 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
     await page.click('#claudeBtn');
     assert.equal(await page.isVisible('#profileStrip .ps-new'), false, 'xem hết thì tắt chữ New');
     await page.waitForSelector('#claudeModal.open');
+
 
     await page.fill('#mcLabel', 'Laptop');
     await page.click('#mcCreate');

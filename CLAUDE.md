@@ -44,3 +44,11 @@ chính sách; không chắc → tạo todo cho admin qua MCP CS Console.
 
 Thiết kế + các bước triển khai: `docs/CAREER-PATH.md`. Mốc KPI/khung lương chép ở 2 nơi (`LEVELS` trong `app.js`
 và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.test.mjs` so khớp, sửa một chỗ thì sửa cả hai.
+
+## 7. Link kết nối Claude (MCP) & nút Cộng phước
+
+- Link MCP đưa cho người dùng là `https://csconsole.vercel.app/mcp/<khoá>` (`MCP_PUBLIC_BASE` trong Edge Function `api`).
+  `vercel.json` (và `netlify.toml`) chuyển tiếp `/mcp/*` sang Edge Function `mcp` trên Supabase — đổi project Supabase
+  thì sửa cả hai file này cùng `config.js`. Link cũ dạng `supabase.co/functions/v1/mcp/<khoá>` vẫn chạy.
+- Nút "Cộng phước" (cuối menu trái) chỉ đếm số lần bấm — bảng `cong_phuoc`, hàm `api_phuoc_*` trong
+  `supabase/05_cong_phuoc.sql`, action `phuocGet` / `phuocAdd`. Không dính vào số liệu nào.

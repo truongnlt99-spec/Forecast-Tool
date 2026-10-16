@@ -3,3 +3,10 @@
   [headers.values]
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
     Cross-Origin-Embedder-Policy = "require-corp"
+
+# Link kết nối Claude dạng https://<domain>/mcp/<khoá> → chuyển tiếp sang Edge Function mcp
+[[redirects]]
+  from = "/mcp/*"
+  to = "https://lheaoklvumzapmwuhysr.supabase.co/functions/v1/mcp/:splat"
+  status = 200
+  force = true
