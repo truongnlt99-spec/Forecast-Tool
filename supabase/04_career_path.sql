@@ -140,6 +140,32 @@ begin
   return api_career_list(em);
 end $$;
 
+-- ---------- GHI: xoá commit 1 quý (Edge Function đã kiểm tra quý còn trong hạn) ----------
+-- Commit đã Đạt có lên level (new_salary có giá trị) → trả level + lương về như trước khi Đạt
+-- (lấy từ level_history của quý đó) và ghi thêm 1 dòng lịch sử. Hồ sơ đã đổi level khác sau đó
+-- (vd admin sửa) thì không tự trả về được → báo lỗi để admin xử lý.
+create or replace function api_career_delete_commit(p_email text, p_quarter text)
+returns json language plpgsql as $$
+declare em text := lower(trim(p_email)); c career_commits%rowtype; m cs_members%rowtype; l level_history%rowtype;
+begin
+  select * into c from career_commits where email = em and quarter = p_quarter for update;
+  if not found then raise exception 'Không có commit quý % để xoá', p_quarter; end if;
+  if c.status = 'achieved' and c.new_salary is not null then
+    select * into l from level_history
+    where lower(email) = em and quarter = p_quarter and reason = 'Career path ' || p_quarter
+    order by changed_at desc, id desc limit 1;
+    select * into m from cs_members where lower(trim(email)) = em for update;
+    if l.id is null or m.username is null or m.level is distinct from l.new_level then
+      raise exception 'Level trong hồ sơ đã thay đổi sau khi bấm Đạt quý % — nhờ admin xử lý', p_quarter;
+    end if;
+    update cs_members set level = l.old_level, salary = l.old_salary where username = m.username;
+    insert into level_history (email, old_level, new_level, old_salary, new_salary, reason, quarter, changed_by)
+    values (em, m.level, l.old_level, m.salary, l.old_salary, 'Xoá commit ' || p_quarter || ' (huỷ Đạt)', p_quarter, em);
+  end if;
+  delete from career_commits where id = c.id;   -- lịch sử sửa commit xoá theo (on delete cascade)
+  return api_career_list(em);
+end $$;
+
 -- ---------- Ghi đè api_register (02_api.sql): khoá tự đổi level ----------
 -- Đăng ký lần đầu (chưa có dòng / chưa có level) vẫn chọn level như cũ.
 create or replace function api_register(p_email text, p_ho_ten text, p_level text,

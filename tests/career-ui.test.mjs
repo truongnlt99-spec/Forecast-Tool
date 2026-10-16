@@ -50,6 +50,18 @@ const fake = {
         }
         return { data: list() };
       }
+      case 'api_career_delete_commit': {   // giống SQL: Đạt có lên level → trả level/lương cũ
+        const i = db.commits.findIndex((x) => x.quarter === a.p_quarter);
+        const c = db.commits[i];
+        if (c.status === 'achieved' && c.newSalary) {
+          const l = db.levelHistory.find((h) => h.quarter === a.p_quarter && h.reason === 'Career path ' + a.p_quarter);
+          db.levelHistory.unshift({ oldLevel: db.profile.level, newLevel: l.oldLevel, oldSalary: +db.profile.salary, newSalary: l.oldSalary,
+            reason: 'Xoá commit ' + a.p_quarter + ' (huỷ Đạt)', quarter: a.p_quarter, at: '20/12/2026 12:00' });
+          db.profile = { ...db.profile, level: l.oldLevel, salary: String(l.oldSalary) };
+        }
+        db.commits.splice(i, 1);
+        return { data: list() };
+      }
       default: return { data: null };
     }
   },
@@ -186,6 +198,18 @@ test('UI Career path: commit → % loading → Đạt lên level', { skip: !chro
       assert.equal(await page.evaluate(() => document.getElementById('pmLevel').disabled), true);
       await page.evaluate(() => document.getElementById('pmClose').click());
 
+      // Xoá commit đã Đạt có lên level → level / lương trả về như trước, trang nạp lại
+      await page.waitForSelector('#cpDelete');
+      assert.match(await page.textContent('.cp-commit-vals + .cp-hist, .table-card:has(#cpDelete)'), /trả level \/ lương về như trước khi Đạt/);
+      await page.click('#cpDelete');
+      assert.match(await page.textContent('#cpDelete'), /xoá \+ trả level\/lương cũ/);
+      await page.click('#cpDelete');
+      await page.waitForFunction(() => /CS level 3/.test((document.querySelector('.ps-chip.lvl') || {}).textContent || ''), null, { timeout: 15000 });
+      assert.equal(db.profile.level, 'CS level 3');
+      assert.equal(db.profile.salary, '13000000');
+      assert.equal(db.commits.length, 0);
+      await page.waitForSelector('#cpTarget');   // quý vẫn mở → hiện lại form để tạo lại
+
       // Rời sang Overview → khối Overview hiện lại, trang Career path ẩn
       await page.evaluate(() => document.querySelector('.tab[data-tab="overview"]').click());
       await page.waitForFunction(() => document.getElementById('cpView').style.display === 'none');
@@ -240,5 +264,12 @@ test('UI tạo bù Q3: khai level đầu quý, Đạt chỉ ghi nhận, biểu �
     assert.deepEqual(await page.$$eval('#cpChart .cp-axis-now', (e) => e.map((x) => x.textContent)), ['Q4/26']);
     await page.hover('#cpChart .cp-hit >> nth=0');
     assert.match(await page.textContent('#cpTip'), /Q3\/2026 · CS level 3 · Đạt — lên level/);
+
+    // Tạo lộn → xoá commit đã Đạt (chỉ ghi nhận, không đổi level/lương) → form tạo bù hiện lại
+    await page.click('#cpDelete'); await page.click('#cpDelete');
+    await page.waitForSelector('#cpBase');
+    assert.equal(db.commits.length, 0);
+    assert.equal(db.profile.level, 'CS level 4');
+    assert.equal(await page.locator('#cpChart .cp-dot').count(), 1);
   });
 });

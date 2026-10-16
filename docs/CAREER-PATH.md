@@ -14,13 +14,16 @@ Mục **Overview → Career path** (`#/overview/career-path`). Áp dụng cho **
 3. **Bấm Đạt:** mở từ tháng 3 tới hết tháng đầu quý sau. Chỉ bấm được khi mọi chỉ số có số đều ≥ commit
    (chỉ số không có deal tính trong quý được bỏ qua). Commit có lên level thì CS nhập lương mới trong khung
    của level mới → `cs_members.level` + `salary` đổi ngay, ghi `level_history`. Quá hạn → *Không đạt*.
-4. Level trong popup *Cập nhật thông tin* bị khoá (`api_register` từ chối đổi level khi đã có level).
+4. **Xoá commit** (tạo lộn): được khi quý còn hạn sửa commit hoặc còn hạn bấm Đạt — kể cả đã bấm Đạt. Commit đã Đạt
+   có lên level thì khi xoá, level + lương trả về như trước khi Đạt (theo `level_history`) và ghi thêm 1 dòng lịch sử;
+   nếu hồ sơ đã bị đổi level khác sau đó thì chặn, nhờ admin xử lý. Xoá xong tạo lại commit như bình thường.
+5. Level trong popup *Cập nhật thông tin* bị khoá (`api_register` từ chối đổi level khi đã có level).
    Muốn sửa level tay: admin sửa trực tiếp bảng `cs_members` trên Supabase.
 
-5. **Lộ trình thăng tiến** (đầu trang): biểu đồ đường, trục dọc = level, trục ngang = quý. Mỗi điểm là level CS
+6. **Lộ trình thăng tiến** (đầu trang): biểu đồ đường, trục dọc = level, trục ngang = quý. Mỗi điểm là level CS
    giữ trong quý đó (quý đã qua: level đầu quý theo commit, quý không commit thì nối tiếp; quý hiện tại: level
    trong hồ sơ). Nét đứt tới quý sau = level mục tiêu của commit quý này. Máy chủ tính sẵn (`track`).
-6. **Tạo bù** (`CAREER_BACKFILL` trong Edge Function `api`): quý đã qua vẫn cho chốt commit tới hạn ghi ở đó —
+7. **Tạo bù** (`CAREER_BACKFILL` trong Edge Function `api`): quý đã qua vẫn cho chốt commit tới hạn ghi ở đó —
    hiện là **Q3/2026, tới hết 10/2026**. Khi tạo bù CS khai thêm *level đầu quý*; mốc sàn tính theo level đầu quý.
    Khi tạo bù, **SRR_4 không bắt buộc**: để trống thì quý đó không xét SRR_4 khi bấm Đạt
    (quý thường vẫn bắt buộc). Bấm Đạt vẫn phải đủ số thực tế của quý đó. Hồ sơ đã ở level mục tiêu (hoặc cao hơn) → chỉ ghi nhận, không đổi
