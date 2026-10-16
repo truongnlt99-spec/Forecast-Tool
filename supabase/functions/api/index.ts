@@ -4,7 +4,7 @@
  * Thay thế Apps Script Web App (/exec), GIỮ NGUYÊN 100% API cũ để frontend
  * (app.js / ui.js) không phải sửa — chỉ đổi API_URL trong config.js.
  *
- *   GET  ?token=...[&sheet=Database]        → { ok, email, sessionToken, profile, deals }
+ *   GET  ?token=...[&sheet=Database]        → { ok, email, sessionToken, profile, deals, syncedAt }
  *   GET  ?warm=1                            → làm ấm (trả invalid_token như cũ)
  *   POST { token, action:'register', hoTen, level, salary, avatar }
  *   POST { token, action:'submitFeedback', title, category, description, expectedDate, attachments }
@@ -605,10 +605,12 @@ Deno.serve(async (req: Request) => {
       const url = new URL(req.url);
       const email = await verifyToken_(url.searchParams.get("token") || "");
       if (!email) return json_({ ok: false, error: "invalid_token" });
-      const [profile, deals, isAdmin] = await Promise.all([
+      const [profile, deals, isAdmin, syncedAt] = await Promise.all([
         rpc_("api_get_profile", { p_email: email }),
         rpc_("api_get_deals_json", { p_email: email }),
         rpc_<boolean>("api_is_admin", { p_email: email }),
+        // chưa chạy supabase/07_gio_dong_bo.sql → null, trang ẩn dòng "cập nhật lúc"
+        rpc_<string | null>("api_data_synced_at", {}).catch(() => null),
       ]);
       return json_({
         ok: true,
@@ -617,6 +619,7 @@ Deno.serve(async (req: Request) => {
         profile: profile ?? null, // null = chưa đăng ký → frontend hiện form
         deals: deals ?? [],
         isAdmin: !!isAdmin,
+        syncedAt: syncedAt || null, // "dd/mm/yyyy HH:MI" giờ VN — lượt đồng bộ CRM gần nhất
       });
     }
 
