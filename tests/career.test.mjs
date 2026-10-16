@@ -288,3 +288,36 @@ test('track biểu đồ thăng tiến: level theo quý + điểm kế hoạch q
   assert.equal(r.track[1].status, 'none');
   Date.now = realNow;
 });
+
+test('tạo bù Q3: SRR_4 không bắt buộc — để trống thì không xét SRR_4; quý thường vẫn bắt buộc', async () => {
+  at('2026-10-16');
+  state.profile = { level: 'CS level 3', salary: '13000000' };
+  state.list = { commits: [], levelHistory: [] };
+  for (const s4 of [undefined, null, '']) {
+    calls.length = 0;
+    const r = await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 78, s1: 80, s4 });
+    assert.equal(r.ok, true, r.error);
+    assert.equal(calls.find((c) => c[0] === 'api_career_save_commit')[1].p_s4, null);
+  }
+  // nhập SRR_4 thì vẫn kiểm mốc sàn như thường
+  assert.match((await post({ action: 'careerSaveCommit', quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 78, s1: 80, s4: 50 })).error, /SRR_4 commit tối thiểu 78%/);
+  // quý thường: SRR_4 vẫn bắt buộc
+  assert.match((await post({ action: 'careerSaveCommit', quarter: 'Q4/2026', cr: 50, s1: 50 })).error, /SRR_4 phải là số/);
+
+  // Q3 có kỳ đo T4 rớt (SRR_4 thực tế 0%) nhưng không commit SRR_4 → vẫn bấm Đạt được
+  const keep = state.deals;
+  state.deals = keep.concat([{ 'Deal ID': 'D12', 'Loại hợp đồng': 'New', 'Giá trị phần mềm bộ (VNĐ)': tr(9), 'Tháng đo T4': '09/2026', 'CHS_CS T4': '30,0' }]);
+  at('2026-10-20');
+  state.list = { commits: [commit({ quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 75, s1: 80, s4: null })], levelHistory: [] };
+  let r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.actuals.s4.v, 0);
+  assert.deepEqual(r.evaluation.items.s4, { actual: 0, commit: null, loading: null, met: null });
+  assert.equal(r.evaluation.present, 1);
+  assert.equal(r.canAchieve, true);
+  // còn nếu có commit SRR_4 thì SRR_4 thực tế 0% làm trượt
+  state.list = { commits: [commit({ quarter: 'Q3/2026', baseLevel: 'CS level 2', targetLevel: 'CS level 3', cr: 75, s1: 80, s4: 78 })], levelHistory: [] };
+  r = await post({ action: 'careerGet', quarter: 'Q3/2026' });
+  assert.equal(r.canAchieve, false);
+  state.deals = keep;
+  Date.now = realNow;
+});

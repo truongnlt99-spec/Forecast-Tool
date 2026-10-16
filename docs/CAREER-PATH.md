@@ -22,7 +22,8 @@ Mục **Overview → Career path** (`#/overview/career-path`). Áp dụng cho **
    trong hồ sơ). Nét đứt tới quý sau = level mục tiêu của commit quý này. Máy chủ tính sẵn (`track`).
 6. **Tạo bù** (`CAREER_BACKFILL` trong Edge Function `api`): quý đã qua vẫn cho chốt commit tới hạn ghi ở đó —
    hiện là **Q3/2026, tới hết 10/2026**. Khi tạo bù CS khai thêm *level đầu quý*; mốc sàn tính theo level đầu quý.
-   Bấm Đạt vẫn phải đủ số thực tế của quý đó. Hồ sơ đã ở level mục tiêu (hoặc cao hơn) → chỉ ghi nhận, không đổi
+   Khi tạo bù, **SRR_4 không bắt buộc**: để trống thì quý đó không xét SRR_4 khi bấm Đạt
+   (quý thường vẫn bắt buộc). Bấm Đạt vẫn phải đủ số thực tế của quý đó. Hồ sơ đã ở level mục tiêu (hoặc cao hơn) → chỉ ghi nhận, không đổi
    level / lương; hồ sơ còn thấp hơn → đổi level + lương như quý thường. Mở thêm quý khác: thêm 1 dòng vào
    `CAREER_BACKFILL` rồi deploy lại function.
 

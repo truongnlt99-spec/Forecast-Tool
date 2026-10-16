@@ -341,15 +341,18 @@ function careerActuals(deals: Row[], q: string, now = currentMonth()) {
   };
 }
 
-// % loading = thực tế ÷ commit. Chỉ số trống (quý không có deal tính) được bỏ qua khi xét Đạt.
+// % loading = thực tế ÷ commit. Bỏ qua khi xét Đạt: chỉ số trống (quý không có deal tính) và
+// chỉ số không commit (SRR_4 khi tạo bù được để trống).
 function careerEvaluate(commit: Record<string, unknown> | null, act: ReturnType<typeof careerActuals>) {
   const items: Record<string, { actual: number | null; commit: number | null; loading: number | null; met: boolean | null }> = {};
   let present = 0, met = 0;
   for (const k of CAREER_KEYS) {
-    const a = act[k].v, c = commit ? Number(commit[k]) : null;
+    const raw = commit ? commit[k] : null;
+    const c = raw == null || raw === "" ? null : Number(raw);
+    const a = act[k].v;
     const ok = a != null && c != null && a >= c;
-    if (a != null) { present++; if (ok) met++; }
-    items[k] = { actual: a, commit: c, loading: a == null || !c ? null : Math.round(a / c * 1000) / 10, met: a == null ? null : ok };
+    if (a != null && (c != null || !commit)) { present++; if (ok) met++; }
+    items[k] = { actual: a, commit: c, loading: a == null || !c ? null : Math.round(a / c * 1000) / 10, met: a == null || (commit && c == null) ? null : ok };
   }
   return { items, present, met, allMet: !!commit && present > 0 && met === present };
 }
@@ -461,8 +464,10 @@ async function careerAction_(body: any, email: string): Promise<Record<string, u
       const target = String(body.targetLevel || base);
       const ti = CAREER_ORDER.indexOf(target);
       if (ti < bi) throw new Error("Level mục tiêu không hợp lệ");
-      const vals = { cr: 0, s1: 0, s4: 0 };
+      const vals: Record<CareerKey, number | null> = { cr: 0, s1: 0, s4: 0 };
       for (const k of CAREER_KEYS) {
+        // Tạo bù: SRR_4 không bắt buộc (quý đó có thể chưa có kỳ đo T4) → null = không xét SRR_4
+        if (k === "s4" && ph.backfill && (body.s4 == null || String(body.s4).trim() === "")) { vals.s4 = null; continue; }
         const v = Number(body[k]);
         if (!isFinite(v) || v <= 0 || v > 100) throw new Error(CAREER_NAME[k] + " phải là số lớn hơn 0 và tối đa 100");
         const floor = CAREER_LEVELS[target].kpi[k];

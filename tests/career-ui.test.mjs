@@ -214,10 +214,15 @@ test('UI tạo bù Q3: khai level đầu quý, Đạt chỉ ghi nhận, biểu �
       ['Giữ CS level 3', 'Lên CS level 4']);
     await page.selectOption('#cpTarget', 'CS level 4');
     assert.match(await page.textContent('#cpFloor_s4'), /Tối thiểu 79%/);
-    await page.fill('#cpIn_cr', '80'); await page.fill('#cpIn_s1', '80'); await page.fill('#cpIn_s4', '79');
+    // SRR_4 không bắt buộc khi tạo bù → để trống
+    assert.match(await page.textContent('label:has(#cpIn_s4)'), /không bắt buộc/);
+    await page.fill('#cpIn_cr', '80'); await page.fill('#cpIn_s1', '80');
     await page.click('#cpSave');
     await page.waitForSelector('.cp-commit-vals');
     assert.equal(db.commits[0].baseLevel, 'CS level 3');
+    assert.equal(db.commits[0].s4, null);
+    assert.match(await page.textContent('.cp-commit-vals'), /SRR_4Không commit/);
+    assert.match(await page.textContent('.cp-kpis'), /Không commit — không xét khi bấm Đạt/);
     assert.match(await page.textContent('.cp-target'), /lên CS level 4.*từ CS level 3/);
 
     // Hồ sơ đã ở level 4 → không hỏi lương, Đạt chỉ ghi nhận
