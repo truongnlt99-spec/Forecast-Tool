@@ -1788,8 +1788,8 @@
     //    Renew triển khai lại (không tính "Renew" thuần)
     //  - deal nằm trong MẪU số từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế;
     //    tháng go-live tính cả TỬ số; go-live đúng tháng hạn → tử + mẫu tháng đó; go-live SỚM
-    //    (tháng trước tháng hạn) → chỉ cộng TỬ số ở tháng go-live, không vào mẫu số tháng nào
-    //    (16/10/2026); deal dừng: loại.
+    //    (tháng trước tháng hạn) → tử + mẫu ở tháng go-live, không vào mẫu số tháng hạn
+    //    (17/10/2026); deal dừng: loại.
     function qContractCounted(c) {
       var s = String(c || '').toLowerCase().trim();
       if (!s || s === 'renew' || s === '—') return false;
@@ -1813,13 +1813,13 @@
           var inp = row.querySelector('[data-f="goLive"]');
           if (inp) gl = inp.value ? new Date(inp.value) : null;
         }
-        var isDat = false, inDen = true;
+        var isDat = false;
         if (gl) {
           var g = qMNorm(gl);
-          if (qMCmp(g, start) <= 0) { if (cur !== g) return; isDat = true; inDen = g === start; }
+          if (qMCmp(g, start) <= 0) { if (cur !== g) return; isDat = true; }
           else { if (qMCmp(cur, start) < 0 || qMCmp(cur, g) > 0) return; isDat = (cur === g); }
         } else if (qMCmp(cur, start) < 0) return;
-        if (inDen) phai += d.dtPhai || 0;
+        phai += d.dtPhai || 0;
         if (isDat) dat += d.dtPhai || 0;
       });
       return { phai: phai, dat: dat, touched: touched };
@@ -3618,8 +3618,8 @@
       if (!start) return no('noMonth');
       if (d.glActual) {
         var g = cxMNorm(d.glActual);
-        if (cxMCmp(g, start) < 0) {                    // go-live SỚM: chỉ tử số tháng go-live
-          if (m === g) return { den: false, num: true, code: 'early' };
+        if (cxMCmp(g, start) < 0) {                    // go-live SỚM: tử + mẫu tháng go-live
+          if (m === g) return { den: true, num: true, code: 'early' };
           return no(cxMCmp(m, g) < 0 ? 'notYet' : 'doneEarly');
         }
         if (cxMCmp(m, start) < 0) return no('notYet');
@@ -3841,9 +3841,9 @@
         case 'notYet': return g && cxMCmp(g, start) < 0
           ? 'Deal go-live ' + gd + ' (tháng ' + g + ') → tháng ' + m + ' chưa tính.'
           : 'Hạn go-live là tháng <b>' + start + '</b> → tháng ' + m + ' chưa tới hạn, chưa tính.';
-        case 'early': return 'Go-live <b>' + gd + '</b> sớm hơn tháng hạn ' + start + ' → chỉ cộng <b>' + v + '</b> vào <b>tử số</b> tháng ' + g +
-          ', <b>không vào mẫu số</b> tháng nào (quy tắc go-live sớm, 16/10/2026). Vì vậy CRM có thể đếm deal này ở tháng hạn còn CS Console thì không.';
-        case 'doneEarly': return 'Deal đã go-live sớm ở tháng ' + g + ' (trước hạn ' + start + ') → chỉ tính tử số tháng ' + g + '; tháng ' + m + ' không tính nữa, kể cả tháng hạn.';
+        case 'early': return 'Go-live <b>' + gd + '</b> sớm hơn tháng hạn ' + start + ' → vào <b>cả tử và mẫu số</b> tháng ' + g + ' (' + v + ')' +
+          ', không vào mẫu số tháng hạn ' + start + ' nữa (quy tắc go-live sớm, 17/10/2026).';
+        case 'doneEarly': return 'Deal đã go-live sớm ở tháng ' + g + ' (trước hạn ' + start + ') → tính tử + mẫu số tháng ' + g + '; tháng ' + m + ' không tính nữa, kể cả tháng hạn.';
         case 'onTime': return 'Go-live <b>' + gd + '</b> đúng tháng hạn ' + start + ' → vào <b>cả tử và mẫu số</b> tháng ' + m + ' (' + v + ').';
         case 'late': return 'Go-live trễ <b>' + gd + '</b> (hạn tháng ' + start + ') → tháng ' + m + ' vào <b>cả tử và mẫu số</b>; ' +
           (cxMAdd(g, -1) === start ? 'tháng ' + start : 'các tháng ' + start + ' → ' + cxMAdd(g, -1)) + ' deal chỉ nằm ở mẫu số.';
@@ -3919,7 +3919,7 @@
         '<details class="cx-rules"><summary>Quy tắc tính CR</summary><ul>' +
           '<li>Chỉ tính loại HĐ: ' + CONTRACTS_OK + '. Deal Dừng triển khai không tính.</li>' +
           '<li>Deal nằm ở <b>mẫu số</b> từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế; tháng go-live tính cả <b>tử số</b>.</li>' +
-          '<li>Go-live <b>sớm</b> (trước tháng hạn): chỉ cộng tử số ở tháng go-live, không vào mẫu số tháng nào.</li>' +
+          '<li>Go-live <b>sớm</b> (trước tháng hạn): tính cả tử và mẫu số ở tháng go-live, không vào mẫu số tháng hạn nữa.</li>' +
           '<li>Số tính theo dữ liệu <b>đã lưu</b>; ngày go-live đang gõ dở trên bảng chưa được tính ở đây.</li>' +
         '</ul></details>' +
         '<div class="cx-actions"><span class="cx-dim">Vẫn thấy sai?</span> <button type="button" class="ad-btn" id="cxReport">Gửi feedback kèm thông tin deal</button></div>';
@@ -3974,9 +3974,8 @@
         '<div class="cx-sum"><div><span>Tử số</span><b>' + money(dat) + '</b></div><div><span>Mẫu số</span><b>' + money(phai) + '</b></div>' +
           '<div><span>CR tháng ' + m + '</span><b>' + (phai > 0 ? pct(Math.round(dat / phai * 1000) / 10) : '—') + '</b></div></div>' +
         '<p class="cx-dim">Tính theo dữ liệu đã lưu. Bấm tên deal để xem chi tiết lý do.</p>' +
-        sec('both', 'go-live trong tháng', '') +
+        sec('both', 'go-live trong tháng (kể cả go-live sớm)', '') +
         sec('den', 'chưa / trễ go-live', 'Các deal này đang kéo CR xuống: go-live trong tháng ' + m + ' sẽ chuyển sang Tử + Mẫu.') +
-        sec('num', 'go-live sớm', 'Go-live trước tháng hạn → chỉ cộng tử số, không vào mẫu số.') +
         sec('none', 'không tính (loại HĐ / dừng / thiếu tháng CR)', '');
       openModal('Vì sao CR tháng ' + m + ' ra số này?', html);
       mBody.querySelectorAll('[data-cx-why]').forEach(function (b) {
@@ -4239,7 +4238,7 @@
       var item = function (d, kind) {
         var on = !!st.sim[d.id];
         return '<label class="cx-sim-item' + (on ? ' on' : '') + '"><input type="checkbox" data-sim="' + esc(d.id) + '"' + (on ? ' checked' : '') + '>' +
-          '<span class="cx-sim-name">' + esc(d.company) + '<span class="cx-dim">Deal ' + esc(d.id) + ' · hạn ' + esc(cxStart(d)) + (kind === 'early' ? ' · kéo sớm = chỉ cộng tử' : '') + '</span></span>' +
+          '<span class="cx-sim-name">' + esc(d.company) + '<span class="cx-dim">Deal ' + esc(d.id) + ' · hạn ' + esc(cxStart(d)) + (kind === 'early' ? ' · kéo sớm = cộng tử + mẫu' : '') + '</span></span>' +
           '<b>' + tr(d.dtPhai) + '</b></label>';
       };
       var met = commit != null && r.v != null && r.v >= commit;

@@ -89,3 +89,10 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
   (cột `mail_sent_at`, trigger xoá mốc khi đổi trạng thái, hàm `mail_fb_pending` / `mail_fb_mark_sent`).
 - Nội dung + màu sắc mail sửa ở khối `MAIL_FB` đầu đoạn mail; `guiMailThu()` gửi 1 mail mẫu cho chính mình.
   Nội dung người dùng luôn qua `escHtml_`. Test: `tests/mail-feedback.test.mjs`.
+
+## 12. CR: deal go-live sớm tính cả tử + mẫu tháng kéo (17/10/2026)
+
+- Thay quy tắc 16/10 "kéo sớm chỉ cộng tử số": deal go-live **trước** tháng hạn → vào **cả tử và mẫu số** ở tháng
+  go-live, không vào mẫu số tháng hạn nữa (giống go-live đúng hạn nhưng ghi ở tháng kéo). Trễ / chưa go-live giữ nguyên.
+- Đã sửa đủ: `crIn()` app.js (admin cho phép sửa), `qCrCompute()` + `cxCrState()` + câu giải thích / mô phỏng ở ui.js,
+  `crIn()` ở Edge Function `api` (career path) và `mcp` (`cr_summary`). Sau khi merge cần deploy lại 2 Edge Function này.

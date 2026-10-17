@@ -66,9 +66,9 @@ test('CS thường không thấy & không gọi được tool admin', async () =
   assert.equal(r.error.code, -32602);
 });
 
-test('cr_summary — deal kéo sớm chỉ vào tử số, Renew bị loại', async () => {
+test('cr_summary — deal kéo sớm vào tử + mẫu tháng kéo (không vào mẫu tháng hạn), Renew bị loại', async () => {
   const o9 = textOf(await tool('cs@base.vn', 'cr_summary', { thang: '09/2026' }));
-  assert.equal(o9.mauSo_DTPhaiGoLive, 10000000);
+  assert.equal(o9.mauSo_DTPhaiGoLive, 14375000);
   assert.equal(o9.tuSo_DTGoLiveDat, 4375000);
   const o10 = textOf(await tool('cs@base.vn', 'cr_summary', { thang: '10/2026' }));
   assert.equal(o10.mauSo_DTPhaiGoLive, 10000000);

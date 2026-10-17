@@ -53,7 +53,7 @@ test('cxCrState — mã lý do: sớm / đúng hạn / trễ / chưa go-live / l
   assert.equal(cx.cxCrState(ext, '10/2026').code, 'dueNow');
 });
 
-test('cxCrSum — giả sử go-live: deal trễ vào tử số, deal hạn sau trong quý chỉ cộng tử', () => {
+test('cxCrSum — giả sử go-live: deal trễ vào tử số, deal hạn sau trong quý cộng cả tử + mẫu', () => {
   const deals = [
     { id: 'a', crMonth: '10/2026', contract: 'New', dtPhai: 10 },   // tới hạn tháng 10, chưa go-live
     { id: 'b', crMonth: '11/2026', contract: 'New', dtPhai: 5 },    // hạn tháng 11
@@ -63,7 +63,7 @@ test('cxCrSum — giả sử go-live: deal trễ vào tử số, deal hạn sau 
   assert.deepEqual(cx.cxCrSum(deals, months), { phai: 30, dat: 20 });
   const now = new Date(2026, 9, 17);
   assert.deepEqual(cx.cxCrSum(deals, months, { a: now }), { phai: 30, dat: 30 });
-  assert.deepEqual(cx.cxCrSum(deals, months, { b: now }), { phai: 30, dat: 25 }, 'kéo sớm chỉ cộng tử số');
+  assert.deepEqual(cx.cxCrSum(deals, months, { b: now }), { phai: 35, dat: 25 }, 'kéo sớm cộng tử + mẫu tháng kéo');
 });
 
 test('cxEvalEvents — ngày đánh giá, trạng thái khoá / sắp khoá, Năm 2++, Tier 4 chỉ cần %Output', () => {
@@ -151,7 +151,7 @@ const base = (id, co, o = {}) => ({ 'Deal ID': id, 'System ID': '', 'Tên khách
   'Tháng ghi nhận CR': '', 'DT phải go-live': '0', 'Tier': 'Tier 2', 'Tháng đo T1': '', 'Tháng đo T4': '',
   '% Active T1': '', '% Output T1': '', '% Active T4': '', '% Output T4': '', 'Ngày đánh giá T1': '', 'Ngày đánh giá T4': '', ...o });
 const DEALS = [
-  // CR tháng này: mẫu = 301 (10tr) + 302 (20tr) = 30tr; tử = 302 (20tr) + 303 (5tr, go-live sớm) = 25tr
+  // CR tháng này: mẫu = 301 (10tr) + 302 (20tr) + 303 (5tr, go-live sớm) = 35tr; tử = 302 (20tr) + 303 (5tr) = 25tr
   base('301', 'Tới hạn chưa GL', { 'Tháng ghi nhận CR': CUR, 'DT phải go-live': '10.000.000' }),
   base('302', 'Trễ đã GL', { 'Tháng ghi nhận CR': PREV, 'Ngày go-live thực tế': firstOfCur, 'DT phải go-live': '20.000.000' }),
   base('303', 'GL sớm', { 'Tháng ghi nhận CR': NEXT, 'Ngày go-live thực tế': firstOfCur, 'DT phải go-live': '5.000.000' }),
@@ -242,7 +242,7 @@ test('UI: giờ đồng bộ CRM + nút "Vì sao?" giải thích CR từng deal 
     await page.click('#fc-row-303 .cx-why');
     await page.waitForSelector('#cxModal.open');
     const body = await page.textContent('#cxModalBody');
-    assert.match(body, /Chỉ tử số/);
+    assert.match(body, /Tử \+ Mẫu số/);
     assert.match(body, /sớm hơn tháng hạn/);
     await page.click('#cxModalClose');
 
@@ -251,9 +251,9 @@ test('UI: giờ đồng bộ CRM + nút "Vì sao?" giải thích CR từng deal 
     await page.waitForSelector('#cxModal.open');
     const sum = await page.textContent('#cxModalBody .cx-sum');
     assert.match(sum, /Tử số25\.000\.000 đ/);
-    assert.match(sum, /Mẫu số30\.000\.000 đ/);
+    assert.match(sum, /Mẫu số35\.000\.000 đ/);
     assert.equal(await page.textContent('#fcCrNum'), '25.000.000 đ');
-    assert.equal(await page.textContent('#fcCrDen'), '30.000.000 đ');
+    assert.equal(await page.textContent('#fcCrDen'), '35.000.000 đ');
     const grp = await page.textContent('#cxModalBody');
     assert.match(grp, /Renew thuần/);      // nhóm "không tính" có lý do
     assert.match(grp, /không thuộc nhóm tính CR/);
@@ -312,8 +312,8 @@ test('UI: Mô phỏng Career path — tick deal → CR quý mới so với commi
       await page.evaluate(() => { location.hash = '#/overview/career-path'; });
       await page.waitForSelector('#cxSim');
       const top = () => page.textContent('#cxSim .cx-sim-top');
-      // Thực tế quý (máy chủ): tháng này tử 25 / mẫu 30; nếu tháng trước cùng quý thì deal 302 (trễ) thêm 20 vào mẫu
-      const prevInQ = today.getMonth() % 3 !== 0, phai = 30 + (prevInQ ? 20 : 0);
+      // Thực tế quý (máy chủ): tháng này tử 25 / mẫu 35; nếu tháng trước cùng quý thì deal 302 (trễ) thêm 20 vào mẫu
+      const prevInQ = today.getMonth() % 3 !== 0, phai = 35 + (prevInQ ? 20 : 0);
       const p = (dat) => (Math.round(dat / phai * 10000) / 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%';
       assert.equal(await page.textContent('#cxSim .cx-sim-top > div:first-child b'), p(25));
       await page.check('#cxSim [data-sim="301"]');   // deal tới hạn 10tr go-live → tử +10
