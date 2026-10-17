@@ -69,3 +69,15 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
   `crIn()` app.js, `qCrCompute()` ui.js mục 11, `cr_summary` MCP và `cxCrState()` — `tests/tro-ly-cs.test.mjs` so khớp với `crIn()`.
 - Lịch đánh giá dùng cùng quy tắc khoá ở mục 8 (ngày đánh giá < hôm nay giờ VN; Năm N = Năm 1 + (N−1) năm).
 - Dòng "CRM cập nhật lúc …" cần chạy `supabase/07_gio_dong_bo.sql` + deploy lại Edge Function `api` (chưa chạy thì dòng đó tự ẩn).
+
+## 10. Nguồn dữ liệu deal: tạm lấy từ sheet (17/10/2026)
+
+- `supabase/apps-script/DongBoSupabase.gs` có `SYNC.NGUON`: `'sheet'` (đang dùng) đọc tab **Extract of Raw** chị Chi đồng bộ
+  (sheet `SYNC.SHEET_ID`, cùng tên cột với query BigQuery); `'bigquery'` chạy query thẳng như cũ.
+- Nguồn sheet: ngày dd/mm/yyyy → yyyy-mm-dd, ô lỗi công thức (#NAME?, #N/A…) → trống, tab < `MIN_ROWS` dòng thì dừng.
+- Chống trùng (`locTrung_`): Deal ID chuẩn hoá về chữ số; lặp y hệt giữ 1; lặp mà nội dung khác → bỏ cả deal lượt đó
+  (Supabase giữ số cũ), quá `MAX_DUP_RATE` thì dừng cả lượt; deal khác ID nhưng trùng Job + tên + giá trị chỉ ghi log
+  (lỗi nguồn, báo chị Chi). `deals_raw` khoá chính `deal_id` nên DB không thể có 2 dòng cùng deal.
+  **Không** đánh dấu ngừng deal vắng mặt (tab chỉ giữ deal gần đây; deal cũ vẫn cần cho Com Năm 2++) → deal bị xoá/huỷ
+  trên CRM sẽ không tự ẩn khỏi console; quay lại `'bigquery'` thì hết.
+- Script chạy trong project Apps Script riêng: sửa file trong repo xong phải dán lại vào Apps Script. Test: `tests/dong-bo-sheet.test.mjs`.
