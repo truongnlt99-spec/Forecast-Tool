@@ -201,17 +201,22 @@ function rowToObj_(fields, row) {
 }
 
 function callSync_(rows, runAt, isFinal) {
+  return rpc_('sync_deals_raw', { p_rows: rows, p_run_at: runAt, p_final: isFinal });
+}
+
+// Gọi 1 hàm SQL trên Supabase bằng service key (Script Property SUPABASE_SERVICE_KEY)
+function rpc_(fn, args) {
   var key = PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY');
   if (!key) throw new Error('Chưa đặt Script Property SUPABASE_SERVICE_KEY.');
   var headers = { apikey: key };
   // Key kiểu cũ (JWT eyJ...) cần thêm Authorization; key mới sb_secret_... thì không
   if (key.indexOf('sb_') !== 0) headers.Authorization = 'Bearer ' + key;
 
-  var resp = UrlFetchApp.fetch(SYNC.SUPABASE_URL + '/rest/v1/rpc/sync_deals_raw', {
+  var resp = UrlFetchApp.fetch(SYNC.SUPABASE_URL + '/rest/v1/rpc/' + fn, {
     method: 'post',
     contentType: 'application/json',
     headers: headers,
-    payload: JSON.stringify({ p_rows: rows, p_run_at: runAt, p_final: isFinal }),
+    payload: JSON.stringify(args || {}),
     muteHttpExceptions: true
   });
   var code = resp.getResponseCode();
@@ -219,13 +224,148 @@ function callSync_(rows, runAt, isFinal) {
   return JSON.parse(resp.getContentText());
 }
 
-// Tạo trigger chạy dongBoDeals mỗi giờ (chạy 1 lần; chạy lại không tạo trùng)
+/* =====================================================================
+ * MAIL BÁO NGƯỜI GỬI KHI FEEDBACK HOÀN THÀNH (cần chạy supabase/08_mail_feedback.sql)
+ * Mỗi 5 phút: feedback vừa chuyển sang trạng thái trong MAIL_FB.TRANG_THAI mà chưa gửi mail →
+ * gửi bằng Gmail của tài khoản chạy script → đánh dấu đã gửi (mỗi lần hoàn thành chỉ 1 mail;
+ * mở lại rồi hoàn thành lần nữa thì gửi lại). Mail lỗi thì để lượt sau thử lại.
+ * ===================================================================== */
+var MAIL_FB = {
+  TRANG_THAI: ['Completed'],          // thêm "Won't Do" nếu muốn báo cả feedback không thực hiện
+  LINK: 'https://csconsole.vercel.app',
+  TEN_NGUOI_GUI: 'CS Console',        // tên hiện ở ô "Từ" trong hộp thư
+
+  // ---- NỘI DUNG — sửa thoải mái. Biến: {ten} {tieu_de} {trang_thai} {ngay_gui} ----
+  TIEU_DE_MAIL: '[CS Console] Feedback "{tieu_de}" — {trang_thai}',
+  LOI_CHAO: 'Chào {ten},',
+  DOAN_MO_DAU: 'Feedback bạn gửi ngày {ngay_gui} đã được team cập nhật trạng thái. Cảm ơn bạn đã dành thời gian góp ý để CS Console tốt hơn mỗi ngày!',
+  NHAN_PHAN_HOI: 'Phản hồi từ team',
+  CHU_NUT: 'Mở CS Console',
+  CHU_KY: 'Team CS Console',
+  CHAN_TRANG: 'Bạn nhận được mail này vì đã gửi Product Feedback trên CS Console. Có thắc mắc thêm, cứ trả lời trực tiếp mail này.',
+
+  // ---- GIAO DIỆN ----
+  MAU_CHU_DAO: '#3D5CFF',             // màu đầu mail + nút
+  MAU_TRANG_THAI: { 'Completed': '#16A34A', "Won't Do": '#64748B', 'In Progress': '#D97706', 'Received': '#3D5CFF' }
+};
+var MAIL_FB_NHAN = { 'Completed': 'Hoàn thành', "Won't Do": 'Không thực hiện', 'In Progress': 'Đang xử lý', 'Received': 'Đã nhận' };
+
+function guiMailFeedback() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { Logger.log('Đang có lượt chạy khác, để lượt sau.'); return; }
+  try {
+    var list = rpc_('mail_fb_pending', { p_statuses: MAIL_FB.TRANG_THAI }) || [];
+    var sent = 0, loi = 0;
+    for (var i = 0; i < list.length; i++) {
+      if (MailApp.getRemainingDailyQuota() < 1) { Logger.log('Hết lượt gửi mail hôm nay, để mai gửi tiếp.'); break; }
+      var f = list[i];
+      try {
+        guiMotMailFb_(f.email, f);
+        rpc_('mail_fb_mark_sent', { p_id: f.id, p_status: f.status });
+        sent++;
+      } catch (e) {
+        loi++;
+        Logger.log('Không gửi được mail feedback %s tới %s: %s', f.id, f.email, e.message);
+      }
+    }
+    if (sent || loi) Logger.log('Mail feedback: đã gửi %s, lỗi %s.', sent, loi);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Gửi 1 mail MẪU tới chính bạn để xem giao diện (không đụng dữ liệu Supabase). Chạy tay từ editor.
+function guiMailThu() {
+  var me = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  guiMotMailFb_(me, {
+    id: 'PFDEMO', name: 'Nguyễn Văn A', title: 'Màn Forecast: thêm cột Ngày nhận deal', status: 'Completed',
+    submittedAt: '16/10/2026',
+    reply: 'Chào bạn, team đã thêm cột "Ngày nhận deal" vào bảng Forecast (Năm 1).\nBạn tải lại trang (Ctrl+Shift+R) để thấy thay đổi nhé.'
+  });
+  Logger.log('Đã gửi mail mẫu tới %s', me);
+}
+
+function guiMotMailFb_(to, f) {
+  var m = noiDungMailFb_(f);
+  MailApp.sendEmail({ to: to, subject: m.subject, body: m.body, htmlBody: m.html, name: MAIL_FB.TEN_NGUOI_GUI });
+}
+
+function thayBien_(tpl, v) {
+  return String(tpl).replace(/\{(ten|tieu_de|trang_thai|ngay_gui)\}/g, function (_, k) { return v[k] == null ? '' : v[k]; });
+}
+function escHtml_(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// Trả về { subject, body (chữ thuần, cho máy không xem được HTML), html }
+function noiDungMailFb_(f) {
+  var C = MAIL_FB, nhan = MAIL_FB_NHAN[f.status] || f.status;
+  var v = { ten: f.name || 'bạn', tieu_de: f.title, trang_thai: nhan, ngay_gui: f.submittedAt || '' };
+  var vh = {};   // bản đã escape để chèn vào HTML
+  for (var k in v) vh[k] = escHtml_(v[k]);
+  var mauTT = (C.MAU_TRANG_THAI || {})[f.status] || C.MAU_CHU_DAO;
+
+  var body = thayBien_(C.LOI_CHAO, v) + '\n\n' + thayBien_(C.DOAN_MO_DAU, v) + '\n\n' +
+    'Feedback: ' + f.title + '\nTrạng thái: ' + nhan + '\n' +
+    (f.reply ? '\n' + C.NHAN_PHAN_HOI + ':\n' + f.reply + '\n' : '') +
+    '\n' + C.CHU_NUT + ': ' + C.LINK + '\n\n' + C.CHU_KY + '\n\n' + thayBien_(C.CHAN_TRANG, v);
+
+  var F = "font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;";
+  var html =
+    '<!doctype html><html><body style="margin:0;padding:0;background:#F1F4F9;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F4F9;padding:28px 12px;"><tr><td align="center">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:14px;overflow:hidden;border:1px solid #E3E8F0;">' +
+      // đầu mail
+      '<tr><td style="background:' + C.MAU_CHU_DAO + ';padding:20px 28px;' + F + 'color:#FFFFFF;">' +
+        '<div style="font-size:18px;font-weight:700;letter-spacing:.2px;">' + escHtml_(C.TEN_NGUOI_GUI) + '</div>' +
+        '<div style="font-size:12.5px;opacity:.85;margin-top:2px;">Product Feedback</div>' +
+      '</td></tr>' +
+      // thân
+      '<tr><td style="padding:26px 28px 8px;' + F + 'color:#1E2A45;font-size:14.5px;line-height:1.6;">' +
+        '<p style="margin:0 0 12px;font-weight:600;">' + thayBien_(escHtml_(C.LOI_CHAO), vh) + '</p>' +
+        '<p style="margin:0 0 18px;color:#475569;">' + thayBien_(escHtml_(C.DOAN_MO_DAU), vh) + '</p>' +
+        // thẻ feedback
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E3E8F0;border-radius:10px;">' +
+          '<tr><td style="padding:14px 16px;' + F + '">' +
+            '<div style="font-size:12px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;">Feedback</div>' +
+            '<div style="font-size:15px;font-weight:600;color:#1E2A45;margin:4px 0 10px;">' + vh.tieu_de + '</div>' +
+            '<span style="display:inline-block;background:' + mauTT + ';color:#FFFFFF;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;">' + vh.trang_thai + '</span>' +
+            (v.ngay_gui ? '<span style="font-size:12px;color:#94A3B8;margin-left:8px;">Gửi ngày ' + vh.ngay_gui + '</span>' : '') +
+          '</td></tr>' +
+        '</table>' +
+        // phản hồi
+        (f.reply
+          ? '<div style="margin:18px 0 0;padding:14px 16px;background:#F5F7FF;border-left:4px solid ' + C.MAU_CHU_DAO + ';border-radius:6px;">' +
+              '<div style="font-size:12px;font-weight:700;color:' + C.MAU_CHU_DAO + ';margin-bottom:6px;">' + escHtml_(C.NHAN_PHAN_HOI) + '</div>' +
+              '<div style="color:#1E2A45;">' + escHtml_(f.reply).replace(/\n/g, '<br>') + '</div>' +
+            '</div>'
+          : '') +
+        // nút
+        '<div style="margin:24px 0 8px;">' +
+          '<a href="' + escHtml_(C.LINK) + '" style="display:inline-block;background:' + C.MAU_CHU_DAO + ';color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border-radius:8px;">' + escHtml_(C.CHU_NUT) + ' →</a>' +
+        '</div>' +
+        '<p style="margin:18px 0 0;color:#1E2A45;">' + escHtml_(C.CHU_KY) + '</p>' +
+      '</td></tr>' +
+      // chân trang
+      '<tr><td style="padding:16px 28px 22px;' + F + 'font-size:12px;line-height:1.5;color:#94A3B8;border-top:1px solid #EEF1F6;">' +
+        thayBien_(escHtml_(C.CHAN_TRANG), vh) +
+      '</td></tr>' +
+    '</table></td></tr></table></body></html>';
+
+  return { subject: thayBien_(C.TIEU_DE_MAIL, v), body: body, html: html };
+}
+
+// Tạo trigger: dongBoDeals mỗi giờ + guiMailFeedback mỗi 5 phút (chạy lại không tạo trùng)
 function caiDatTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'dongBoDeals') ScriptApp.deleteTrigger(t);
+    var h = t.getHandlerFunction();
+    if (h === 'dongBoDeals' || h === 'guiMailFeedback') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('dongBoDeals').timeBased().everyHours(1).create();
-  Logger.log('Đã cài trigger đồng bộ mỗi giờ.');
+  ScriptApp.newTrigger('guiMailFeedback').timeBased().everyMinutes(5).create();
+  Logger.log('Đã cài trigger: đồng bộ deal mỗi giờ, gửi mail feedback mỗi 5 phút.');
 }
 
 // In ra nguồn BigQuery của các tab Connected Sheets để copy vào SYNC
