@@ -4298,3 +4298,535 @@
     window.csAssist = { crState: cxCrState, crSum: cxCrSum, evalEvents: cxEvalEvents, openDealWhy: openDealWhy, openCrBreakdown: openCrBreakdown, showCal: showCal };
   })();
 })();
+
+/* =======================================================================
+   PRODUCT TOUR — Hướng dẫn sử dụng (Driver.js).
+   Toàn bộ nằm ở ui.js, KHÔNG đụng app.js (coi app.js như black box, chỉ đọc
+   DOM + bấm control thật để "tự lái"). Driver.js nạp ở index.html TRƯỚC ui.js.
+   - Tự bật 1 lần cho người lần đầu (localStorage), sau đó bấm nút 🧭 ở topbar.
+   - Thiếu phần tử nào thì bước đó vẫn chạy (popover canh giữa), không gãy tour.
+   ======================================================================= */
+(function () {
+  if (!window.driver || !window.driver.js || !window.driver.js.driver) return;
+  var D = window.driver.js.driver;
+  var SEEN = 'csTourSeen_v1';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+
+  /* ---- CSS riêng cho popover (driver.css đã nạp ở index.html) + nút 🧭 ---- */
+  (function injectCss() {
+    if (document.getElementById('csTourCss')) return;
+    var css = ''
+      + '#csTourBtn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;border-radius:10px;'
+      +   'border:1px solid rgba(120,125,170,.28);background:transparent;color:#9ba2f2;'
+      +   'font:600 13px/1 Inter,system-ui,sans-serif;cursor:pointer;margin-right:4px}'
+      + '#csTourBtn:hover{background:rgba(90,90,214,.16)}'
+      + '#csTourBtn svg{width:17px;height:17px}'
+      + '@media(max-width:760px){#csTourBtn .cst-lb{display:none}#csTourBtn{padding:0 10px}}'
+      + '.driver-popover.cst{border-radius:14px;border:1px solid #e4e6f2;box-shadow:0 18px 50px rgba(8,10,22,.5);'
+      +   'max-width:340px;padding:0;overflow:hidden;background:#fff}'
+      + '.cst-top{padding:12px 16px 11px;background:linear-gradient(135deg,#f5f5ff,#ffffff);border-bottom:1px solid #eeeefb}'
+      + '.cst-brand{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:#5b5bd6;text-transform:uppercase;'
+      +   'margin-bottom:9px;display:flex;align-items:center;gap:6px}'
+      + '.cst-bar{height:4px;border-radius:4px;background:#e9e9f7;overflow:hidden}'
+      + '.cst-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7c7cf0,#5b5bd6);border-radius:4px;transition:width .35s ease}'
+      + '.driver-popover.cst .driver-popover-title{padding:13px 16px 0;font:700 15.5px/1.5 Inter,system-ui,sans-serif;color:#1f2340}'
+      + '.driver-popover.cst .driver-popover-description{padding:0 16px;font:400 13.5px/1.62 Inter,system-ui,sans-serif;color:#3a3f63}'
+      + '.driver-popover.cst .driver-popover-footer{padding:11px 14px 13px;margin-top:13px;background:#faf9ff;border-top:1px solid #efeefb}'
+      + '.driver-popover.cst .driver-popover-progress-text{color:#6b7090;font-size:12px}'
+      + '.driver-popover.cst .driver-popover-footer button{background:#5b5bd6;color:#fff;text-shadow:none;border:0;'
+      +   'border-radius:9px;font:600 13px/1.3 Inter,system-ui,sans-serif;padding:7px 13px;cursor:pointer}'
+      + '.driver-popover.cst .driver-popover-footer button.driver-popover-prev-btn{background:#ececfb;color:#5b5bd6}'
+      + '.driver-popover.cst .driver-popover-close-btn{display:none}'
+      + '.driver-popover.cst .driver-popover-arrow{border-color:#fff}'
+      + '.cst-skip{all:unset;cursor:pointer;color:#9aa0c0;font-size:12px;text-decoration:underline;margin-right:auto;padding:4px 2px}'
+      + '.cst-skip:hover{color:#5b5bd6}'
+      + '.cst-sub{margin-top:10px;font-size:12px;color:#6b7090}'
+      + '.cst-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}'
+      + '.cst-chip{all:unset;cursor:pointer;font:600 12px/1 Inter,system-ui,sans-serif;padding:7px 11px;border-radius:999px;background:#ececfb;color:#5b5bd6}'
+      + '.cst-chip:hover{background:#dedefa}'
+      + '.cst-chip-main{background:#5b5bd6;color:#fff}.cst-chip-main:hover{background:#4c4cc4}'
+      + '.cst-pause{all:unset;cursor:pointer;display:inline-block;margin-top:12px;font:600 12.5px/1 Inter,system-ui,sans-serif;'
+      +   'padding:8px 12px;border-radius:9px;border:1px dashed #b9b9ef;color:#5b5bd6}'
+      + '.cst-pause:hover{background:#f3f3fe}'
+      + '.cst-hub{position:fixed;z-index:9000;background:#fff;color:#1f2340;border:1px solid #e4e6f2;border-radius:14px;'
+      +   'box-shadow:0 18px 50px rgba(8,10,22,.45);overflow:hidden;font:400 13px/1.45 Inter,system-ui,sans-serif;animation:cstHubIn .16s ease-out}'
+      + '@keyframes cstHubIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}'
+      + '.cst-hub-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px 14px 10px;'
+      +   'background:linear-gradient(135deg,#f5f5ff,#fff);border-bottom:1px solid #eeeefb}'
+      + '.cst-hub-head .cst-brand{margin-bottom:4px}'
+      + '.cst-hub-title{font-weight:700;font-size:15px;color:#1f2340}'
+      + '.cst-hub-x{all:unset;cursor:pointer;width:28px;height:28px;border-radius:8px;text-align:center;line-height:28px;color:#9aa0c0}'
+      + '.cst-hub-x:hover{background:#ececfb;color:#5b5bd6}'
+      + '.cst-hub-list{max-height:min(60vh,460px);overflow:auto;padding:6px}'
+      + '.cst-hub-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px}'
+      + '.cst-hub-row:hover{background:#f6f6fe}'
+      + '.cst-hub-ic{flex:0 0 32px;height:32px;border-radius:9px;background:#ececfb;display:grid;place-items:center;font-size:16px}'
+      + '.cst-hub-tx{flex:1;min-width:0;display:flex;flex-direction:column}'
+      + '.cst-hub-tx b{font-weight:600;font-size:13.5px}'
+      + '.cst-hub-tx span{font-size:12px;color:#6b7090}'
+      + '.cst-hub-act{display:flex;gap:6px;flex:0 0 auto}'
+      + '.cst-hub-go{all:unset;cursor:pointer;font:600 12px/1 Inter,system-ui,sans-serif;padding:7px 10px;border-radius:8px;background:#5b5bd6;color:#fff}'
+      + '.cst-hub-go:hover{background:#4c4cc4}'
+      + '.cst-hub-play{all:unset;cursor:pointer;font-size:11px;width:28px;height:27px;text-align:center;line-height:27px;border-radius:8px;background:#ececfb;color:#5b5bd6}'
+      + '.cst-hub-play:hover{background:#dedefa}'
+      + '.cst-hub-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:10px 14px 12px;border-top:1px solid #efeefb;background:#faf9ff}'
+      + '.cst-hub-foot .cst-chip{margin:0}'
+      + '.cst-why .cx-why{box-shadow:0 0 0 3px #ffd34d,0 0 14px 4px rgba(255,211,77,.75);animation:cstWhy 1.1s ease-in-out infinite}'
+      + '@keyframes cstWhy{0%,100%{box-shadow:0 0 0 3px #ffd34d,0 0 14px 4px rgba(255,211,77,.75)}50%{box-shadow:0 0 0 5px #ffd34d,0 0 22px 8px rgba(255,211,77,.45)}}';
+    var s = document.createElement('style'); s.id = 'csTourCss'; s.textContent = css;
+    document.head.appendChild(s);
+  })();
+
+  /* ---- helpers "tự lái": bấm control thật của app ---- */
+  function click(sel) { var el = $(sel); if (el) { el.click(); return true; } return false; }
+  function openTab(tab) { var el = $('.tab[data-tab="' + tab + '"]'); if (el && !el.classList.contains('active')) el.click(); }
+  function setMenu(open) { var m = $('#accMenu'); if (!m) return; if (open) m.classList.add('open'); else m.classList.remove('open'); }
+  // Có kích thước VÀ không bị ẩn bằng visibility (popup đóng chỉ ẩn bằng CSS, vẫn giữ kích thước)
+  function visible(el) {
+    return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length) &&
+      getComputedStyle(el).visibility !== 'hidden');
+  }
+  // settledFn (tuỳ chọn): trả true khi màn đã tải xong → hết phần tử thì thôi chờ sớm
+  // (vẫn chờ tối thiểu ~0.5s để nội dung kịp vẽ).
+  function waitFor(sel, cb, settledFn, tries) {
+    tries = (tries == null) ? 30 : tries;              // ~30 * 90ms ≈ 2.7s
+    var el = sel ? $(sel) : null;
+    if (!sel || visible(el)) return cb(el);
+    if (tries <= 0 || (settledFn && tries <= 24 && settledFn())) return cb(null);
+    setTimeout(function () { waitFor(sel, cb, settledFn, tries - 1); }, 90);
+  }
+
+  /* ---- đưa app về đúng màn cho từng bước (trước khi highlight) ---- */
+  /* Driver.js gắn class driver-active/driver-fade vào <body>, nhưng app.js và
+     mục Career path kiểm tra body.className === 'app-mode' (so khớp tuyệt đối)
+     → khi tour chạy, Career path tự tắt & routing app.js bị bỏ qua. Chuyển các
+     class đó lên <html> ngay khi Driver gắn (CSS của Driver vẫn ăn vì <html> là cha). */
+  // Không dựa vào onDestroyed: Driver BỎ QUA hook này khi bước hiện tại không có
+  // phần tử (bước chào / canh giữa) → class kẹt trên <html> làm cả trang không bấm được.
+  // Thay vào đó đồng bộ theo drv.isActive() mỗi lần Driver gắn/gỡ class ở <body>.
+  var DRV_CLS = ['driver-active', 'driver-fade', 'driver-simple'];
+  function clearDrvCls() { DRV_CLS.forEach(function (c) { document.documentElement.classList.remove(c); }); }
+  function syncDrvCls() {
+    var active = !!(drv && drv.isActive());
+    DRV_CLS.forEach(function (c) {
+      if (document.body.classList.contains(c)) {
+        document.body.classList.remove(c);
+        if (active) document.documentElement.classList.add(c);
+      }
+    });
+    if (!active && document.documentElement.classList.contains('driver-active')) endTour();
+  }
+  new MutationObserver(syncDrvCls).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // Pháo hoa: Driver chặn click trong popover ở capture phase (stopImmediatePropagation)
+  // nên không gắn listener vào nút "Xong" được → bắn khi tour kết thúc ở bước cuối
+  // và KHÔNG phải do bấm "Bỏ qua".
+  var ended = true, skipped = false;
+  function endTour() {
+    clearDrvCls();
+    if (ended) return;
+    ended = true;
+    var completed = !skipped && lastIdx === STEPS.length - 1;
+    closeReqModal(); document.documentElement.classList.remove('cst-why');
+    try {
+      localStorage.setItem(SEEN, '1');
+      // nghỉ giữa chặng / chỉ xem riêng một phần thì giữ chỗ xem dở
+      if (!paused && stopAt < 0) localStorage.removeItem(RESUME);
+    } catch (e) {}
+    if (completed) celebrate();
+  }
+
+  function closeReqModal() { var m = $('#reqModal'); if (m) m.classList.remove('open'); }
+
+  function isCareerOn() { return /^#\/?overview\/career-path/.test(location.hash || ''); }
+  function leaveCareer() { if (isCareerOn()) location.hash = '#/overview'; }
+
+  // prep IDEMPOTENT: chỉ bấm control khi CHƯA ở đúng màn (vì onHighlightStarted +
+  // refresh() có thể gọi prep nhiều lần — bấm lại nút bật-tắt sẽ gây nhảy/lệch).
+  function prep(key) {
+    setMenu(false);
+    if (key !== 'reqChoose') closeReqModal();
+    // Bước nút "?": tô sáng (nhấp nháy) TẤT CẢ nút ? trên thẻ CR và từng deal
+    document.documentElement.classList.toggle('cst-why', key === 'fcWhyCard' || key === 'fcWhyDeal');
+    var el;
+    switch (key) {
+      case 'ovIntro': case 'ovFilter': case 'ovCards': case 'ovTable':
+        leaveCareer(); openTab('overview'); break;
+      case 'cpIntro': case 'cpChart': case 'cpCommit': case 'cpSim':
+        openTab('overview');
+        if (!isCareerOn()) { el = $('.cp-nav-btn'); if (el) el.click(); }
+        break;
+      case 'fcIntro': case 'fcFilterHelp': case 'fcWhyCard': case 'fcWhyDeal': case 'fcMain': case 'fcCrm':
+        openTab('forecast');
+        el = $('.fc-view-btn[data-view="y1"]'); if (el && !el.classList.contains('active')) el.click();
+        break;
+      case 'reqIntro': case 'reqList': case 'reqCreate': case 'reqChoose':
+        openTab('forecast');
+        if (!visible($('#fcRequestBlock'))) { el = $('.fc-req-btn'); if (el) el.click(); }
+        // Bước "Tạo mới": bấm luôn nút để mở popup 2 lựa chọn Gia hạn / Dừng
+        if (key === 'reqChoose' && !visible($('#reqModal .req-type-choice'))) { el = $('#reqCreateBtn'); if (el) el.click(); }
+        break;
+      case 'calIntro': case 'calList':
+        openTab('forecast');
+        if (!visible($('#cxCalBlock'))) { el = $('.cx-cal-btn'); if (el) el.click(); }
+        break;
+      case 'scIntro': case 'scPerf': case 'scIncome':
+        openTab('dashboard'); break;
+      case 'changelog': case 'claude':
+        leaveCareer(); openTab('overview'); setMenu(true); break;
+      case 'end': leaveCareer(); openTab('overview'); break;
+    }
+  }
+
+  /* ---- Nội dung 23 bước (đúng thứ tự đã chốt) ---- */
+  function S(sel, key, title, desc, side) {
+    return { element: sel, _key: key, popover: { title: title, description: desc, side: side || 'right', align: 'start', popoverClass: 'cst' } };
+  }
+  function C(key, title, desc) { return { _key: key, popover: { title: title, description: desc, popoverClass: 'cst' } }; }
+  // Bước "không bắt buộc": thiếu phần tử (chưa có dữ liệu) thì tự nhảy qua.
+  function O(step, settledFn) { step._optional = true; step._settled = settledFn; return step; }
+  var careerReady = function () { var v = $('#cpView'); return visible(v) && !v.querySelector('.pf-loading'); };
+  var forecastReady = function () { return visible($('#fcTableCard')); };
+  var dashReady = function () { return visible($('#panel-dashboard')); };
+
+  var STEPS = [
+    C('welcome', '👋 Chào mừng tới CS Console',
+      'Đây là nơi bạn xem &amp; quản lý số liệu các deal mình phụ trách. Cùng đi một vòng nhanh qua từng tính năng nha — bấm <b>Tiếp →</b> để bắt đầu!'),
+
+    S('.tab[data-tab="overview"]', 'ovIntro', 'Tab Overview',
+      'Đầu tiên là <b>Overview</b> — bức tranh tổng quan cả portfolio của bạn.', 'right'),
+    S('#panel-overview .filter-bar', 'ovFilter', '① Bộ lọc',
+      'Lọc deal theo <b>thời gian</b>, <b>loại hợp đồng</b>, <b>bộ giải pháp</b>. Mọi số liệu bên dưới đổi theo bộ lọc này.', 'bottom'),
+    S('#panel-overview .kpi-row', 'ovCards', '② Số liệu tổng quan',
+      'Nhìn nhanh: số deal nhận, revenue đang thực hiện, CHS_CS trung bình và sức khoẻ deal.', 'bottom'),
+    S('#panel-overview .table-card', 'ovTable', '③ Danh sách deal',
+      'Toàn bộ deal bạn phụ trách. Bấm vào một dòng để xem chi tiết.', 'top'),
+
+    S('.nav-sub .cp-nav-btn', 'cpIntro', 'Career path',
+      'Nơi quản lý <b>lộ trình thăng tiến</b>: chặng đã qua, commit quý và mô phỏng CR.', 'right'),
+    O(S('#cpView .cp-chart-card', 'cpChart', '① Lộ trình của bạn',
+      'Biểu đồ level qua từng quý — xem mình đã đi tới đâu và kế hoạch quý này.', 'bottom'), careerReady),
+    O(S('#cpView .cp-head .cp-sec', 'cpCommit', '② Tạo / sửa commit',
+      'Đầu quý chọn giữ hay lên level, nhập commit <b>CR · SRR_1 · SRR_4</b>. Lên level thì commit không thấp hơn mốc KPI của level đó.', 'top'), careerReady),
+    O(S('#cxSim', 'cpSim', '③ Mô phỏng tính CR',
+      'Tick thử các deal giả sử go-live trong tháng để xem <b>CR quý</b> mới so với commit. <b>Chọn gợi ý</b> tự chọn deal lớn. Chỉ tính thử, không lưu gì.', 'top'), careerReady),
+
+    S('.tab[data-tab="forecast"]', 'fcIntro', 'Tab Forecast',
+      'Dự báo <b>CR/ACR</b> và nhập %Active/%Output cho từng deal theo năm.', 'right'),
+    S('#panel-forecast .fc-kpis', 'fcMain', '① Màn Forecast',
+      'Card <b>CHS_T1/T4</b>, tử số &amp; mẫu số <b>CR</b>, <b>ACR</b>; bên dưới là bảng deal theo <b>Năm 1 / Năm 2++</b>.', 'bottom'),
+    S('#fcFilter', 'fcFilterHelp', '② Bộ lọc',
+      'Lọc deal theo <b>Tháng</b> và nhóm <b>CHS</b> (T1/T4 ≥ 50 hay &lt; 50). Số liệu và bảng deal đổi theo bộ lọc này.', 'bottom'),
+    O(S('#panel-forecast .cx-why-cr', 'fcWhyCard', '③ Nút "?" trên thẻ CR',
+      'Bấm <b>?</b> trên thẻ <b>Tử số / Mẫu số CR</b> để xem danh sách từng deal tạo nên con số đó — <b>vì sao CR tháng</b> ra như vậy.', 'bottom'), forecastReady),
+    O(S('#fcTbody .cx-why', 'fcWhyDeal', '④ Nút "?" ở từng deal',
+      'Mỗi deal có nút <b>?</b> cạnh tên: bấm để xem deal đang nằm ở <b>tử hay mẫu số CR</b> và lý do (go-live sớm, trễ, loại HĐ không tính…).', 'right'), forecastReady),
+    O(S('.fc-gl-crm-badge', 'fcCrm', '⑤ Dữ liệu từ CRM',
+      'Nhãn <b>"Đã kéo"</b> / <b>"CRM"</b> nghĩa là số này <b>đồng bộ thẳng từ Base CRM</b> về — tự khoá, không nhập tay, cứ yên tâm nha.', 'top'), forecastReady),
+
+    C('pause', '☕ Đã đi hơn nửa chặng!',
+      'Còn vài phần nữa: <b>Request</b>, <b>Lịch đánh giá</b>, <b>Scorecard</b>… Muốn nghỉ chút không? Bấm <b>Tiếp →</b> để đi tiếp, hoặc quay lại xem phần nào chưa rõ.'),
+
+    S('#fcRequestBlock', 'reqIntro', 'Mục Request',
+      'Trong Forecast có <b>Request</b> — nơi tạo &amp; theo dõi đề xuất <b>Gia hạn / Dừng triển khai</b>.', 'top'),
+    S('#fcRequestBlock .table-card', 'reqList', '① Danh sách đề xuất',
+      'Theo dõi các đề xuất đã tạo và <b>trạng thái duyệt</b> của chúng. Lọc nhanh Tất cả / Gia hạn / Dừng bằng các chip phía trên.', 'top'),
+    S('#reqCreateBtn', 'reqCreate', '② Tạo mới',
+      'Bấm <b>＋ Tạo mới</b> để gửi một đề xuất mới — bấm <b>Tiếp</b> để xem thử nhé.', 'bottom'),
+    S('#reqModal .req-type-choice', 'reqChoose', '③ Chọn loại đề xuất',
+      'Có 2 lựa chọn: <b>Gia hạn triển khai</b> (lùi ngày go-live) hoặc <b>Dừng triển khai</b>. Chọn xong thì tìm deal theo tên / Sys ID / Deal ID và điền lý do.', 'bottom'),
+
+    S('#cxCalBlock', 'calIntro', 'Lịch đánh giá',
+      'Xem lịch các <b>kỳ đánh giá T1/T4</b> từ Năm 1 đến Năm 5.', 'top'),
+    S('#cxCalBlock .table-card', 'calList', 'Kỳ đánh giá & deal nhiều năm',
+      'Mọi kỳ đánh giá kèm <b>ngày khoá</b> nhập %Active/%Output và kỳ còn thiếu số — gồm cả <b>deal nhiều năm</b> ở các năm tiếp theo để theo dõi <b>tháng nhận Com</b>. Lọc nhanh bằng các chip phía trên.', 'top'),
+
+    S('.tab[data-tab="dashboard"]', 'scIntro', 'Tab Scorecard',
+      'Xem <b>performance</b> và <b>thu nhập tạm tính</b> của bạn.', 'right'),
+    O(S('#csPerfCard', 'scPerf', '① Performance &amp; xếp loại tháng',
+      'Kết quả performance theo tháng: <b>CR, SRR_1, SRR_4</b> so với mốc KPI / GOAL / OUT, và <b>xếp loại tháng</b> ở cuối thẻ.', 'right'), dashReady),
+    O(S('#incomeHero', 'scIncome', '② Thu nhập tạm tính',
+      'Ước tính thu nhập (lương cứng + commission) ngay trên Console để bạn hình dung sớm.', 'top'), dashReady),
+
+    S('#changelogBtn', 'changelog', 'Changelog',
+      'Mỗi lần tool có bản mới, xem ở đây để biết vừa đổi gì nha.', 'left'),
+    S('#claudeBtn', 'claude', 'Kết nối Claude (MCP)',
+      'Hỏi &amp; cập nhật deal bằng cách <b>chat với Claude</b>. Tạo link kết nối (hiện 1 lần) rồi dán vào Claude — link có khoá bí mật, đừng chia sẻ nhé.', 'left'),
+
+    S('#csTourBtn', 'end', 'Hoàn tất! 🎉',
+      'Từ giờ bấm nút <b>🧭 Product tour</b> trên thanh menu sẽ mở <b>bảng tóm tắt tính năng</b> — đi nhanh tới từng phần hoặc xem lại hướng dẫn riêng phần đó. Chúc bạn làm việc hiệu quả!', 'bottom')
+  ];
+
+  /* ---- Driver instance ---- */
+  var lastIdx = -1, curDir = 1, settled = false;
+  // Driver chọn phần tử TRƯỚC khi gọi onHighlightStarted rồi gán activeElement ngay sau khi
+  // hook trả về → mọi moveTo() gọi đồng bộ trong hook đều bị đè bằng "phần tử ảo".
+  // Lùi sang tick sau là lượt highlight dở dang đã xong, moveTo() mới có tác dụng.
+  function afterHighlight(idx, fn) {
+    setTimeout(function () { if (drv.isActive() && drv.getActiveIndex() === idx) fn(); }, 30);
+  }
+  var RESUME = 'csTourResume_v1', paused = false;
+  // Các phần lớn của tour — dùng cho bước "nghỉ giữa chặng" (quay lại) và nút "xem tiếp".
+  var SECTIONS = [['ovIntro', 'Overview'], ['cpIntro', 'Career path'], ['fcIntro', 'Forecast'],
+    ['reqIntro', 'Request'], ['calIntro', 'Lịch đánh giá'], ['scIntro', 'Scorecard']];
+  function idxOf(key) { for (var i = 0; i < STEPS.length; i++) if (STEPS[i]._key === key) return i; return -1; }
+  function sectionAt(i) {
+    var name = '';
+    SECTIONS.forEach(function (s) { var k = idxOf(s[0]); if (k > -1 && k <= i) name = s[1]; });
+    return name;
+  }
+  function getResume() { var v = -1; try { v = parseInt(localStorage.getItem(RESUME), 10); } catch (e) {} return (v > 0 && v < STEPS.length) ? v : -1; }
+
+  var drv = D({
+    showProgress: true, animate: true, allowClose: true, showButtons: ['next', 'previous'],
+    // Khoá bấm vào vùng đang highlight: lỡ bấm "Dừng triển khai"/tab… trong lúc tour
+    // sẽ làm popup/màn đổi mà tour không biết → khung trống, lệch bước.
+    disableActiveInteraction: true,
+    overlayColor: '#0b0d12', overlayOpacity: 0.6,
+    nextBtnText: 'Tiếp →', prevBtnText: '← Lùi', doneBtnText: 'Xong 🎉', progressText: '{{current}}/{{total}}',
+    steps: STEPS,
+    // "Tự lái": mỗi khi 1 bước được highlight, đưa app về đúng màn của bước đó
+    // (bấm tab/nút thật), rồi chờ nội dung (kể cả async) hiện ra và canh lại
+    // highlight bằng refresh(). Dùng onHighlightStarted để LUÔN chạy dù tới bước
+    // bằng Tiếp / Lùi / nhảy bước — không phụ thuộc onNextClick.
+    onHighlightStarted: function () {
+      var idx = drv.getActiveIndex();
+      var step = STEPS[idx]; if (!step) return;
+      // Xem riêng một phần: tới mốc phần kế tiếp thì kết thúc (không pháo hoa, giữ chỗ xem dở)
+      if (stopAt > -1 && idx >= stopAt) { skipped = true; setTimeout(function () { drv.destroy(); }, 0); return; }
+      if (idx !== lastIdx) { curDir = idx > lastIdx ? 1 : -1; lastIdx = idx; settled = false; }
+      prep(step._key);
+      if (!step.element || settled) return;
+      waitFor(step.element, function (found) {
+        if (settled || !drv.isActive() || drv.getActiveIndex() !== idx) return;
+        settled = true;
+        afterHighlight(idx, function () {
+          if (!found) {
+            // Không có phần tử (vd level chưa áp dụng Career path, chưa deal nào có nhãn CRM):
+            // bước "không bắt buộc" thì tự nhảy qua theo chiều đang đi, khỏi hiện khung lệch.
+            if (step._optional) {
+              if (curDir > 0) { if (drv.hasNextStep()) drv.moveNext(); }
+              else if (drv.hasPreviousStep()) drv.movePrevious();
+            }
+            return;
+          }
+          // Lúc highlight mà phần tử chưa hiện (popup đang mở, nội dung đang tải) thì Driver dùng
+          // "phần tử ảo" giữa màn — refresh() KHÔNG tìm lại selector → chạy lại bước.
+          if (drv.getActiveElement() !== found) drv.moveTo(idx); else drv.refresh();
+          // Nội dung còn lớn thêm (biểu đồ vẽ sau, popup chạy animation) → canh lại khung
+          [450, 1100].forEach(function (ms) {
+            setTimeout(function () { if (drv.isActive() && drv.getActiveIndex() === idx) drv.refresh(); }, ms);
+          });
+        });
+      }, step._settled, step._settled ? 66 : 30); // bước phụ thuộc dữ liệu: chờ tới ~6s khi còn đang tải
+    },
+    onPopoverRender: function (popover) {
+      var pct = Math.round((drv.getActiveIndex() + 1) / STEPS.length * 100);
+      if (!popover.wrapper.querySelector('.cst-top')) {
+        var top = document.createElement('div');
+        top.className = 'cst-top';
+        top.innerHTML = '<div class="cst-brand">✦ Product tour · CS Console</div><div class="cst-bar"><i></i></div>';
+        popover.wrapper.insertBefore(top, popover.wrapper.firstChild);
+      }
+      var bar = popover.wrapper.querySelector('.cst-bar i'); if (bar) bar.style.width = pct + '%';
+
+      var idx = drv.getActiveIndex(), key = STEPS[idx] && STEPS[idx]._key, desc = popover.description;
+      if (stopAt > -1 && idx === stopAt - 1 && popover.nextButton) popover.nextButton.textContent = 'Xong ✓';
+      // Commit: đổi lời theo tình huống — chưa có commit (form "Lên commit") hay đã có (nút "Sửa commit")
+      if (key === 'cpCommit' && desc && popover.title) {
+        var save = $('#cpSave'), editBtn = $('#cpEdit');
+        if (save && /Chốt/.test(save.textContent)) {
+          popover.title.innerHTML = '② Tạo commit quý này';
+          desc.innerHTML = 'Bạn <b>chưa có commit</b> cho quý này. Chọn <b>level mục tiêu</b> (giữ hay lên level), nhập <b>CR · SRR_1 · SRR_4</b> (%) rồi bấm <b>Chốt commit</b>. Lên level thì mỗi số phải ≥ mốc KPI của level đó.';
+        } else if (editBtn) {
+          popover.title.innerHTML = '② Commit của quý';
+          desc.innerHTML = 'Số bạn đã commit cho quý: level mục tiêu và <b>CR · SRR_1 · SRR_4</b>. Cần chỉnh thì bấm <b>Sửa commit</b> (được sửa tới hết hạn chốt của quý).';
+        }
+      }
+      // Bước chào: có chỗ đang xem dở → nút "xem tiếp"
+      var rs = getResume();
+      if (key === 'welcome' && rs > 0 && desc && !desc.querySelector('.cst-chips')) {
+        desc.insertAdjacentHTML('beforeend',
+          '<div class="cst-chips"><button type="button" class="cst-chip cst-chip-main" data-goto="' + rs + '">↪ Xem tiếp từ chỗ đang dở: ' + sectionAt(rs) + '</button></div>');
+      }
+      // Bước nghỉ giữa chặng: các phần đã đi qua (bấm để quay lại) + nút nghỉ
+      if (key === 'pause' && desc && !desc.querySelector('.cst-chips')) {
+        var chips = SECTIONS.filter(function (s) { var k = idxOf(s[0]); return k > -1 && k < idx; })
+          .map(function (s) { return '<button type="button" class="cst-chip" data-goto="' + idxOf(s[0]) + '">↺ ' + s[1] + '</button>'; }).join('');
+        desc.insertAdjacentHTML('beforeend',
+          '<div class="cst-sub">Xem lại phần đã qua:</div><div class="cst-chips">' + chips + '</div>' +
+          '<button type="button" class="cst-pause" data-pause="1">☕ Nghỉ chút, lát xem tiếp</button>');
+      }
+      if (desc) {
+        desc.querySelectorAll('[data-goto]').forEach(function (b) {
+          b.addEventListener('click', function () { drv.moveTo(parseInt(b.getAttribute('data-goto'), 10)); });
+        });
+        var pz = desc.querySelector('[data-pause]');
+        if (pz) pz.addEventListener('click', function () {
+          paused = true; skipped = true;
+          try { localStorage.setItem(RESUME, String(idx + 1)); } catch (e) {}
+          drv.destroy();
+        });
+      }
+
+      if (popover.footer && !popover.footer.querySelector('.cst-skip')) {
+        var skip = document.createElement('button');
+        skip.className = 'cst-skip'; skip.type = 'button'; skip.textContent = 'Bỏ qua';
+        skip.addEventListener('click', function () { skipped = true; drv.destroy(); });
+        popover.footer.insertBefore(skip, popover.footer.firstChild);
+      }
+    },
+    onDestroyed: function () { endTour(); }
+  });
+
+  // Chế độ "xem riêng một phần" (nút ▶ ở bảng tóm tắt): dừng ở mốc phần kế tiếp.
+  var stopAt = -1;
+  function nextBoundary(from) {
+    var marks = SECTIONS.map(function (s) { return idxOf(s[0]); })
+      .concat([idxOf('pause'), idxOf('changelog'), idxOf('claude'), idxOf('end')]);
+    var b = STEPS.length;
+    marks.forEach(function (m) { if (m > from && m < b) b = m; });
+    return b;
+  }
+  function startTour(from, sectionOnly) {
+    closeHub();
+    stopAt = sectionOnly ? nextBoundary(from) : -1;
+    // Khung Performance + Xếp loại tháng không có id → gắn id để tour khoanh trọn cả thẻ
+    var pg = $('#perfGrid');
+    if (pg && pg.parentElement && !pg.parentElement.id) pg.parentElement.id = 'csPerfCard';
+    ended = false; skipped = false; paused = false; lastIdx = -1; curDir = 1; settled = false;
+    drv.drive(from > 0 ? from : 0);
+  }
+  window.csStartTour = startTour; // tiện gọi lại nếu cần
+  window.csTourDriver = drv;      // debug: csTourDriver.moveTo(n) để nhảy tới bước n
+
+  /* ---- Bảng tóm tắt tính năng (mở bằng nút 🧭 sau khi đã xem tour) ----
+     Mỗi dòng: "Đi tới" (nhảy thẳng tới màn đó) + "▶" (xem hướng dẫn riêng phần đó). */
+  var HUB = [
+    ['📊', 'Overview', 'Bộ lọc, số liệu tổng quan, danh sách deal', 'ovIntro'],
+    ['🚀', 'Career path', 'Lộ trình level, tạo / sửa commit quý, mô phỏng CR', 'cpIntro'],
+    ['📈', 'Forecast', 'Card CHS / CR, bộ lọc, nút ? giải thích, dữ liệu từ CRM', 'fcIntro'],
+    ['📝', 'Request', 'Tạo & theo dõi đề xuất Gia hạn / Dừng triển khai', 'reqIntro'],
+    ['📅', 'Lịch đánh giá', 'Kỳ T1/T4 Năm 1–5, ngày khoá nhập, deal nhiều năm', 'calIntro'],
+    ['🏆', 'Scorecard', 'Performance, xếp loại tháng, thu nhập tạm tính', 'scIntro'],
+    ['🕘', 'Changelog', 'Xem tool vừa cập nhật gì', 'changelog', '#changelogBtn'],
+    ['🔌', 'Kết nối Claude', 'Hỏi & cập nhật deal bằng chat với Claude (MCP)', 'claude', '#claudeBtn']
+  ];
+  var hub = null;
+  function closeHub() { if (hub) { hub.remove(); hub = null; } }
+  // Đặt ngay dưới nút 🧭, canh mép phải; màn hẹp thì co lại (gọi lại khi đổi cỡ cửa sổ)
+  function placeHub() {
+    if (!hub) return;
+    var b = document.getElementById('csTourBtn'), r = b && visible(b) ? b.getBoundingClientRect() : { bottom: 60, right: innerWidth - 12 };
+    var w = Math.min(430, innerWidth - 24);
+    hub.style.width = w + 'px';
+    hub.style.top = (r.bottom + 8) + 'px';
+    hub.style.left = Math.max(12, Math.min(r.right - w, innerWidth - w - 12)) + 'px';
+  }
+  function openHub() {
+    closeHub();
+    var rs = getResume();
+    hub = document.createElement('div');
+    hub.className = 'cst-hub'; hub.setAttribute('role', 'dialog'); hub.setAttribute('aria-label', 'Product tour');
+    hub.innerHTML =
+      '<div class="cst-hub-head"><div><div class="cst-brand">✦ Product tour · CS Console</div>' +
+        '<div class="cst-hub-title">Tóm tắt tính năng</div></div>' +
+        '<button type="button" class="cst-hub-x" aria-label="Đóng">✕</button></div>' +
+      '<div class="cst-hub-list">' + HUB.map(function (h) {
+        return '<div class="cst-hub-row"><div class="cst-hub-ic">' + h[0] + '</div>' +
+          '<div class="cst-hub-tx"><b>' + h[1] + '</b><span>' + h[2] + '</span></div>' +
+          '<div class="cst-hub-act"><button type="button" class="cst-hub-go" data-nav="' + h[3] + '"' + (h[4] ? ' data-click="' + h[4] + '"' : '') + '>Đi tới</button>' +
+          '<button type="button" class="cst-hub-play" data-tour="' + h[3] + '" title="Xem hướng dẫn phần này" aria-label="Xem hướng dẫn ' + h[1] + '">▶</button></div></div>';
+      }).join('') + '</div>' +
+      '<div class="cst-hub-foot">' +
+        (rs > 0 ? '<button type="button" class="cst-chip" data-resume="' + rs + '">↪ Xem tiếp: ' + sectionAt(rs) + '</button>' : '') +
+        '<button type="button" class="cst-chip cst-chip-main" data-restart="1">▶ Xem lại toàn bộ tour</button></div>';
+    document.body.appendChild(hub);
+    placeHub();
+
+    hub.querySelector('.cst-hub-x').addEventListener('click', closeHub);
+    hub.querySelectorAll('[data-nav]').forEach(function (x) {
+      x.addEventListener('click', function () {
+        var sel = x.getAttribute('data-click');
+        closeHub();
+        if (sel) { var el = $(sel); if (el) el.click(); }   // Changelog / Kết nối Claude: mở luôn
+        else prep(x.getAttribute('data-nav'));               // các màn khác: điều hướng như tour
+      });
+    });
+    hub.querySelectorAll('[data-tour]').forEach(function (x) {
+      x.addEventListener('click', function () { startTour(idxOf(x.getAttribute('data-tour')), true); });
+    });
+    var rb = hub.querySelector('[data-resume]');
+    if (rb) rb.addEventListener('click', function () { startTour(parseInt(rb.getAttribute('data-resume'), 10)); });
+    hub.querySelector('[data-restart]').addEventListener('click', function () { startTour(0); });
+  }
+  document.addEventListener('click', function (e) {
+    if (hub && !hub.contains(e.target) && !(e.target.closest && e.target.closest('#csTourBtn'))) closeHub();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeHub(); });
+  window.addEventListener('resize', placeHub);
+
+  var btn = document.getElementById('csTourBtn');
+  if (btn) btn.addEventListener('click', function () {
+    var seen = false; try { seen = localStorage.getItem(SEEN) === '1'; } catch (e) {}
+    if (!seen) return startTour();      // chưa xem lần nào → chạy tour
+    if (hub) closeHub(); else openHub(); // đã xem → mở/đóng bảng tóm tắt
+  });
+
+  /* ---- Tự bật 1 lần khi app đã sẵn sàng (đăng nhập xong + có hồ sơ) ---- */
+  (function autoFirstRun() {
+    var seen = false; try { seen = localStorage.getItem(SEEN) === '1'; } catch (e) {}
+    if (seen) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var ready = !document.body.classList.contains('login-mode') && visible($('#profileStrip'));
+      if (ready) { clearInterval(timer); setTimeout(startTour, 700); }
+      else if (tries > 50) { clearInterval(timer); } // ~30s thì thôi
+    }, 600);
+  })();
+
+  /* ---- Pháo hoa / confetti khi hoàn tất tour ---- */
+  function celebrate() {
+    var c = document.createElement('canvas');
+    c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147483647';
+    document.body.appendChild(c);
+    var ctx = c.getContext('2d'); c.width = innerWidth; c.height = innerHeight;
+    var P = [], colors = ['#5b5bd6', '#7c7cf0', '#ffd34d', '#ef5a7a', '#16a34a', '#0ea5e9', '#f6a94a', '#a855f7', '#ec4899'];
+    function burst(x, y, n) {
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2, s = 3 + Math.random() * 8;
+        P.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 3, g: 0.14 + Math.random() * 0.08,
+          col: colors[(Math.random() * colors.length) | 0], sz: 3 + Math.random() * 5, life: 60 + Math.random() * 50,
+          rot: Math.random() * 6, vr: (Math.random() - .5) * .5 });
+      }
+    }
+    function rain(n) {
+      for (var i = 0; i < n; i++) {
+        P.push({ x: Math.random() * c.width, y: -10 - Math.random() * 60, vx: (Math.random() - .5) * 2,
+          vy: 2 + Math.random() * 3, g: 0.05, col: colors[(Math.random() * colors.length) | 0],
+          sz: 3 + Math.random() * 4, life: 110 + Math.random() * 60, rot: Math.random() * 6, vr: (Math.random() - .5) * .4 });
+      }
+    }
+    // Nhiều pháo hoa: nổ ở 7 vị trí + mưa confetti, dồn vào ~1.4s đầu, tổng ~3s.
+    var shots = [[0.5, 0.4], [0.26, 0.34], [0.74, 0.36], [0.4, 0.52], [0.62, 0.5], [0.15, 0.46], [0.85, 0.46]];
+    shots.forEach(function (p, k) {
+      setTimeout(function () { burst(innerWidth * p[0], innerHeight * p[1], 110); rain(40); }, k * 200);
+    });
+    var t0 = performance.now();
+    setTimeout(function () { c.remove(); }, 3500); // chốt chặn: tab chạy nền làm rAF chậm
+    (function loop(now) {
+      ctx.clearRect(0, 0, c.width, c.height); var alive = 0;
+      for (var i = 0; i < P.length; i++) {
+        var p = P[i]; if (p.life <= 0) continue; alive++;
+        p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 45)); ctx.fillStyle = p.col;
+        ctx.fillRect(-p.sz / 2, -p.sz / 2, p.sz, p.sz * 1.7); ctx.restore();
+      }
+      // Các cụm nổ được hẹn giờ (0–1.2s) → khung đầu chưa có hạt nào; vẫn chạy tiếp
+      // trong lúc còn cụm chờ nổ, tổng tối đa ~3.2s.
+      var t = now - t0;
+      if ((alive > 0 || t < shots.length * 200 + 100) && t < 3200) requestAnimationFrame(loop); else c.remove();
+    })(t0);
+  }
+})();

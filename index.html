@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=39">
+<link rel="stylesheet" href="driver.css?v=1">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="login-mode">
@@ -279,6 +280,12 @@
         <div class="hte-block" id="hteScorecard" style="display:none;">
           <select id="dbMonth" class="fc-month" aria-label="Tháng đánh giá"></select>
         </div>
+
+        <!-- Nút mở Product Tour (ui.js mục PRODUCT TOUR gắn sự kiện + tự bật lần đầu) -->
+        <button type="button" id="csTourBtn" title="Xem Product tour" aria-label="Product tour">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5l-1.6 4.9-4.9 1.6 1.6-4.9z"/></svg>
+          <span class="cst-lb">Product tour</span>
+        </button>
 
         <div class="user-box" id="userBox">
           <!-- Hồ sơ CS: app.js điền qua các id psAvatar / psName / psSub / psChips.
@@ -941,7 +948,9 @@
 
   <!-- ui.js nạp TRƯỚC app.js: nó chỉ lo giao diện, nhưng cần cài "tai nghe"
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
-  <script src="ui.js?v=52"></script>
+  <!-- Driver.js (product tour) — nạp TRƯỚC ui.js để window.driver sẵn sàng -->
+  <script src="driver.iife.js?v=1"></script>
+  <script src="ui.js?v=68"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=14"></script>
 
