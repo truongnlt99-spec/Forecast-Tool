@@ -76,8 +76,8 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
   (sheet `SYNC.SHEET_ID`, cùng tên cột với query BigQuery); `'bigquery'` chạy query thẳng như cũ.
 - Nguồn sheet: ngày dd/mm/yyyy → yyyy-mm-dd, ô lỗi công thức (#NAME?, #N/A…) → trống, tab < `MIN_ROWS` dòng thì dừng.
 - Chống trùng (`locTrung_`): Deal ID chuẩn hoá về chữ số; lặp y hệt giữ 1; lặp mà nội dung khác → bỏ cả deal lượt đó
-  (Supabase giữ số cũ), quá `MAX_DUP_RATE` thì dừng cả lượt; deal khác ID nhưng trùng Job + tên + giá trị chỉ ghi log
-  (lỗi nguồn, báo chị Chi). `deals_raw` khoá chính `deal_id` nên DB không thể có 2 dòng cùng deal.
-  **Không** đánh dấu ngừng deal vắng mặt (tab chỉ giữ deal gần đây; deal cũ vẫn cần cho Com Năm 2++) → deal bị xoá/huỷ
-  trên CRM sẽ không tự ẩn khỏi console; quay lại `'bigquery'` thì hết.
+  (Supabase giữ số cũ), quá `MAX_DUP_RATE` thì dừng cả lượt. Deal ID khác nhau (kể cả cùng Job) luôn đồng bộ bình thường.
+  `deals_raw` khoá chính `deal_id` nên DB không thể có 2 dòng cùng deal.
+- Deal không còn trong tab bị đánh dấu ngừng (ẩn, không xoá) như nguồn BigQuery; SQL chặn nếu lượt thấy < 50% số deal
+  active. Lượt có Deal ID xung đột thì không ẩn deal nào.
 - Script chạy trong project Apps Script riêng: sửa file trong repo xong phải dán lại vào Apps Script. Test: `tests/dong-bo-sheet.test.mjs`.

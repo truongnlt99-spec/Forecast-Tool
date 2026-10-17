@@ -24,9 +24,9 @@
  * NGUỒN DỮ LIỆU (SYNC.NGUON, từ 17/10/2026):
  *  - 'sheet'    (đang dùng, TẠM THỜI): đọc tab "Extract of Raw" mà chị Chi đồng bộ sẵn
  *               trong sheet SHEET_ID — cùng tên cột với query BigQuery. Script tự đổi ngày
- *               dd/mm/yyyy → yyyy-mm-dd, bỏ ô lỗi công thức (#NAME?, #N/A…). Ở chế độ này
- *               deal không có trong tab KHÔNG bị đánh dấu ngừng (tab chỉ giữ các deal gần
- *               đây; deal cũ vẫn cần cho Com Năm 2++), chỉ thêm / cập nhật.
+ *               dd/mm/yyyy → yyyy-mm-dd, bỏ ô lỗi công thức (#NAME?, #N/A…). Deal không còn
+ *               trong tab bị đánh dấu ngừng (ẩn khỏi console, không xoá) như nguồn BigQuery —
+ *               trừ lượt có Deal ID xung đột (xem locTrung_) thì lượt đó không ẩn deal nào.
  *  - 'bigquery' : chạy query thẳng trên BigQuery như trước. Đổi lại khi có quyền BigQuery ổn định.
  * =====================================================================
  */
@@ -60,8 +60,6 @@ function dongBoDeals() {
       if (dd.trungGiong) Logger.log('Bỏ %s dòng lặp y hệt (cùng Deal ID, cùng nội dung)', dd.trungGiong);
       if (dd.xungDot.length) Logger.log('KHÔNG cập nhật %s deal có nhiều dòng KHÁC nhau (giữ số cũ trên Supabase): %s',
         dd.xungDot.length, dd.xungDot.join(', '));
-      if (dd.nghiTrungJob.length) Logger.log('Cảnh báo — deal khác ID nhưng giống hệt trong cùng Job (lỗi nguồn, báo chị Chi lọc): %s',
-        dd.nghiTrungJob.join(' | '));
       if (rows.length < SYNC.MIN_ROWS) throw new Error('Tab "' + SYNC.SHEET_TAB + '" chỉ có ' + rows.length +
         ' deal hợp lệ (< ' + SYNC.MIN_ROWS + ') — có thể đang cập nhật dở, dừng, không đồng bộ.');
       if (dd.xungDot.length > rows.length * SYNC.MAX_DUP_RATE) throw new Error(dd.xungDot.length +
@@ -73,12 +71,16 @@ function dongBoDeals() {
       if (!rows.length) throw new Error('BigQuery trả về 0 dòng — dừng, không đồng bộ.');
     }
 
+    // Lượt có Deal ID xung đột: các deal đó không được gửi → nếu bật ẩn deal vắng mặt thì chúng bị ẩn oan.
+    var anDealVang = !tuSheet || !dd.xungDot.length;
+    if (!anDealVang) Logger.log('Lượt này KHÔNG ẩn deal vắng mặt vì có Deal ID xung đột.');
     var runAt = new Date().toISOString();
     var total = { upserted: 0, bo_qua_thieu_id: 0, deactivated: 0, cot_khong_khop: {} };
     for (var i = 0; i < rows.length; i += SYNC.BATCH_SIZE) {
       var batch = rows.slice(i, i + SYNC.BATCH_SIZE);
-      // nguồn sheet: không bao giờ gửi lô cuối (p_final) → không đánh dấu ngừng deal vắng mặt
-      var res = callSync_(batch, runAt, !tuSheet && i + SYNC.BATCH_SIZE >= rows.length);
+      // lô cuối (p_final) → Supabase đánh dấu ngừng deal không có trong lượt này; chốt an toàn ở SQL:
+      // lượt thấy < 50% số deal đang active thì báo lỗi, không ẩn hàng loạt
+      var res = callSync_(batch, runAt, anDealVang && i + SYNC.BATCH_SIZE >= rows.length);
       total.upserted += res.upserted;
       total.bo_qua_thieu_id += res.bo_qua_thieu_id;
       total.deactivated += res.deactivated;
@@ -134,8 +136,7 @@ function oSheet_(v) {
 // cùng deal; nhưng sheet có 2 dòng cùng Deal ID thì không biết dòng nào đúng):
 //  - Deal ID chuẩn hoá về chữ số ("1,180,370" / "1180370.0" → "1180370"); không phải số → bỏ.
 //  - Lặp y hệt → giữ 1. Lặp mà nội dung KHÁC nhau → bỏ cả deal lượt này (Supabase giữ số cũ) + ghi log.
-//  - Deal khác ID nhưng trùng Job + tên + giá trị + bộ giải pháp + loại HĐ → chỉ cảnh báo (lỗi nguồn,
-//    không tự xoá vì có thể là deal thật).
+//  - Deal ID khác nhau thì luôn đồng bộ bình thường (1 Job có nhiều deal là chuyện thường).
 function locTrung_(rows) {
   var byId = {}, order = [], conflict = {}, idSai = 0, trungGiong = 0;
   rows.forEach(function (r) {
@@ -148,15 +149,7 @@ function locTrung_(rows) {
     else conflict[id] = true;
   });
   var out = order.filter(function (id) { return !conflict[id]; }).map(function (id) { return byId[id].row; });
-  var job = {};
-  out.forEach(function (r) {
-    if (r.Job_ID == null) return;
-    var k = [r.Job_ID, r.Deal_name, r.Deal_value, r.Bo_giai_phap, r.Loai_hop_dong].join('|');
-    (job[k] = job[k] || []).push(r.Deal_ID);
-  });
-  var nghi = Object.keys(job).filter(function (k) { return job[k].length > 1; })
-    .map(function (k) { return 'Job ' + k.split('|')[0] + ': ' + job[k].join(', '); });
-  return { rows: out, idSai: idSai, trungGiong: trungGiong, xungDot: Object.keys(conflict), nghiTrungJob: nghi };
+  return { rows: out, idSai: idSai, trungGiong: trungGiong, xungDot: Object.keys(conflict) };
 }
 
 // Query + project: ưu tiên SYNC.BQ_QUERY, không có thì đọc từ nguồn Connected Sheets
