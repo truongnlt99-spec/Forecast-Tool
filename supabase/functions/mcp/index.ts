@@ -107,7 +107,7 @@ function isStopped(d: Deal): boolean {
   return !!s && s !== "false";
 }
 
-// Quy tắc CR — giống crIn() trong app.js (quyết định 15–16/10/2026)
+// Quy tắc CR — giống crIn() trong app.js (quyết định 15–17/10/2026)
 function contractCounted(c: string): boolean {
   const s = String(c || "").toLowerCase().trim();
   if (!s || s === "renew" || s === "—") return false;
@@ -118,9 +118,9 @@ function crIn(d: Deal, m: string): { dat: boolean; noDen?: boolean } | null {
   if (!isMonth(crMonth) || !contractCounted(d["Loại hợp đồng"]) || isStopped(d)) return null;
   const g = monthOf(d["Ngày go-live thực tế"]);
   if (g) {
-    // go-live SỚM (tháng trước tháng hạn) → chỉ tử số ở tháng go-live, không vào mẫu số tháng nào
-    if (mCmp(g, crMonth) < 0) return m === g ? { dat: true, noDen: true } : null;
-    if (g === crMonth) return m === g ? { dat: true } : null;
+    // go-live SỚM (tháng trước tháng hạn) hoặc đúng tháng hạn → tử + mẫu ở tháng go-live,
+    // không vào mẫu số tháng hạn nữa (17/10/2026)
+    if (mCmp(g, crMonth) <= 0) return m === g ? { dat: true } : null;
     if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
     return { dat: m === g };
   }
@@ -210,7 +210,7 @@ const TOOLS: Tool[] = [
     description:
       "Tính CR của tháng (tử số = DT go-live đạt, mẫu số = DT phải go-live) theo đúng quy tắc của console: " +
       "deal nằm trong mẫu số từ tháng hạn tới tháng go-live; go-live đúng tháng hạn tính cả tử + mẫu; " +
-      "go-live SỚM (tháng trước tháng hạn) chỉ cộng tử số ở tháng go-live, không vào mẫu số tháng nào; " +
+      "go-live SỚM (tháng trước tháng hạn) tính cả tử + mẫu ở tháng go-live, không vào mẫu số tháng hạn; " +
       "chỉ loại HĐ New/Upsale/Cross/Expansion/Renew CSM/Renew triển khai lại; bỏ deal dừng triển khai.",
     inputSchema: S({ thang: str("Tháng MM/YYYY (mặc định tháng hiện tại)") }),
     readOnly: true,

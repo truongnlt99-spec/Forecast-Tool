@@ -256,7 +256,7 @@ function mShift(m: string, n: number): string {
   const t = yy * 12 + (mm - 1) + n;
   return String(t % 12 + 1).padStart(2, "0") + "/" + Math.floor(t / 12);
 }
-// Quy tắc CR — giống crIn() trong app.js và tool cr_summary của MCP (quyết định 15–16/10/2026)
+// Quy tắc CR — giống crIn() trong app.js và tool cr_summary của MCP (quyết định 15–17/10/2026)
 function contractCounted(c: string): boolean {
   const s = String(c || "").toLowerCase().trim();
   if (!s || s === "renew" || s === "—") return false;
@@ -268,8 +268,8 @@ function crIn(d: Row, m: string): { dat: boolean; noDen?: boolean } | null {
   if (!/^\d{2}\/\d{4}$/.test(crMonth || "") || !contractCounted(d["Loại hợp đồng"]) || (stop && stop !== "false")) return null;
   const g = monthOf(d["Ngày go-live thực tế"]);
   if (g) {
-    if (mCmp(g, crMonth) < 0) return m === g ? { dat: true, noDen: true } : null;
-    if (g === crMonth) return m === g ? { dat: true } : null;
+    // go-live SỚM hoặc đúng tháng hạn → tử + mẫu ở tháng go-live (17/10/2026)
+    if (mCmp(g, crMonth) <= 0) return m === g ? { dat: true } : null;
     if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
     return { dat: m === g };
   }

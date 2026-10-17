@@ -1,4 +1,4 @@
-// Quy tắc CR (quyết định 15–16/10/2026) — phải giống nhau ở 3 nơi:
+// Quy tắc CR (quyết định 15–17/10/2026) — phải giống nhau ở 3 nơi:
 // app.js crIn(), ui.js qCrCompute() và tool cr_summary của MCP.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ function loadCrIn() {
 const D = { crMonth: '10/2026', contract: 'Upsale' };   // tháng hạn = 10/2026
 const CASES = [
   // [tháng xem, go-live thực tế, kết quả]
-  ['09/2026', '2026-09-30', { dat: true, noDen: true }], // kéo SỚM: chỉ tử số tháng kéo
+  ['09/2026', '2026-09-30', { dat: true }],              // kéo SỚM: tử + mẫu tháng kéo (17/10/2026)
   ['10/2026', '2026-09-30', null],                       // không vào mẫu số tháng hạn
   ['11/2026', '2026-09-30', null],
   ['08/2026', '2026-09-30', null],
@@ -60,6 +60,7 @@ test('ui.js qCrCompute — cùng quy tắc với app.js (kể cả deal gia hạ
   ];
   const fn = new Function('qList', 'qMNorm', 'document', body + '\nreturn qCrCompute;')(
     qList, mNorm, { getElementById: () => null });
-  assert.deepEqual(fn('09/2026'), { phai: 10000000, dat: 5375000, touched: true });
+  // kéo sớm (deal 1, 4) vào cả tử + mẫu tháng 09
+  assert.deepEqual(fn('09/2026'), { phai: 15375000, dat: 5375000, touched: true });
   assert.deepEqual(fn('10/2026'), { phai: 12000000, dat: 2000000, touched: true });
 });

@@ -7,7 +7,8 @@ import { loadEdgeFunction, read, slice } from './helpers.mjs';
 // 10 deal mẫu cho Q4/2026. Đơn vị triệu cho dễ đọc.
 const tr = (n) => (n * 1e6).toLocaleString('vi-VN');
 const DEALS = [
-  // CR — tháng 10: tử = D1 10 + D3 30 + D5 6 (go-live sớm, chỉ tử số) = 46; mẫu = D1 10 + D2 20 + D3 30 = 60
+  // CR — tháng 10: tử = D1 10 + D3 30 + D5 6 (go-live sớm) = 46; mẫu = D1 10 + D2 20 + D3 30 + D5 6 (go-live sớm
+  // vào cả mẫu tháng kéo — 17/10/2026) = 66
   { 'Deal ID': 'D1', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '15/10/2026',
     'DT phải go-live': tr(10), 'Giá trị phần mềm bộ (VNĐ)': tr(10), 'Tháng đo T1': '10/2026', 'CHS_CS T1': '60,0' },
   { 'Deal ID': 'D2', 'Loại hợp đồng': 'Upsale', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '', 'DT phải go-live': tr(20) },
@@ -71,9 +72,9 @@ test('careerGet giữa quý: chỉ tính tháng đã tới, cộng dồn đúng 
   assert.equal(r.canAchieveWindow, false);
   assert.equal(r.status, 'none');
   assert.deepEqual(r.quarters, ['Q4/2026', 'Q3/2026']);
-  assert.equal(r.actuals.cr.phai, 60e6);
+  assert.equal(r.actuals.cr.phai, 66e6);
   assert.equal(r.actuals.cr.dat, 46e6);
-  assert.equal(r.actuals.cr.v, 76.67);
+  assert.equal(r.actuals.cr.v, 69.7);
   assert.equal(r.actuals.s1.v, 66.67);   // 10 / (10 + 5), PS và kỳ đo tháng 12 không tính
   assert.equal(r.actuals.s1.n, 2);
   assert.equal(r.actuals.s4.v, 100);
@@ -98,7 +99,7 @@ test('CR quý = tổng tử/mẫu từng tháng của tool cr_summary (MCP)', as
   }
   assert.equal(view.actuals.cr.phai, phai);   // deal D2 chưa go-live nằm trong mẫu số cả 3 tháng
   assert.equal(view.actuals.cr.dat, dat);
-  assert.equal(phai, 100e6);
+  assert.equal(phai, 106e6);   // 66 (tháng 10) + 20 + 20 (D2 tháng 11, 12)
   Date.now = realNow;
 });
 
@@ -153,7 +154,7 @@ test('careerSaveCommit: mốc sàn khi lên level, giữ level thì không có s
 });
 
 test('careerAchieve: chỉ trong cửa sổ, phải đạt đủ, lên level thì cần lương trong khung', async () => {
-  // tháng 12 — số quý: CR 46%, SRR_1 8,7% (D10 kỳ đo tháng 12 đã tới, chưa có CHS), SRR_4 100%
+  // tháng 12 — số quý: CR 43,4% (46 / 106), SRR_1 8,7% (D10 kỳ đo tháng 12 đã tới, chưa có CHS), SRR_4 100%
   at('2026-12-20');
   state.list = { commits: [commit({ targetLevel: 'CS level 4', cr: 40, s1: 8, s4: 90 })], levelHistory: [] };
   let r = await post({ action: 'careerGet', quarter: 'Q4/2026' });
@@ -161,7 +162,7 @@ test('careerAchieve: chỉ trong cửa sổ, phải đạt đủ, lên level th�
   assert.equal(r.canEdit, true);
   assert.equal(r.levelUp, true);
   assert.equal(r.canAchieve, true);
-  assert.equal(r.evaluation.items.cr.loading, 115);   // 46 / 40
+  assert.equal(r.evaluation.items.cr.loading, 108.5); // 43,4 / 40
   assert.equal(r.actuals.s1.v, 8.7);
   assert.equal(r.evaluation.items.s1.loading, 108.8);
 
@@ -183,7 +184,7 @@ test('careerAchieve: chỉ trong cửa sổ, phải đạt đủ, lên level th�
   assert.equal(k.p_new_level, null);
   assert.equal(k.p_new_salary, null);
 
-  // chưa đạt (CR thực tế 46% < commit 50%)
+  // chưa đạt (CR thực tế 43,4% < commit 50%)
   state.list = { commits: [commit({ cr: 50, s1: 8, s4: 90 })], levelHistory: [] };
   assert.equal((await post({ action: 'careerGet', quarter: 'Q4/2026' })).canAchieve, false);
   assert.match((await post({ action: 'careerAchieve', quarter: 'Q4/2026' })).error, /chưa đạt/);

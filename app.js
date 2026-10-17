@@ -90,15 +90,14 @@
   function countsForSrr(d) { return contractCounted(d.contract) && !isNonSoftware(d); }
   // CR theo tháng m: deal nằm trong MẪU số từ tháng ghi nhận CR (tháng hạn, đã tính gia hạn)
   // cho tới tháng go-live thực tế; tháng go-live tính cả TỬ số. Sau đó không tính nữa.
-  // Go-live ĐÚNG tháng hạn → tử + mẫu tháng đó. Go-live SỚM (tháng trước tháng hạn) → chỉ cộng
-  // TỬ số ở tháng go-live, KHÔNG vào mẫu số tháng nào (noDen) — quyết định 16/10/2026.
-  // Deal dừng: không có tháng CR.
+  // Go-live ĐÚNG tháng hạn → tử + mẫu tháng đó. Go-live SỚM (tháng trước tháng hạn) → tử + mẫu
+  // ở tháng go-live, không vào mẫu số tháng hạn nữa — quyết định 17/10/2026 (thay quy tắc 16/10
+  // "kéo sớm chỉ tính tử số"). Deal dừng: không có tháng CR.
   function crIn(d, m, gl) {
     if (!d.crMonth || !contractCounted(d.contract)) return null;
     if (gl) {
       var g = mNorm(gl);
-      if (mCmp(g, d.crMonth) < 0) return (m === g) ? { dat: true, noDen: true } : null;
-      if (g === d.crMonth) return (m === g) ? { dat: true } : null;
+      if (mCmp(g, d.crMonth) <= 0) return (m === g) ? { dat: true } : null;
       if (mCmp(m, d.crMonth) < 0 || mCmp(m, g) > 0) return null;
       return { dat: m === g };
     }
