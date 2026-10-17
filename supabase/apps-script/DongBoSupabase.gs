@@ -35,6 +35,7 @@ var SYNC = {
   NGUON: 'sheet',      // 'sheet' | 'bigquery'
   SHEET_TAB: 'Extract of Raw',
   MIN_ROWS: 500,       // tab ít hơn số dòng này → coi là đang lỗi / đang cập nhật dở, dừng
+  MAX_DUP_RATE: 0.05,  // > 5% Deal ID bị lặp với nội dung khác nhau → sheet nghi hỏng (dán chồng…), dừng
   SUPABASE_URL: 'https://lheaoklvumzapmwuhysr.supabase.co',
   BQ_PROJECT_ID: 'base-data-analyst',
   BQ_QUERY: '',        // để trống = đọc query từ tab "Bigquery" (Connected Sheets)
@@ -51,10 +52,20 @@ function dongBoDeals() {
     var tuSheet = SYNC.NGUON === 'sheet';
     var rows;
     if (tuSheet) {
-      rows = docSheet_();
-      Logger.log('Tab "%s" có %s dòng', SYNC.SHEET_TAB, rows.length);
+      var raw = docSheet_();
+      Logger.log('Tab "%s" có %s dòng', SYNC.SHEET_TAB, raw.length);
+      var dd = locTrung_(raw);
+      rows = dd.rows;
+      if (dd.idSai) Logger.log('Bỏ %s dòng Deal ID không hợp lệ', dd.idSai);
+      if (dd.trungGiong) Logger.log('Bỏ %s dòng lặp y hệt (cùng Deal ID, cùng nội dung)', dd.trungGiong);
+      if (dd.xungDot.length) Logger.log('KHÔNG cập nhật %s deal có nhiều dòng KHÁC nhau (giữ số cũ trên Supabase): %s',
+        dd.xungDot.length, dd.xungDot.join(', '));
+      if (dd.nghiTrungJob.length) Logger.log('Cảnh báo — deal khác ID nhưng giống hệt trong cùng Job (lỗi nguồn, báo chị Chi lọc): %s',
+        dd.nghiTrungJob.join(' | '));
       if (rows.length < SYNC.MIN_ROWS) throw new Error('Tab "' + SYNC.SHEET_TAB + '" chỉ có ' + rows.length +
-        ' dòng (< ' + SYNC.MIN_ROWS + ') — có thể đang cập nhật dở, dừng, không đồng bộ.');
+        ' deal hợp lệ (< ' + SYNC.MIN_ROWS + ') — có thể đang cập nhật dở, dừng, không đồng bộ.');
+      if (dd.xungDot.length > rows.length * SYNC.MAX_DUP_RATE) throw new Error(dd.xungDot.length +
+        ' Deal ID bị lặp với nội dung khác nhau — sheet nghi bị dán chồng / lỗi, dừng, không đồng bộ.');
     } else {
       var src = layQuery_();
       rows = queryBigQuery_(src.projectId, src.query);
@@ -117,6 +128,35 @@ function oSheet_(v) {
   var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
   return s;
+}
+
+// Chống trùng trước khi đẩy sang Supabase (deals_raw khoá theo deal_id nên DB không bao giờ có 2 dòng
+// cùng deal; nhưng sheet có 2 dòng cùng Deal ID thì không biết dòng nào đúng):
+//  - Deal ID chuẩn hoá về chữ số ("1,180,370" / "1180370.0" → "1180370"); không phải số → bỏ.
+//  - Lặp y hệt → giữ 1. Lặp mà nội dung KHÁC nhau → bỏ cả deal lượt này (Supabase giữ số cũ) + ghi log.
+//  - Deal khác ID nhưng trùng Job + tên + giá trị + bộ giải pháp + loại HĐ → chỉ cảnh báo (lỗi nguồn,
+//    không tự xoá vì có thể là deal thật).
+function locTrung_(rows) {
+  var byId = {}, order = [], conflict = {}, idSai = 0, trungGiong = 0;
+  rows.forEach(function (r) {
+    var id = String(r.Deal_ID == null ? '' : r.Deal_ID).replace(/[,\s]/g, '').replace(/\.0+$/, '');
+    if (!/^\d{1,15}$/.test(id)) { idSai++; return; }
+    r.Deal_ID = id;
+    var key = JSON.stringify(r);
+    if (!byId[id]) { byId[id] = { row: r, key: key }; order.push(id); return; }
+    if (byId[id].key === key) trungGiong++;
+    else conflict[id] = true;
+  });
+  var out = order.filter(function (id) { return !conflict[id]; }).map(function (id) { return byId[id].row; });
+  var job = {};
+  out.forEach(function (r) {
+    if (r.Job_ID == null) return;
+    var k = [r.Job_ID, r.Deal_name, r.Deal_value, r.Bo_giai_phap, r.Loai_hop_dong].join('|');
+    (job[k] = job[k] || []).push(r.Deal_ID);
+  });
+  var nghi = Object.keys(job).filter(function (k) { return job[k].length > 1; })
+    .map(function (k) { return 'Job ' + k.split('|')[0] + ': ' + job[k].join(', '); });
+  return { rows: out, idSai: idSai, trungGiong: trungGiong, xungDot: Object.keys(conflict), nghiTrungJob: nghi };
 }
 
 // Query + project: ưu tiên SYNC.BQ_QUERY, không có thì đọc từ nguồn Connected Sheets

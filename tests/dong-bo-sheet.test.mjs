@@ -66,6 +66,42 @@ test('dongBoDeals (nguồn sheet): gửi theo lô, KHÔNG lô nào p_final (khô
 
 test('dongBoDeals (nguồn sheet): tab ít dòng bất thường → dừng, không gửi gì', () => {
   const { ctx, calls } = load([HEAD, [1, 'cs', '', '', '', '', '', '']]);
-  assert.throws(() => ctx.dongBoDeals(), /chỉ có 1 dòng/);
+  assert.throws(() => ctx.dongBoDeals(), /chỉ có 1 deal hợp lệ/);
   assert.equal(calls.length, 0);
+});
+
+const H2 = ['Deal_ID', 'Job_ID', 'Deal_name', 'Deal_value', 'Bo_giai_phap', 'Loai_hop_dong', 'CO_Owner'];
+const row = (id, o = {}) => [id, o.job ?? 1, o.name ?? 'Deal ' + id, o.val ?? 1000 + Number(String(id).replace(/\D/g, '')), 'HRM', 'New', o.cs ?? 'cs'];
+
+test('locTrung_: chuẩn hoá Deal ID, lặp y hệt giữ 1, lặp khác nội dung bỏ cả deal, cảnh báo trùng cùng Job', () => {
+  const { ctx } = load([]);
+  const rows = ctx.sheetToRows_([H2,
+    row(101), row(101),                         // lặp y hệt → giữ 1
+    row(102, { cs: 'a' }), row(102, { cs: 'b' }), // khác CS → bỏ cả deal 102
+    row('1,103'), row('104.0'), row('abc'),     // chuẩn hoá / không hợp lệ
+    row(105, { job: 9, name: 'X', val: 5 }), row(106, { job: 9, name: 'X', val: 5 }), // khác ID, trùng Job
+  ]);
+  const r = ctx.locTrung_(rows);
+  assert.deepEqual([...r.rows].map((x) => x.Deal_ID), ['101', '1103', '104', '105', '106']);
+  assert.equal(r.trungGiong, 1);
+  assert.deepEqual([...r.xungDot], ['102']);
+  assert.equal(r.idSai, 1);
+  assert.deepEqual([...r.nghiTrungJob], ['Job 9: 105, 106']);
+});
+
+test('dongBoDeals (nguồn sheet): gửi đúng 1 dòng mỗi deal; quá nhiều Deal ID xung đột → dừng, không gửi', () => {
+  const ok = [H2];
+  for (let i = 0; i < 6; i++) ok.push(row(2000 + i), row(2000 + i));   // mỗi deal lặp 2 lần y hệt
+  let t = load(ok, { minRows: 5, batch: 4 });
+  t.ctx.dongBoDeals();
+  const ids = t.calls.flatMap((c) => c.p_rows.map((x) => x.Deal_ID));
+  assert.equal(ids.length, 6);
+  assert.equal(new Set(ids).size, 6);
+
+  const bad = [H2];
+  for (let i = 0; i < 10; i++) bad.push(row(3000 + i, { cs: 'a' }));
+  bad.push(row(3000, { cs: 'b' }));              // 1/9 deal xung đột > 5%
+  t = load(bad, { minRows: 5 });
+  assert.throws(() => t.ctx.dongBoDeals(), /lặp với nội dung khác nhau/);
+  assert.equal(t.calls.length, 0);
 });
