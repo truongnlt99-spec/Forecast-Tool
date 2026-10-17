@@ -81,3 +81,11 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
 - Deal không còn trong tab bị đánh dấu ngừng (ẩn, không xoá) như nguồn BigQuery; SQL chặn nếu lượt thấy < 50% số deal
   active. Lượt có Deal ID xung đột thì không ẩn deal nào.
 - Script chạy trong project Apps Script riêng: sửa file trong repo xong phải dán lại vào Apps Script. Test: `tests/dong-bo-sheet.test.mjs`.
+
+## 11. Mail báo người gửi khi feedback hoàn thành (17/10/2026)
+
+- Không dùng Resend: hàm `guiMailFeedback` trong `supabase/apps-script/DongBoSupabase.gs` (cùng project Apps Script đồng bộ,
+  trigger mỗi 5 phút) gửi bằng Gmail của tài khoản chạy script. Cần `supabase/08_mail_feedback.sql`
+  (cột `mail_sent_at`, trigger xoá mốc khi đổi trạng thái, hàm `mail_fb_pending` / `mail_fb_mark_sent`).
+- Nội dung + màu sắc mail sửa ở khối `MAIL_FB` đầu đoạn mail; `guiMailThu()` gửi 1 mail mẫu cho chính mình.
+  Nội dung người dùng luôn qua `escHtml_`. Test: `tests/mail-feedback.test.mjs`.
