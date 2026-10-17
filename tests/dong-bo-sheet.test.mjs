@@ -53,14 +53,14 @@ test('sheetToRows_: ngày dd/mm/yyyy và Date → yyyy-mm-dd, ô lỗi công th�
   assert.equal(rows[1].O1, '100');
 });
 
-test('dongBoDeals (nguồn sheet): gửi theo lô, KHÔNG lô nào p_final (không tắt deal vắng mặt), không gọi BigQuery', () => {
+test('dongBoDeals (nguồn sheet): gửi theo lô, chỉ lô cuối p_final (ẩn deal vắng mặt), không gọi BigQuery', () => {
   const values = [HEAD];
   for (let i = 0; i < 7; i++) values.push([1000 + i, 'cs', '01/10/2026', '', '', '', '', '']);
   const { ctx, calls } = load(values, { minRows: 5, batch: 3 });
   ctx.dongBoDeals();
   assert.equal(calls.length, 3);
   assert.deepEqual(calls.map((c) => c.p_rows.length), [3, 3, 1]);
-  assert.equal(calls.some((c) => c.p_final), false);
+  assert.deepEqual(calls.map((c) => c.p_final), [false, false, true]);
   assert.equal(new Set(calls.map((c) => c.p_run_at)).size, 1);
 });
 
@@ -73,7 +73,7 @@ test('dongBoDeals (nguồn sheet): tab ít dòng bất thường → dừng, kh�
 const H2 = ['Deal_ID', 'Job_ID', 'Deal_name', 'Deal_value', 'Bo_giai_phap', 'Loai_hop_dong', 'CO_Owner'];
 const row = (id, o = {}) => [id, o.job ?? 1, o.name ?? 'Deal ' + id, o.val ?? 1000 + Number(String(id).replace(/\D/g, '')), 'HRM', 'New', o.cs ?? 'cs'];
 
-test('locTrung_: chuẩn hoá Deal ID, lặp y hệt giữ 1, lặp khác nội dung bỏ cả deal, cảnh báo trùng cùng Job', () => {
+test('locTrung_: chuẩn hoá Deal ID, lặp y hệt giữ 1, lặp khác nội dung bỏ cả deal, khác ID cùng Job vẫn giữ', () => {
   const { ctx } = load([]);
   const rows = ctx.sheetToRows_([H2,
     row(101), row(101),                         // lặp y hệt → giữ 1
@@ -86,7 +86,7 @@ test('locTrung_: chuẩn hoá Deal ID, lặp y hệt giữ 1, lặp khác nội 
   assert.equal(r.trungGiong, 1);
   assert.deepEqual([...r.xungDot], ['102']);
   assert.equal(r.idSai, 1);
-  assert.deepEqual([...r.nghiTrungJob], ['Job 9: 105, 106']);
+  assert.equal(r.nghiTrungJob, undefined, 'không còn cảnh báo trùng cùng Job');
 });
 
 test('dongBoDeals (nguồn sheet): gửi đúng 1 dòng mỗi deal; quá nhiều Deal ID xung đột → dừng, không gửi', () => {
@@ -104,4 +104,16 @@ test('dongBoDeals (nguồn sheet): gửi đúng 1 dòng mỗi deal; quá nhiều
   t = load(bad, { minRows: 5 });
   assert.throws(() => t.ctx.dongBoDeals(), /lặp với nội dung khác nhau/);
   assert.equal(t.calls.length, 0);
+});
+
+test('dongBoDeals (nguồn sheet): lượt có Deal ID xung đột → vẫn gửi deal khác nhưng KHÔNG ẩn deal vắng mặt', () => {
+  const v = [H2];
+  for (let i = 0; i < 30; i++) v.push(row(4000 + i));
+  v.push(row(4000, { cs: 'khac' }));             // 1/29 xung đột (< 5%) → không dừng
+  const { ctx, calls } = load(v, { minRows: 5 });
+  ctx.dongBoDeals();
+  const ids = calls.flatMap((c) => c.p_rows.map((x) => x.Deal_ID));
+  assert.equal(ids.length, 29);
+  assert.equal(ids.includes('4000'), false);
+  assert.equal(calls.some((c) => c.p_final), false);
 });
