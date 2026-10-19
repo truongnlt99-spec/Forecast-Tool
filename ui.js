@@ -1079,6 +1079,193 @@
     hidePerfBoilerplateNote();
   }
 
+  /* -------------------------------------------------------
+     9b. XẾP LOẠI PERFORMANCE — VÌ SAO KPI / GOAL / OUT? (19/10/2026)
+        Mốc OUT của CS level 1–7 cần thêm DT go-live (New/Up/Cross) trong
+        tháng (điều kiện mới so với chính sách cũ, xem dashRating() app.js).
+        - Thẻ "DT go-live": thêm thanh tiến độ + vạch OUT (app.js chỉ ghi số).
+        - Nút ? cạnh huy hiệu xếp loại → popup bảng ✓/✗: mỗi hàng 1 điều kiện,
+          mỗi cột 1 mốc KPI/GOAL/OUT. CS_A: chỉ 1 hàng DT go-live.
+        Chỉ ĐỌC lại số app.js đã vẽ trong #perfGrid / #perfRating (MutationObserver),
+        huy hiệu của app.js là kết quả gốc — không tính lại xếp loại.
+     ------------------------------------------------------- */
+  /* ==PERF WHY START== */
+  (function () {
+    /* ==PW PURE START== — hàm thuần, tests/perf-why.test.mjs nạp riêng đoạn này */
+    var PW_TIERS = ['kpi', 'goal', 'out'];
+    var PW_NAME = { kpi: 'KPI', goal: 'GOAL', out: 'OUT', under: 'UNDER KPI', none: 'Không xếp loại' };
+    function pwEsc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    // "62,86%" → 62.86 · không có số → null
+    function pwNum(s) {
+      var m = /(-?\d+(?:[.,]\d+)?)\s*%/.exec(s || '');
+      return m ? parseFloat(m[1].replace(',', '.')) : null;
+    }
+    // Đọc lại số tiền dạng fmtMoneyShort (app.js): "220tr", "1,25 tỷ", "500.000 đ"
+    function pwMoney(s) {
+      var m = /(-?[\d.,]+)\s*(tỷ|tr|đ)/.exec(s || '');
+      if (!m) return null;
+      var n = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+      if (isNaN(n)) return null;
+      return n * (m[2] === 'tỷ' ? 1e9 : m[2] === 'tr' ? 1e6 : 1);
+    }
+    function pwFmtMoney(n) {
+      if (n == null) return '—';
+      if (n >= 1e9) return (Math.round(n / 1e7) / 100).toLocaleString('vi-VN') + ' tỷ';
+      if (n >= 1e6) return Math.round(n / 1e6).toLocaleString('vi-VN') + 'tr';
+      return n.toLocaleString('vi-VN') + ' đ';
+    }
+    function pwPct(v, dec) { return (dec ? v.toFixed(2) : String(v)).replace('.', ',') + '%'; }
+
+    // model CS : { group:'CS', rating, month, metrics:[{label, val|null, th:{kpi,goal,out}}], rev, revOut }
+    // model CSA: { group:'CSA', rating, month, rev, revTh:{kpi,goal,out} }
+    // → { head, cols, rows:[{label, sub, cells:[{st:'ok'|'bad'|'skip'|'na', text}]}], note }
+    function pwExplain(md) {
+      var r = md.rating, rank = PW_TIERS.indexOf(r);
+      var next = r === 'under' ? 'kpi' : (rank >= 0 && rank < 2 ? PW_TIERS[rank + 1] : null);
+      var rev = md.rev == null ? 0 : md.rev;
+      var rows = [], miss = [], head, note;
+      var need = function (label, cur, th) { return label + ' <b>' + cur + '</b> (cần ≥ ' + th + ')'; };
+
+      if (md.group === 'CSA') {
+        var th = md.revTh;
+        rows.push({ label: 'DT go-live', sub: pwFmtMoney(rev), cells: PW_TIERS.map(function (t, i) {
+          var ok = r === 'none' ? rev >= th[t] : i <= rank;
+          return { st: ok ? 'ok' : 'bad', text: (ok ? '✓' : '✗') + ' ≥ ' + pwFmtMoney(th[t]) };
+        }) });
+        if (next) miss.push(need('DT go-live', pwFmtMoney(rev), pwFmtMoney(th[next])));
+        note = 'CS_A xếp loại <b>chỉ theo DT go-live</b> (New/Up/Cross) của các deal go-live đạt trong tháng.';
+        if (r === 'none') head = 'Tháng ' + pwEsc(md.month) + ' không có deal đến hạn CR nên <b>không xếp loại</b>.';
+        else if (r === 'out') head = 'Bạn đạt <b>OUT</b>: DT go-live <b>' + pwFmtMoney(rev) + '</b> ≥ ' + pwFmtMoney(th.out) + '.';
+      } else {
+        var present = md.metrics.filter(function (x) { return x.val != null; });
+        var meets = function (t) { return present.every(function (x) { return x.val >= x.th[t]; }); };
+        // DT go-live chỉ là điều kiện của mốc OUT. Huy hiệu app.js là kết quả gốc: tỷ lệ đủ OUT
+        // mà vẫn không OUT → chắc chắn thiếu DT (tránh lệch do số tiền đã làm tròn trên màn hình).
+        var revOk = r === 'out' ? true : (present.length && meets('out')) ? false : rev >= md.revOut;
+        md.metrics.forEach(function (x) {
+          var empty = x.val == null;
+          rows.push({ label: x.label, sub: empty ? 'trống' : pwPct(x.val, true), cells: PW_TIERS.map(function (t) {
+            if (empty) return { st: 'skip', text: 'bỏ qua' };
+            var ok = x.val >= x.th[t];
+            if (t === next && !ok) miss.push(need(pwEsc(x.label), pwPct(x.val, true), pwPct(x.th[t])));
+            return { st: ok ? 'ok' : 'bad', text: (ok ? '✓ ' : '✗ ') + pwPct(x.th[t]) };
+          }) });
+        });
+        rows.push({ label: 'DT go-live', sub: pwFmtMoney(rev), cells: [{ st: 'na', text: '—' }, { st: 'na', text: '—' },
+          { st: revOk ? 'ok' : 'bad', text: (revOk ? '✓' : '✗') + ' ≥ ' + pwFmtMoney(md.revOut) }] });
+        if (next === 'out' && !revOk) miss.push(need('DT go-live', pwFmtMoney(rev), pwFmtMoney(md.revOut)));
+        note = 'Phải đạt <b>tất cả các ô trong một cột</b> mới được mức đó. Chỉ số trống (không có deal tới kỳ đo) được bỏ qua. ' +
+          '<b>DT go-live</b> (New/Up/Cross) = tổng DT các deal go-live đạt trong tháng, chỉ là điều kiện thêm của <b>mốc OUT</b>.';
+        if (r === 'none') head = 'Tháng ' + pwEsc(md.month) + ' cả 3 chỉ số CR, SRR_1, SRR_4 đều trống nên <b>không xếp loại</b> (không bị tính Under KPI).';
+        else if (r === 'out') head = 'Bạn đạt <b>OUT</b>: mọi chỉ số có dữ liệu đều qua mốc OUT và DT go-live <b>' + pwFmtMoney(rev) + '</b> ≥ ' + pwFmtMoney(md.revOut) + '.';
+      }
+      if (!head) {
+        head = 'Bạn đang <b>' + PW_NAME[r] + '</b>.';
+        if (next && miss.length) head += ' Để ' + (r === 'under' ? 'đạt' : 'lên') + ' <b>' + PW_NAME[next] + '</b> còn thiếu: ' + miss.join(' · ') + '.';
+      }
+      return { head: head, cols: PW_TIERS.map(function (t) { return { key: t, name: PW_NAME[t], cur: t === r }; }), rows: rows, note: note };
+    }
+    function pwHtml(md) {
+      var e = pwExplain(md);
+      var h = '<p class="pw-head">' + e.head + '</p><div class="pw-wrap"><table class="pw-table"><thead><tr><th>Điều kiện</th>' +
+        e.cols.map(function (c) { return '<th class="' + (c.cur ? 'pw-cur' : '') + '">' + c.name + '</th>'; }).join('') + '</tr></thead><tbody>';
+      e.rows.forEach(function (row) {
+        h += '<tr><td>' + pwEsc(row.label) + ' <span class="pw-val">' + pwEsc(row.sub) + '</span></td>' +
+          row.cells.map(function (c, i) { return '<td class="pw-' + c.st + (e.cols[i].cur ? ' pw-cur' : '') + '">' + pwEsc(c.text) + '</td>'; }).join('') + '</tr>';
+      });
+      return h + '</tbody></table></div><p class="pw-note">' + e.note + '</p>';
+    }
+    /* ==PW PURE END== */
+
+    var grid = document.getElementById('perfGrid'), ratingEl = document.getElementById('perfRating');
+    if (!grid || !ratingEl) return;
+
+    // Đọc lại số app.js đã vẽ (dashRenderPerf) → model cho pwExplain
+    function readModel() {
+      var badge = ratingEl.querySelector('.rating-badge');
+      var rm = badge && /\brt-(\w+)/.exec(badge.className);
+      if (!rm) return null;
+      var lbl = ratingEl.querySelector('.pr-label'), mm = lbl && /(\d{2}\/\d{4})/.exec(lbl.textContent);
+      var md = { group: 'CS', rating: rm[1], month: mm ? mm[1] : '', metrics: [], rev: null, revOut: null };
+      grid.querySelectorAll('.pf-card').forEach(function (card) {
+        var label = ((card.querySelector('.kpi-label') || {}).textContent || '').split(/\s+[—–-]\s+/)[0].trim();
+        var valEl = card.querySelector('.pf-val'), sub = (card.querySelector('.kpi-sub') || {}).textContent || '';
+        if (/^Doanh thu go-live/.test(label)) {
+          var t = /KPI\s*([^·]+)·\s*GOAL\s*([^·]+)·\s*OUT\s*(.+)/.exec(sub);
+          md.group = 'CSA'; md.rev = pwMoney(valEl && valEl.textContent);
+          md.revTh = t ? { kpi: pwMoney(t[1]), goal: pwMoney(t[2]), out: pwMoney(t[3]) } : { kpi: 0, goal: 0, out: 0 };
+        } else if (/^DT go-live/.test(label)) {
+          md.rev = pwMoney(valEl && valEl.textContent);
+          md.revOut = pwMoney(sub.split('≥')[1]);
+        } else {
+          var th = {};
+          card.querySelectorAll('.pf-tick').forEach(function (tk) {
+            var k = /\bt-(kpi|goal|out)\b/.exec(tk.className);
+            if (k) th[k[1]] = pwNum(tk.getAttribute('title'));
+          });
+          if (th.kpi == null) return;
+          md.metrics.push({ label: label, val: card.querySelector('.pf-none') ? null : pwNum(valEl && valEl.textContent), th: th });
+        }
+      });
+      if (md.group === 'CS' && md.revOut == null) return null;
+      return md;
+    }
+
+    // Thẻ DT go-live (CS): thêm thanh + vạch OUT. Thang tới 125% mốc OUT để vượt mốc vẫn thấy.
+    function decorateRevCard(md) {
+      if (!md || md.group !== 'CS' || !md.revOut) return;
+      var card = [].filter.call(grid.querySelectorAll('.pf-card'), function (c) {
+        return /^DT go-live/.test(((c.querySelector('.kpi-label') || {}).textContent || '').trim());
+      })[0];
+      if (!card || card.querySelector('.pw-rev-track')) return;
+      var rev = md.rev || 0, max = Math.max(md.revOut * 1.25, rev);
+      var track = document.createElement('div');
+      track.className = 'pf-track pw-rev-track';
+      track.innerHTML = '<div class="pf-fill ' + (rev >= md.revOut || md.rating === 'out' ? 'f-out' : 'f-kpi') + '" style="width:' + (rev / max * 100) + '%"></div>' +
+        '<span class="pf-tick t-out" style="left:' + (md.revOut / max * 100) + '%" title="OUT ≥ ' + pwFmtMoney(md.revOut) + '"></span>';
+      var legend = document.createElement('div');
+      legend.className = 'pf-legend';
+      legend.innerHTML = '<span class="pf-legend-item t-out"><i class="pf-legend-dot"></i>OUT ≥ ' + pwFmtMoney(md.revOut) + ' · chỉ xét cho mốc OUT</span>';
+      card.appendChild(track);
+      card.appendChild(legend);
+    }
+
+    function openWhy() {
+      var md = readModel(), modal = document.getElementById('cxModal');
+      if (!md || !modal) return;
+      document.getElementById('cxModalTitle').textContent = 'Vì sao xếp loại tháng ' + md.month + ' là ' + PW_NAME[md.rating] + '?';
+      document.getElementById('cxModalBody').innerHTML = pwHtml(md);
+      modal.classList.add('open');
+      if (!modal.dataset.pwBound) { // đóng modal khi mục TRỢ LÝ CS không chạy (thiếu API_URL)
+        modal.dataset.pwBound = '1';
+        var close = function () { modal.classList.remove('open'); };
+        document.getElementById('cxModalClose').addEventListener('click', close);
+        modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+      }
+    }
+
+    function refresh() {
+      var badge = ratingEl.querySelector('.rating-badge');
+      if (badge && !ratingEl.querySelector('.pw-why')) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'cx-why pw-why'; b.textContent = '?';
+        b.title = 'Vì sao tháng này được xếp loại như vậy?';
+        b.setAttribute('aria-label', b.title);
+        b.addEventListener('click', openWhy);
+        badge.parentNode.insertBefore(b, badge.nextSibling);
+      }
+      decorateRevCard(readModel());
+    }
+    new MutationObserver(refresh).observe(ratingEl, { childList: true, subtree: true });
+    new MutationObserver(refresh).observe(grid, { childList: true });
+    refresh();
+  })();
+  /* ==PERF WHY END== */
+
   // CHS score color gradient (low score = light blue, high score = dark blue)
   function colorizeChsScores() {
     var radarRows = document.querySelectorAll('.radar-row');
