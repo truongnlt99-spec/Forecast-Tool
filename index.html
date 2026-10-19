@@ -281,13 +281,14 @@
           <select id="dbMonth" class="fc-month" aria-label="Tháng đánh giá"></select>
         </div>
 
-        <!-- Nút mở Product Tour (ui.js mục PRODUCT TOUR gắn sự kiện + tự bật lần đầu) -->
-        <button type="button" id="csTourBtn" title="Xem Product tour" aria-label="Product tour">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5l-1.6 4.9-4.9 1.6 1.6-4.9z"/></svg>
-          <span class="cst-lb">Product tour</span>
-        </button>
-
         <div class="user-box" id="userBox">
+          <!-- Nút mở Product Tour — đặt TRONG #userBox để luôn đứng sát avatar ở mọi tab
+               (ui.js mục PRODUCT TOUR gắn sự kiện + tự bật lần đầu) -->
+          <button type="button" id="csTourBtn" title="Xem Product tour" aria-label="Product tour">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5l-1.6 4.9-4.9 1.6 1.6-4.9z"/></svg>
+            <span class="cst-lb">Product tour</span>
+          </button>
+
           <!-- Hồ sơ CS: app.js điền qua các id psAvatar / psName / psSub / psChips.
                Bấm vào mở menu tài khoản (ui.js). -->
           <button class="profile-strip" id="profileStrip" style="display:none;" aria-haspopup="menu" aria-expanded="false">
@@ -950,7 +951,7 @@
        fetch trước khi app.js gọi API lần đầu để đọc được avatar từ profile -->
   <!-- Driver.js (product tour) — nạp TRƯỚC ui.js để window.driver sẵn sàng -->
   <script src="driver.iife.js?v=1"></script>
-  <script src="ui.js?v=70"></script>
+  <script src="ui.js?v=71"></script>
   <!-- app.js: KHÔNG đổi so với bản hiện tại -->
   <script src="app.js?v=14"></script>
 

@@ -4364,19 +4364,36 @@
   (function injectCss() {
     if (document.getElementById('csTourCss')) return;
     var css = ''
-      + '#csTourBtn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;border-radius:10px;'
-      +   'border:1px solid rgba(120,125,170,.28);background:transparent;color:#9ba2f2;'
-      +   'font:600 13px/1 Inter,system-ui,sans-serif;cursor:pointer;margin-right:4px}'
-      + '#csTourBtn:hover{background:rgba(90,90,214,.16)}'
-      + '#csTourBtn svg{width:17px;height:17px}'
-      + '@media(max-width:760px){#csTourBtn .cst-lb{display:none}#csTourBtn{padding:0 10px}}'
+      // Nút 🧭 nổi bật: nền gradient, phát sáng, vệt sáng lướt qua định kỳ;
+      // chấm vàng nhấp nháy (.cst-new) cho người chưa xem tour
+      + '#csTourBtn{position:relative;flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;'
+      +   'border:0;border-radius:999px;cursor:pointer;white-space:nowrap;color:#fff;font:600 13px/1 Inter,system-ui,sans-serif;'
+      +   'background:linear-gradient(135deg,#8a8af5 0%,#5b5bd6 55%,#8b5cf6 100%);'
+      +   'box-shadow:0 4px 14px rgba(91,91,214,.45),inset 0 1px 0 rgba(255,255,255,.28);transition:transform .15s,box-shadow .15s,filter .15s}'
+      + '#csTourBtn:hover{transform:translateY(-1px);filter:brightness(1.08);box-shadow:0 7px 22px rgba(91,91,214,.6),inset 0 1px 0 rgba(255,255,255,.28)}'
+      + '#csTourBtn:active{transform:none}'
+      + '#csTourBtn svg{width:16px;height:16px;position:relative;z-index:1}'
+      + '#csTourBtn .cst-lb{position:relative;z-index:1}'
+      + '#csTourBtn::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;'
+      +   'background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.45) 50%,transparent 60%) no-repeat;'
+      +   'background-size:250% 100%;background-position:150% 0;animation:cstShine 3.6s ease-in-out infinite}'
+      + '@keyframes cstShine{0%,55%{background-position:150% 0}90%,100%{background-position:-50% 0}}'
+      + '#csTourBtn.cst-new::before{content:"";position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;'
+      +   'background:#ffd34d;border:2px solid #fff;animation:cstDot 1.6s ease-out infinite;z-index:2}'
+      + '@keyframes cstDot{0%{box-shadow:0 0 0 0 rgba(255,211,77,.75)}70%{box-shadow:0 0 0 8px rgba(255,211,77,0)}100%{box-shadow:0 0 0 0 rgba(255,211,77,0)}}'
+      + '@media(prefers-reduced-motion:reduce){#csTourBtn::after,#csTourBtn.cst-new::before{animation:none}}'
+      + '@media(max-width:760px){#csTourBtn .cst-lb{display:none}#csTourBtn{padding:0 11px}}'
       + '.driver-popover.cst{border-radius:14px;border:1px solid #e4e6f2;box-shadow:0 18px 50px rgba(8,10,22,.5);'
       +   'max-width:340px;padding:0;overflow:hidden;background:#fff}'
       + '.cst-top{padding:12px 16px 11px;background:linear-gradient(135deg,#f5f5ff,#ffffff);border-bottom:1px solid #eeeefb}'
       + '.cst-brand{font-size:10.5px;font-weight:800;letter-spacing:.05em;color:#5b5bd6;text-transform:uppercase;'
       +   'margin-bottom:9px;display:flex;align-items:center;gap:6px}'
-      + '.cst-bar{height:4px;border-radius:4px;background:#e9e9f7;overflow:hidden}'
-      + '.cst-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7c7cf0,#5b5bd6);border-radius:4px;transition:width .35s ease}'
+      // Thanh tiến độ chia đúng số bước: ô đã qua tô tím, ô hiện tại đậm + viền sáng
+      + '.cst-bar{display:flex;gap:2px;height:5px}'
+      + '.cst-bar i{flex:1;border-radius:2px;background:#e4e4f6;transition:background .25s}'
+      + '.cst-bar i.on{background:#a5a5ef}'
+      + '.cst-bar i.cur{background:#5b5bd6;box-shadow:0 0 0 1px rgba(91,91,214,.3)}'
+      + '.cst-brand .cst-sec{margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none;color:#6b7090}'
       + '.driver-popover.cst .driver-popover-title{padding:13px 16px 0;font:700 15.5px/1.5 Inter,system-ui,sans-serif;color:#1f2340}'
       + '.driver-popover.cst .driver-popover-description{padding:0 16px;font:400 13.5px/1.62 Inter,system-ui,sans-serif;color:#3a3f63}'
       + '.driver-popover.cst .driver-popover-footer{padding:11px 14px 13px;margin-top:13px;background:#faf9ff;border-top:1px solid #efeefb}'
@@ -4480,6 +4497,7 @@
       // nghỉ giữa chặng / chỉ xem riêng một phần thì giữ chỗ xem dở
       if (!paused && stopAt < 0) localStorage.removeItem(RESUME);
     } catch (e) {}
+    syncNewDot();
     if (completed) celebrate();
   }
 
@@ -4625,7 +4643,7 @@
   function getResume() { var v = -1; try { v = parseInt(localStorage.getItem(RESUME), 10); } catch (e) {} return (v > 0 && v < STEPS.length) ? v : -1; }
 
   var drv = D({
-    showProgress: true, animate: true, allowClose: true, showButtons: ['next', 'previous'],
+    showProgress: false, animate: true, allowClose: true, showButtons: ['next', 'previous'],
     // Khoá bấm vào vùng đang highlight: lỡ bấm "Dừng triển khai"/tab… trong lúc tour
     // sẽ làm popup/màn đổi mà tour không biết → khung trống, lệch bước.
     disableActiveInteraction: true,
@@ -4668,14 +4686,20 @@
       }, step._settled, step._settled ? 66 : 30); // bước phụ thuộc dữ liệu: chờ tới ~6s khi còn đang tải
     },
     onPopoverRender: function (popover) {
-      var pct = Math.round((drv.getActiveIndex() + 1) / STEPS.length * 100);
+      var cur = drv.getActiveIndex();
       if (!popover.wrapper.querySelector('.cst-top')) {
         var top = document.createElement('div');
         top.className = 'cst-top';
-        top.innerHTML = '<div class="cst-brand">✦ Product tour · CS Console</div><div class="cst-bar"><i></i></div>';
+        top.innerHTML = '<div class="cst-brand">✦ Product tour · CS Console<span class="cst-sec"></span></div><div class="cst-bar"></div>';
         popover.wrapper.insertBefore(top, popover.wrapper.firstChild);
       }
-      var bar = popover.wrapper.querySelector('.cst-bar i'); if (bar) bar.style.width = pct + '%';
+      // Thanh tiến độ: mỗi bước 1 ô (thay cho chữ "x/28"); bên phải dòng tiêu đề = phần đang xem
+      var bar = popover.wrapper.querySelector('.cst-bar');
+      if (bar) bar.innerHTML = STEPS.map(function (s, i) {
+        return '<i class="' + (i < cur ? 'on' : i === cur ? 'cur' : '') + '"></i>';
+      }).join('');
+      var sec = popover.wrapper.querySelector('.cst-sec');
+      if (sec) sec.textContent = sectionAt(cur);
 
       var idx = drv.getActiveIndex(), key = STEPS[idx] && STEPS[idx]._key, desc = popover.description;
       if (stopAt > -1 && idx === stopAt - 1 && popover.nextButton) popover.nextButton.textContent = 'Xong ✓';
@@ -4814,6 +4838,12 @@
   window.addEventListener('resize', placeHub);
 
   var btn = document.getElementById('csTourBtn');
+  // Chấm vàng nhấp nháy trên nút cho người CHƯA xem tour
+  function syncNewDot() {
+    var s = false; try { s = localStorage.getItem(SEEN) === '1'; } catch (e) {}
+    if (btn) btn.classList.toggle('cst-new', !s);
+  }
+  syncNewDot();
   if (btn) btn.addEventListener('click', function () {
     var seen = false; try { seen = localStorage.getItem(SEEN) === '1'; } catch (e) {}
     if (!seen) return startTour();      // chưa xem lần nào → chạy tour
