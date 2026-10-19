@@ -21,6 +21,7 @@
  *   POST { token, action:'careerAchieve', quarter, newSalary? }   (Đạt → lên level ngay)
  *   POST { token, action:'careerDeleteCommit', quarter }    (xoá commit; đã Đạt lên level → trả level/lương cũ)
  *   POST { token, action:'phuocGet' } / { action:'phuocAdd', n }  → { mine, total } (nút "Cộng phước", cho vui)
+ *   POST { token, action:'adminPhuocBoard' }              → { total, people, members, items:[{rank,name,email,level,count,lastAt}] }
  *   POST { token, multiYearRows:[...] }
  *   POST { token, rows:[...] }
  *
@@ -588,6 +589,8 @@ async function extraAction_(body: any, email: string): Promise<Record<string, un
       return {};
     case "adminListCs":
       return { items: await rpc_("api_admin_list_cs", { p_email: email }) };
+    case "adminPhuocBoard":
+      return await rpc_<Record<string, unknown>>("api_admin_phuoc_board", { p_email: email });
     default:
       throw new Error("action không hỗ trợ: " + body.action);
   }

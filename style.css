@@ -812,6 +812,15 @@ tr.fc-injected td{background:color-mix(in srgb,var(--amber) 5%,transparent)}
 .ad-table td{padding:8px 10px; border-top:1px solid var(--stroke-soft); color:var(--tx-2); white-space:nowrap}
 .ad-table td.num,.ad-table th.num{text-align:right}
 .ad-table td b{color:var(--tx)}
+/* Quản trị → Cộng phước: 3 thẻ tổng quan + bảng xếp hạng */
+.ph-stats{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px}
+.ph-stats .kpi-value{font-size:24px}
+.ph-of{font-size:14px; font-weight:500; color:var(--tx-3)}
+.ad-table tr.ph-top td{background:var(--row-hover)}
+.ph-bar-cell{width:28%; min-width:110px}
+.ph-bar{height:6px; border-radius:6px; background:var(--chart-track); overflow:hidden}
+.ph-bar span{display:block; height:100%; border-radius:6px; background:var(--accent)}
+@media (max-width:760px){.ph-stats{grid-template-columns:1fr}}
 @media (max-width:760px){
   .pf-wrap{flex-direction:column}
   .pf-list-col{border-left:0; border-top:1px solid var(--stroke-soft); padding-left:0; padding-top:18px}

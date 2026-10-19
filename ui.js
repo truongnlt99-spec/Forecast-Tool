@@ -2308,7 +2308,7 @@
     bindModal(adminBtn, adminModal, 'adminClose', function () { renderAdmin(); });
 
     function renderAdmin() {
-      var tabs = [['feedback', 'Feedback'], ['todo', 'Todo'], ['cs', 'Danh sách CS']];
+      var tabs = [['feedback', 'Feedback'], ['todo', 'Todo'], ['cs', 'Danh sách CS'], ['phuoc', 'Cộng phước']];
       adminBody.innerHTML =
         '<div class="ad-tabs">' + tabs.map(function (t) {
           return '<button type="button" class="chip-btn' + (tab === t[0] ? ' active' : '') + '" data-tab-ad="' + t[0] + '">' + t[1] + '</button>';
@@ -2318,17 +2318,20 @@
       });
       if (tab === 'feedback') loadFeedback();
       else if (tab === 'todo') loadTodo();
+      else if (tab === 'phuoc') loadPhuoc();
       else loadCs();
     }
     function pane() { return $('adPane'); }
+    // Kết quả trả về chậm của tab cũ (vd Feedback) không được ghi đè lên tab đang xem
+    function forTab(fn) { var t = tab; return function (err, d) { if (tab === t) fn(err, d); }; }
     function failPane(err) { var p = pane(); if (p) p.innerHTML = '<div class="pf-empty">Không tải được: ' + esc(err) + '</div>'; }
 
     // ---------- Feedback ----------
     function loadFeedback() {
-      post({ action: 'adminListFeedback' }, function (err, d) {
+      post({ action: 'adminListFeedback' }, forTab(function (err, d) {
         if (err) return failPane(err);
         fbItems = d.items || []; drawFeedback();
-      });
+      }));
     }
     function drawFeedback() {
       var p = pane(); if (!p) return;
@@ -2386,10 +2389,10 @@
 
     // ---------- Todo ----------
     function loadTodo() {
-      post({ action: 'adminListTodo' }, function (err, d) {
+      post({ action: 'adminListTodo' }, forTab(function (err, d) {
         if (err) return failPane(err);
         todoItems = d.items || []; drawTodo();
-      });
+      }));
     }
     function saveTodo(item, okMsg) {
       post({ action: 'adminSaveTodo', item: item }, function (err) {
@@ -2467,10 +2470,10 @@
 
     // ---------- Danh sách CS ----------
     function loadCs() {
-      post({ action: 'adminListCs' }, function (err, d) {
+      post({ action: 'adminListCs' }, forTab(function (err, d) {
         if (err) return failPane(err);
         csItems = d.items || []; drawCs();
-      });
+      }));
     }
     function fmtMoney(n) { return n == null || n === '' ? '—' : Number(n).toLocaleString('vi-VN'); }
     function drawCs() {
@@ -2497,6 +2500,51 @@
       inp.addEventListener('input', function () {
         csQuery = inp.value; var pos = inp.selectionStart; drawCs();
         var n = $('csQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {}
+      });
+    }
+
+    // ---------- Cộng phước: tổng quan + bảng xếp hạng ----------
+    var phData = null, phQuery = '';
+    function loadPhuoc() {
+      post({ action: 'adminPhuocBoard' }, forTab(function (err, d) {
+        if (err) return failPane(/action không hỗ trợ/.test(String(err)) ? 'backend chưa cập nhật bảng xếp hạng Cộng phước' : err);
+        phData = d || {}; drawPhuoc();
+      }));
+    }
+    function drawPhuoc() {
+      var p = pane(); if (!p || !phData) return;
+      var items = phData.items || [], total = phData.total || 0, people = phData.people || 0, members = phData.members || 0;
+      var top = items.length ? items[0].count : 0;
+      var q = phQuery.toLowerCase();
+      var list = items.filter(function (m) { return !q || [m.name, m.email, m.level].join(' ').toLowerCase().indexOf(q) !== -1; });
+      var MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
+      var nf = function (n) { return Number(n || 0).toLocaleString('vi-VN'); };
+      p.innerHTML =
+        '<div class="ph-stats">' +
+          '<div class="kpi-card"><div class="kpi-label">Tổng phước cả team</div><div class="kpi-value">🙏 ' + nf(total) + '</div></div>' +
+          '<div class="kpi-card"><div class="kpi-label">Số người đã cộng phước</div><div class="kpi-value">' + nf(people) +
+            (members ? '<span class="ph-of"> / ' + nf(members) + ' CS</span>' : '') + '</div>' +
+            (members ? '<div class="kpi-sub">' + Math.round(people / members * 100) + '% team đã tham gia</div>' : '') + '</div>' +
+          '<div class="kpi-card"><div class="kpi-label">Trung bình mỗi người</div><div class="kpi-value">' + nf(people ? Math.round(total / people) : 0) + '</div>' +
+            (top ? '<div class="kpi-sub">Cao nhất: ' + nf(top) + ' phước</div>' : '') + '</div>' +
+        '</div>' +
+        (items.length
+          ? '<div class="mc-row" style="margin-bottom:12px"><input type="search" class="ad-search" id="phQ" placeholder="Tìm tên, email, level…" value="' + esc(phQuery) + '">' +
+            '<span class="pf-hint" style="font-size:12px">' + list.length + ' người</span></div>' +
+            '<div class="ad-table-wrap"><table class="ad-table"><thead><tr>' +
+              '<th class="num">Hạng</th><th>Họ tên</th><th>Email</th><th>Level</th><th class="num">Số phước</th><th></th><th>Lần cuối</th>' +
+            '</tr></thead><tbody>' + list.map(function (m) {
+              return '<tr' + (m.rank <= 3 ? ' class="ph-top"' : '') + '><td class="num">' + (MEDAL[m.rank] || m.rank) + '</td>' +
+                '<td><b>' + esc(m.name) + '</b></td><td>' + esc(m.email) + '</td><td>' + esc(m.level || '—') + '</td>' +
+                '<td class="num"><b>' + nf(m.count) + '</b></td>' +
+                '<td class="ph-bar-cell"><div class="ph-bar"><span style="width:' + (top ? Math.max(2, Math.round(m.count / top * 100)) : 0) + '%"></span></div></td>' +
+                '<td>' + esc(m.lastAt || '') + '</td></tr>';
+            }).join('') + '</tbody></table></div>'
+          : '<div class="pf-empty">Chưa ai cộng phước 🙏</div>');
+      var inp = $('phQ');
+      if (inp) inp.addEventListener('input', function () {
+        phQuery = inp.value; var pos = inp.selectionStart; drawPhuoc();
+        var n = $('phQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {}
       });
     }
   })();
