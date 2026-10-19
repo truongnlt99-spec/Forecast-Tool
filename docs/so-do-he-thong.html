@@ -1,0 +1,431 @@
+<title>Sơ đồ CS Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: bản vẽ kỹ thuật một cột, mỗi phần = 1 hình + chú thích; bảng tra cứu phía dưới */
+:root{
+  --bg:#F3F6F7; --paper:#FFFFFF; --fg:#16212B; --muted:#5A6A77; --line:#C5D0D8;
+  --accent:#0D7480; --accent-soft:#DDEFF1;
+  --g-vercel:#EEF1F4; --g-supa:#E6F3EC; --g-google:#FBF1DF; --warn:#A4561A; --warn-soft:#FBEBDD;
+  --f-display:"Be Vietnam Pro",system-ui,sans-serif;
+  --f-body:"Be Vietnam Pro",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1417; --paper:#151D22; --fg:#E2E9ED; --muted:#91A2AE; --line:#33424C;
+  --accent:#48C2CC; --accent-soft:#16343A;
+  --g-vercel:#1A2228; --g-supa:#14271E; --g-google:#2B2416; --warn:#F0A060; --warn-soft:#33261A;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1417; --paper:#151D22; --fg:#E2E9ED; --muted:#91A2AE; --line:#33424C;
+  --accent:#48C2CC; --accent-soft:#16343A;
+  --g-vercel:#1A2228; --g-supa:#14271E; --g-google:#2B2416; --warn:#F0A060; --warn-soft:#33261A;
+  color-scheme:dark}
+
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+header{display:flex;flex-direction:column;gap:10px;max-width:760px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,4.4vw,42px);line-height:1.15;margin:0;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:800;font-size:22px;margin:0;text-wrap:balance}
+h3{font-size:15px;margin:0;font-weight:600}
+p{margin:0;max-width:68ch}
+.lead{color:var(--muted);font-size:16px}
+section{display:flex;flex-direction:column;gap:16px}
+.sec-head{display:flex;flex-direction:column;gap:6px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+
+figure{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.scroll{overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:760px}
+figcaption{color:var(--muted);font-size:14px;max-width:80ch}
+
+/* SVG theming qua token */
+.grp-v{fill:var(--g-vercel);stroke:var(--line)} .grp-s{fill:var(--g-supa);stroke:var(--line)} .grp-g{fill:var(--g-google);stroke:var(--line)}
+.bx{fill:var(--paper);stroke:var(--line);stroke-width:1.2}
+.bx-a{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+.bx-w{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.2}
+.bx-d{fill:var(--paper);stroke:var(--line);stroke-dasharray:4 3}
+.t{fill:var(--fg);font-family:var(--f-body);font-size:13px;font-weight:600}
+.s{fill:var(--muted);font-family:var(--f-body);font-size:11px}
+.m{fill:var(--muted);font-family:var(--f-mono);font-size:10.5px}
+.hd{fill:var(--accent);font-family:var(--f-mono);font-size:11px;letter-spacing:.08em}
+.lb{fill:var(--fg);font-family:var(--f-body);font-size:11px}
+.ar{stroke:var(--fg);stroke-width:1.3;fill:none}
+.ar-a{stroke:var(--accent);stroke-width:1.6;fill:none}
+.ar-d{stroke:var(--muted);stroke-width:1.2;fill:none;stroke-dasharray:4 3}
+.head{fill:var(--fg)} .head-a{fill:var(--accent)} .head-m{fill:var(--muted)}
+
+/* Bảng tra cứu */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.note{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.note ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.warn{border-color:var(--warn);background:var(--warn-soft)}
+.warn h3{color:var(--warn)}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.no{border-color:var(--warn);color:var(--warn)}
+ol.steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;max-width:80ch}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Tài liệu bàn giao · cập nhật 19/10/2026</span>
+  <h1>CS Console: hệ thống gồm những gì và nối với nhau ra sao</h1>
+  <p class="lead">Web theo dõi deal triển khai cho team CS của Base.vn. Frontend là file tĩnh trên Vercel, backend và dữ liệu nằm trên Supabase, dữ liệu deal đổ về mỗi giờ từ Google Sheet qua Apps Script. Không dùng framework: HTML, CSS và JavaScript thuần.</p>
+</header>
+
+<!-- ================= 1. TỔNG THỂ ================= -->
+<section>
+  <div class="sec-head">
+    <h2>1. Bức tranh tổng thể</h2>
+    <p>Bốn khu vực: người dùng, Vercel (giao diện), Supabase (xử lý + dữ liệu), Google (đăng nhập, nguồn deal, gửi mail). Số trong vòng tròn là thứ tự một lần mở console.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 510" role="img" aria-label="Sơ đồ tổng thể: trình duyệt tải trang từ Vercel, đăng nhập Google, gọi Edge Function api trên Supabase; Claude gọi Edge Function mcp qua link Vercel; Apps Script đồng bộ deal từ Google Sheet vào Postgres mỗi giờ.">
+      <defs>
+        <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-a"/></marker>
+        <marker id="hm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-m"/></marker>
+      </defs>
+
+      <text x="20" y="22" class="hd">NGƯỜI DÙNG</text>
+      <text x="240" y="22" class="hd">VERCEL · FRONTEND</text>
+      <text x="540" y="22" class="hd">SUPABASE · BACKEND</text>
+      <text x="880" y="22" class="hd">GOOGLE</text>
+
+      <!-- groups -->
+      <rect x="240" y="70" width="230" height="290" rx="10" class="grp-v"/>
+      <text x="252" y="64" class="m">csconsole.vercel.app</text>
+      <rect x="540" y="70" width="270" height="400" rx="10" class="grp-s"/>
+      <text x="552" y="64" class="m">project lheaoklvumzapmwuhysr</text>
+      <rect x="880" y="70" width="220" height="312" rx="10" class="grp-g"/>
+
+      <!-- users -->
+      <rect x="20" y="88" width="170" height="58" rx="7" class="bx"/>
+      <text x="34" y="112" class="t">CS · Admin</text>
+      <text x="34" y="132" class="s">trình duyệt, email @base.vn</text>
+
+      <rect x="20" y="330" width="170" height="58" rx="7" class="bx"/>
+      <text x="34" y="354" class="t">Claude</text>
+      <text x="34" y="374" class="s">connector MCP cá nhân</text>
+
+      <rect x="20" y="430" width="170" height="58" rx="7" class="bx"/>
+      <text x="34" y="454" class="t">Claude phiên sáng</text>
+      <text x="34" y="474" class="s">xử lý feedback, dùng MCP admin</text>
+
+      <!-- vercel inner -->
+      <rect x="256" y="88" width="198" height="30" rx="5" class="bx"/><text x="268" y="108" class="lb"><tspan class="mono">index.html</tspan> · khung trang</text>
+      <rect x="256" y="126" width="198" height="30" rx="5" class="bx"/><text x="268" y="146" class="lb"><tspan class="mono">config.js</tspan> · API_URL, CLIENT_ID</text>
+      <rect x="256" y="164" width="198" height="30" rx="5" class="bx-a"/><text x="268" y="184" class="lb"><tspan class="mono">ui.js</tspan> · lớp vá giao diện</text>
+      <rect x="256" y="202" width="198" height="30" rx="5" class="bx-w"/><text x="268" y="222" class="lb"><tspan class="mono">app.js</tspan> · logic gốc, không sửa</text>
+      <rect x="256" y="240" width="198" height="30" rx="5" class="bx"/><text x="268" y="260" class="lb"><tspan class="mono">style.css</tspan> · driver.js (tour)</text>
+      <rect x="256" y="300" width="198" height="30" rx="5" class="bx-d"/><text x="268" y="320" class="lb"><tspan class="mono">vercel.json</tspan>: /mcp/* → Supabase</text>
+
+      <!-- github -->
+      <rect x="240" y="430" width="230" height="58" rx="7" class="bx"/>
+      <text x="254" y="454" class="t">GitHub</text>
+      <text x="254" y="474" class="m">truongnlt99-spec/Forecast-Tool</text>
+
+      <!-- supabase inner -->
+      <rect x="556" y="88" width="238" height="58" rx="7" class="bx-a"/>
+      <text x="570" y="112" class="t">Edge Function <tspan class="mono">api</tspan></text>
+      <text x="570" y="132" class="s">xác thực · gọi hàm SQL · cấp vé CST1</text>
+
+      <rect x="556" y="180" width="238" height="124" rx="7" class="bx"/>
+      <text x="570" y="202" class="t">Postgres</text>
+      <text x="570" y="224" class="m">deals_raw (deal từ CRM)</text>
+      <text x="570" y="241" class="m">deal_inputs · multiyear (CS nhập)</text>
+      <text x="570" y="258" class="m">cs_members · career_* · todolist</text>
+      <text x="570" y="275" class="m">product_feedback · mcp_keys</text>
+      <text x="570" y="292" class="m">view v_database + hàm api_*</text>
+
+      <rect x="556" y="330" width="238" height="58" rx="7" class="bx"/>
+      <text x="570" y="354" class="t">Edge Function <tspan class="mono">mcp</tspan></text>
+      <text x="570" y="374" class="s">24 tool · khoá cá nhân (lưu SHA-256)</text>
+
+      <rect x="556" y="410" width="238" height="44" rx="7" class="bx"/>
+      <text x="570" y="429" class="t">Storage</text>
+      <text x="570" y="445" class="s">ảnh đính kèm feedback (api upload)</text>
+
+      <!-- google inner -->
+      <rect x="896" y="88" width="188" height="44" rx="7" class="bx"/>
+      <text x="908" y="106" class="t">Google Sign-In</text>
+      <text x="908" y="122" class="s">cấp id_token, chỉ @base.vn</text>
+      <rect x="896" y="152" width="188" height="40" rx="7" class="bx"/>
+      <text x="908" y="169" class="t">Gmail</text>
+      <text x="908" y="184" class="s">báo người gửi khi feedback xong</text>
+      <rect x="896" y="216" width="188" height="76" rx="7" class="bx-a"/>
+      <text x="908" y="235" class="t">Apps Script</text>
+      <text x="908" y="251" class="m">DongBoSupabase.gs</text>
+      <text x="908" y="267" class="s">mỗi giờ: đồng bộ deal</text>
+      <text x="908" y="282" class="s">mỗi 5 phút: gửi mail</text>
+      <rect x="896" y="316" width="92" height="50" rx="7" class="bx"/>
+      <text x="906" y="336" class="t">Sheet</text>
+      <text x="906" y="354" class="s">Extract of Raw</text>
+      <rect x="994" y="316" width="90" height="50" rx="7" class="bx-d"/>
+      <text x="1004" y="336" class="t">BigQuery</text>
+      <text x="1004" y="354" class="s">dự phòng</text>
+
+      <!-- arrows -->
+      <path d="M190 103 H252" class="ar" marker-end="url(#h)"/>
+      <text x="221" y="97" class="lb" text-anchor="middle">tải</text>
+
+      <path d="M105 88 V50 H990 V84" class="ar" marker-end="url(#h)"/>
+      <text x="640" y="44" class="lb" text-anchor="middle">① đăng nhập, lấy id_token</text>
+
+      <path d="M454 217 C505 217 505 117 552 117" class="ar-a" marker-end="url(#ha)"/>
+      <text x="478" y="160" class="lb">② gọi API</text>
+
+      <path d="M794 110 H892" class="ar" marker-end="url(#h)"/>
+      <text x="843" y="104" class="lb" text-anchor="middle">③ kiểm token</text>
+
+      <path d="M675 146 V176" class="ar" marker-end="url(#h)"/>
+      <text x="683" y="166" class="m">rpc api_*</text>
+
+      <path d="M675 330 V308" class="ar" marker-end="url(#h)"/>
+      <text x="683" y="323" class="m">rpc api_*</text>
+
+      <path d="M190 352 C220 352 225 315 252 315" class="ar" marker-end="url(#h)"/>
+      <text x="234" y="300" class="lb" text-anchor="end">/mcp/&lt;khoá&gt;</text>
+
+      <path d="M454 315 C505 315 505 359 552 359" class="ar" marker-end="url(#h)"/>
+      <text x="476" y="352" class="lb">chuyển tiếp</text>
+
+      <path d="M896 256 H798" class="ar-a" marker-end="url(#ha)"/>
+      <text x="847" y="249" class="lb" text-anchor="middle">④ sync deal</text>
+
+      <path d="M990 216 V196" class="ar" marker-end="url(#h)"/>
+      <path d="M941 316 V296" class="ar" marker-end="url(#h)"/>
+      <path d="M1039 316 V296" class="ar-d" marker-end="url(#hm)"/>
+
+      <path d="M190 459 H236" class="ar" marker-end="url(#h)"/>
+      <text x="213" y="452" class="lb" text-anchor="middle">mở PR</text>
+
+      <path d="M355 430 V364" class="ar" marker-end="url(#h)"/>
+      <text x="363" y="402" class="lb">push main → tự deploy</text>
+    </svg>
+    </div>
+    <figcaption>Trình duyệt chỉ nói chuyện với Edge Function <code>api</code>, không truy cập thẳng database. Claude đi qua link <code>csconsole.vercel.app/mcp/&lt;khoá&gt;</code>, Vercel chuyển tiếp sang Edge Function <code>mcp</code>. Cả hai function đều gọi chung các hàm SQL <code>api_*</code>, nên quyền và quy tắc nằm ở database. Apps Script vừa đẩy deal vào (mỗi giờ), vừa đọc danh sách feedback cần báo để gửi mail (mỗi 5 phút).</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2. FRONTEND ================= -->
+<section>
+  <div class="sec-head">
+    <h2>2. Bên trong giao diện: app.js và ui.js</h2>
+    <p>Đây là chỗ "không theo framework". <code>app.js</code> tự vẽ toàn bộ giao diện và bị khoá, không ai được sửa. Mọi thay đổi về sau đều nằm ở <code>ui.js</code>: nó canh những gì app.js vẽ ra rồi đắp thêm lên.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 960 320" role="img" aria-label="index.html nạp config.js, driver.js, ui.js rồi app.js. app.js vẽ DOM; ui.js theo dõi DOM bằng MutationObserver và vá thêm; ui.js đẩy giá trị vào input thật của app.js qua proxy input.">
+      <defs>
+        <marker id="h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ha2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-a"/></marker>
+        <marker id="hm2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-m"/></marker>
+      </defs>
+      <text x="20" y="22" class="hd">THỨ TỰ NẠP TRONG INDEX.HTML</text>
+      <rect x="20" y="36" width="200" height="44" rx="6" class="bx"/><text x="34" y="55" class="t mono">config.js</text><text x="34" y="71" class="s">địa chỉ API, Client ID</text>
+      <rect x="250" y="36" width="200" height="44" rx="6" class="bx"/><text x="264" y="55" class="t mono">driver.iife.js</text><text x="264" y="71" class="s">thư viện product tour</text>
+      <rect x="480" y="36" width="200" height="44" rx="6" class="bx-a"/><text x="494" y="55" class="t mono">ui.js</text><text x="494" y="71" class="s">cài "tai nghe" fetch trước</text>
+      <rect x="710" y="36" width="200" height="44" rx="6" class="bx-w"/><text x="724" y="55" class="t mono">app.js</text><text x="724" y="71" class="s">chạy app, gọi API lần đầu</text>
+      <path d="M220 58 H246" class="ar" marker-end="url(#h2)"/>
+      <path d="M450 58 H476" class="ar" marker-end="url(#h2)"/>
+      <path d="M680 58 H706" class="ar" marker-end="url(#h2)"/>
+
+      <text x="20" y="140" class="hd">KHI ĐANG CHẠY</text>
+      <rect x="20" y="160" width="230" height="74" rx="7" class="bx-w"/>
+      <text x="36" y="184" class="t mono">app.js</text>
+      <text x="36" y="203" class="s">≈2.600 dòng · tính CR, CHS, bảng deal</text>
+      <text x="36" y="220" class="s">coi như hộp đen: chỉ đọc</text>
+
+      <rect x="365" y="160" width="230" height="74" rx="7" class="bx"/>
+      <text x="381" y="184" class="t">Giao diện (DOM)</text>
+      <text x="381" y="203" class="s">bảng, chip, card, dropdown, modal</text>
+
+      <rect x="710" y="160" width="230" height="74" rx="7" class="bx-a"/>
+      <text x="726" y="184" class="t mono">ui.js</text>
+      <text x="726" y="203" class="s">≈4.900 dòng · modal, Trợ lý CS,</text>
+      <text x="726" y="220" class="s">quản trị, tour, khoá ô U/O…</text>
+
+      <path d="M250 182 H361" class="ar" marker-end="url(#h2)"/>
+      <text x="305" y="175" class="lb" text-anchor="middle">vẽ ra</text>
+
+      <path d="M595 182 H706" class="ar-d" marker-end="url(#hm2)"/>
+      <text x="650" y="175" class="lb" text-anchor="middle">báo thay đổi</text>
+      <path d="M706 214 H599" class="ar-a" marker-end="url(#ha2)"/>
+      <text x="652" y="230" class="lb" text-anchor="middle">chèn / sửa thêm</text>
+
+      <path d="M825 234 V290 H135 V238" class="ar-a" marker-end="url(#ha2)"/>
+      <text x="480" y="284" class="lb" text-anchor="middle">proxy input: ui.js nhận thao tác, ghi .value + dispatchEvent vào input thật → app.js xử lý như bình thường</text>
+    </svg>
+    </div>
+    <figcaption>Nét đứt là <b>MutationObserver</b>: trình duyệt báo cho ui.js mỗi khi app.js vẽ lại một phần (bảng, chip…), ui.js liền chèn nút, đổi chữ hoặc khoá ô. ui.js nạp <i>trước</i> app.js để kịp bọc hàm <code>fetch</code> và đọc response API (avatar, số liệu cho Trợ lý CS) mà không cần app.js chuyển cho.</figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="note">
+      <h3>Các mục trong ui.js (tìm theo tiêu đề khối comment)</h3>
+      <ul>
+        <li><b>A–D</b>: modal Gia hạn/Dừng, nút trên bảng deal, chỉnh 2 card CR, màn Request</li>
+        <li><b>Kết nối Claude</b>: tạo, thu hồi link MCP</li>
+        <li><b>Quản trị</b>: feedback, todo, danh sách CS, bảng Cộng phước</li>
+        <li><b>Trợ lý CS</b> (cuối file): "Vì sao?", lịch đánh giá, mô phỏng Career path</li>
+        <li><b>Product tour</b>: Driver.js, 28 bước</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>Cache-busting</h3>
+      <p>index.html nạp file kèm <code>?v=N</code> (ví dụ <code>ui.js?v=71</code>). Mỗi lần sửa CSS/JS phải tăng số này, nếu không trình duyệt người dùng vẫn chạy bản cũ.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3. DỮ LIỆU DEAL ================= -->
+<section>
+  <div class="sec-head">
+    <h2>3. Một con số deal đi từ CRM tới màn hình</h2>
+    <p>Số deal không nhập tay. Nó chảy từ CRM qua sheet của chị Chi, được Apps Script kiểm rồi mới vào database. Số CS tự nhập (%Active, %Output…) nằm bảng riêng, chỉ ghép vào lúc xem.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 960 260" role="img" aria-label="Luồng dữ liệu deal: CRM và BigQuery sang sheet Extract of Raw, Apps Script kiểm và gọi sync_deals_raw vào deals_raw, view v_database ghép số CS nhập, rồi qua v_database_display, api_get_deals_json, Edge Function api tới app.js.">
+      <defs>
+        <marker id="h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+      </defs>
+      <rect x="20" y="30" width="150" height="60" rx="7" class="bx"/><text x="34" y="54" class="t">CRM → BigQuery</text><text x="34" y="74" class="s">nguồn gốc</text>
+      <rect x="210" y="30" width="150" height="60" rx="7" class="bx"/><text x="224" y="54" class="t">Sheet</text><text x="224" y="74" class="s">tab Extract of Raw</text>
+      <rect x="400" y="30" width="150" height="60" rx="7" class="bx-a"/><text x="414" y="54" class="t">Apps Script</text><text x="414" y="74" class="s">lọc trùng, kiểm an toàn</text>
+      <rect x="590" y="30" width="150" height="60" rx="7" class="bx"/><text x="604" y="54" class="t mono">deals_raw</text><text x="604" y="74" class="s">khoá chính deal_id</text>
+      <rect x="780" y="30" width="160" height="60" rx="7" class="bx"/><text x="794" y="54" class="t mono">v_database</text><text x="794" y="74" class="s">+ deal_inputs, khoá U/O</text>
+
+      <path d="M170 60 H206" class="ar" marker-end="url(#h3)"/><text x="188" y="52" class="m" text-anchor="middle">chị Chi</text>
+      <path d="M360 60 H396" class="ar" marker-end="url(#h3)"/><text x="378" y="52" class="m" text-anchor="middle">đọc</text>
+      <path d="M550 60 H586" class="ar" marker-end="url(#h3)"/><text x="568" y="52" class="m" text-anchor="middle">lô 500</text>
+      <path d="M740 60 H776" class="ar" marker-end="url(#h3)"/>
+
+      <text x="400" y="114" class="s">• dừng nếu tab &lt; 500 dòng</text>
+      <text x="400" y="130" class="s">• dừng nếu &gt; 5% Deal ID xung đột</text>
+      <text x="400" y="146" class="s">• deal mất khỏi tab → ẩn, không xoá</text>
+
+      <path d="M860 90 V176" class="ar" marker-end="url(#h3)"/>
+      <rect x="780" y="180" width="160" height="56" rx="7" class="bx"/><text x="794" y="203" class="t mono">v_database_display</text><text x="794" y="222" class="s">định dạng ngày, tiền, %</text>
+      <rect x="590" y="180" width="150" height="56" rx="7" class="bx"/><text x="604" y="203" class="t mono">api_get_deals_json</text><text x="604" y="222" class="s">lọc deal của email</text>
+      <rect x="400" y="180" width="150" height="56" rx="7" class="bx-a"/><text x="414" y="203" class="t">Edge Function api</text><text x="414" y="222" class="s">GET ?token=…</text>
+      <rect x="210" y="180" width="150" height="56" rx="7" class="bx-w"/><text x="224" y="203" class="t">app.js + ui.js</text><text x="224" y="222" class="s">vẽ bảng, tính CR</text>
+      <path d="M780 208 H744" class="ar" marker-end="url(#h3)"/>
+      <path d="M590 208 H554" class="ar" marker-end="url(#h3)"/>
+      <path d="M400 208 H364" class="ar" marker-end="url(#h3)"/>
+      <text x="20" y="203" class="s">CS nhập % → POST rows</text>
+      <text x="20" y="220" class="s">→ api_save_rows → deal_inputs</text>
+    </svg>
+    </div>
+    <figcaption>Cách chống lệch dữ liệu: mọi thứ khớp theo <code>deal_id</code> (không theo số dòng), sheet lỗi thì dừng cả lượt và Supabase giữ số cũ, SQL từ chối nếu một lượt thấy chưa tới 50% số deal đang active. Nguồn tạm thời là sheet; đổi <code>SYNC.NGUON = 'bigquery'</code> để chạy query thẳng khi có quyền BigQuery ổn định.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4. ĐĂNG NHẬP ================= -->
+<section>
+  <div class="sec-head">
+    <h2>4. Đăng nhập và phân quyền</h2>
+  </div>
+  <ol class="steps">
+    <li>Người dùng bấm nút Google. Google trả <code>id_token</code>, chỉ chấp nhận email <code>@base.vn</code>.</li>
+    <li>app.js gửi token đó lên Edge Function <code>api</code>. Function hỏi Google (<code>tokeninfo</code>) để xác minh, rồi cấp một vé phiên <code>CST1.…</code> ký bằng <code>SESSION_SECRET</code>, hạn 30 ngày. Các lần sau chỉ gửi vé này.</li>
+    <li>Mọi hàm SQL <code>api_*</code> nhận email đã xác minh và chỉ trả deal của email đó. Email có trong bảng <code>app_admins</code> thấy thêm phần Quản trị và các tool <code>admin_*</code> trên MCP.</li>
+    <li>Link MCP: mỗi người tự tạo trong mục "Kết nối Claude". Database chỉ lưu mã băm SHA-256 của khoá; thu hồi khoá là link chết ngay.</li>
+  </ol>
+</section>
+
+<!-- ================= 5. QUY TẮC CHÉP NHIỀU NƠI ================= -->
+<section>
+  <div class="sec-head">
+    <h2>5. Quy tắc bị chép ở nhiều nơi</h2>
+    <p>Rủi ro lớn nhất khi bàn giao. Cùng một quy tắc được viết lại ở nhiều file vì app.js không được sửa và database, MCP cũng cần tự tính. Sửa một chỗ mà quên chỗ khác thì giao diện, Claude và career path ra ba con số khác nhau.</p>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Quy tắc</th><th>Nằm ở đâu</th><th>Test bắt lệch</th></tr></thead>
+    <tbody>
+      <tr><td>Cách tính CR</td><td><code>crIn()</code> app.js · <code>qCrCompute()</code> ui.js · <code>cxCrState()</code> ui.js · <code>crIn()</code> trong Edge Function <code>api</code> · <code>cr_summary</code> trong <code>mcp</code></td><td><code>cr.test.mjs</code>, <code>tro-ly-cs.test.mjs</code></td></tr>
+      <tr><td>Mốc KPI, khung lương level</td><td><code>LEVELS</code> app.js · <code>CAREER_LEVELS</code> Edge Function <code>api</code></td><td><code>career.test.mjs</code></td></tr>
+      <tr><td>Khoá nhập %Active/%Output theo ngày đánh giá</td><td>view <code>v_database</code> (cột "Khoá U/O") → ui.js khoá ô · <code>api_save_rows</code>, <code>api_save_multiyear</code> · <code>api_patch_deal_input</code> + MCP <code>update_multiyear_inputs</code></td><td><code>khoa-uo.test.mjs</code></td></tr>
+      <tr><td>Domain link MCP</td><td><code>vercel.json</code> · <code>netlify.toml</code> · <code>config.js</code> · secret <code>MCP_PUBLIC_BASE</code></td><td><code>phuoc-mcp-url.test.mjs</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ================= 6. DEPLOY ================= -->
+<section>
+  <div class="sec-head">
+    <h2>6. Sửa xong thì đưa lên bằng cách nào</h2>
+    <p>Chỉ frontend tự động. Ba phần còn lại phải làm tay, và quên bước nào thì phần đó vẫn chạy bản cũ.</p>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Phần</th><th>File trong repo</th><th>Cách đưa lên</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Giao diện</td><td><code>index.html</code>, <code>ui.js</code>, <code>style.css</code>, <code>config.js</code></td><td>Push nhánh <code>main</code> → Vercel tự deploy. Nhớ tăng <code>?v=N</code>.</td><td><span class="pill">tự động</span></td></tr>
+      <tr><td>Database</td><td><code>supabase/01…09_*.sql</code></td><td>Chạy file mới trong Supabase SQL Editor, theo thứ tự số. File sau có thể ghi đè hàm của file trước.</td><td><span class="pill no">làm tay</span></td></tr>
+      <tr><td>Edge Function</td><td><code>supabase/functions/api</code>, <code>mcp</code></td><td>Deploy lại từng function. Phải tắt "Verify JWT". Secrets đặt trong Dashboard: <code>SESSION_SECRET</code> (bắt buộc), <code>RESEND_API_KEY</code>, <code>PF_ADMIN_EMAIL</code>, <code>MCP_PUBLIC_BASE</code>.</td><td><span class="pill no">làm tay</span></td></tr>
+      <tr><td>Đồng bộ + mail</td><td><code>supabase/apps-script/DongBoSupabase.gs</code></td><td>Dán lại cả file vào project Apps Script "Dong bo Supabase". Key Supabase nằm ở Script Properties, không trong code. <code>caiDatTrigger()</code> tạo lịch chạy.</td><td><span class="pill no">làm tay</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Test chạy bằng <code>cd tests &amp;&amp; npm install &amp;&amp; npm test</code>: quy tắc CR, MCP server, đồng bộ sheet, mail, và smoke test giao diện trên Chromium. Không đặt <code>package.json</code> ở gốc repo vì Vercel đang deploy kiểu tĩnh.</p>
+</section>
+
+<!-- ================= 7. BÀN GIAO ================= -->
+<section>
+  <div class="sec-head">
+    <h2>7. Danh sách bàn giao</h2>
+  </div>
+  <div class="grid2">
+    <div class="note">
+      <h3>Quyền cần chuyển cho người mới</h3>
+      <ul>
+        <li>GitHub repo <span class="mono">truongnlt99-spec/Forecast-Tool</span></li>
+        <li>Vercel project (domain csconsole.vercel.app)</li>
+        <li>Supabase project <span class="mono">lheaoklvumzapmwuhysr</span> (database, function, storage, secrets)</li>
+        <li>Project Apps Script "Dong bo Supabase" và tài khoản Gmail chạy nó</li>
+        <li>Google Cloud OAuth Client (nút đăng nhập Google)</li>
+        <li>Quyền đọc sheet Extract of Raw (chị Chi quản lý)</li>
+        <li>Thêm email người mới vào bảng <code>app_admins</code></li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>Tài liệu nên đọc trước</h3>
+      <ul>
+        <li><code>CLAUDE.md</code>: luật của repo và nhật ký các thay đổi quy tắc</li>
+        <li><code>docs/XU-LY-FEEDBACK.md</code>: quy trình Claude xử lý feedback mỗi sáng</li>
+        <li><code>docs/CAREER-PATH.md</code>: thiết kế career path</li>
+        <li><code>supabase/RA-SOAT-CHINH-SACH.md</code>, <code>BAN-TEST.md</code></li>
+      </ul>
+    </div>
+    <div class="note warn">
+      <h3>Điểm dễ vấp</h3>
+      <ul>
+        <li>Không sửa <code>app.js</code>. Cần đổi hành vi thì vá ở ui.js; thật sự không vá được thì hỏi admin.</li>
+        <li>Comment đầu <code>config.js</code> ghi "bản test, không merge vào main" là comment cũ. Nhánh main hiện đang trỏ thẳng Supabase.</li>
+        <li><code>Code.gs</code> (Apps Script Web App, nằm ngoài repo) là backend cũ, đã được Edge Function <code>api</code> thay thế.</li>
+        <li>Đổi project Supabase thì phải sửa cùng lúc <code>config.js</code>, <code>vercel.json</code>, <code>netlify.toml</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>Vẽ từ mã nguồn repo ngày 19/10/2026. Kích thước file: app.js ≈2.600 dòng, ui.js ≈4.900, mỗi Edge Function ≈700, SQL ≈2.600 dòng trên 10 file.</footer>
+</div>
