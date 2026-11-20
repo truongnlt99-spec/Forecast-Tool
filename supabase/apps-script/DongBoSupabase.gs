@@ -19,7 +19,7 @@
  *     Connected Sheets của tab "Bigquery" (sheet SHEET_ID). Ai sửa query ở
  *     đó thì lượt đồng bộ sau tự theo. Muốn cố định query thì điền BQ_QUERY.
  *  5. Chạy dongBoDeals() 1 lần (lần đầu Google hỏi quyền → Allow), xem log.
- *     Ổn thì chạy caiDatTrigger() để tự đồng bộ mỗi giờ.
+ *     Ổn thì chạy caiDatTrigger() để tự đồng bộ mỗi 30 phút.
  *
  * NGUỒN DỮ LIỆU (SYNC.NGUON, từ 17/10/2026):
  *  - 'sheet'    (đang dùng, TẠM THỜI): đọc tab "Extract of Raw" mà chị Chi đồng bộ sẵn
@@ -421,15 +421,15 @@ function noiDungMailFb_(f) {
   return { subject: thayBien_(C.TIEU_DE_MAIL, v), body: body, html: html };
 }
 
-// Tạo trigger: dongBoDeals mỗi giờ + guiMailFeedback mỗi 5 phút (chạy lại không tạo trùng)
+// Tạo trigger: dongBoDeals mỗi 30 phút + guiMailFeedback mỗi 5 phút (chạy lại không tạo trùng)
 function caiDatTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var h = t.getHandlerFunction();
     if (h === 'dongBoDeals' || h === 'guiMailFeedback') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('dongBoDeals').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('dongBoDeals').timeBased().everyMinutes(30).create();
   ScriptApp.newTrigger('guiMailFeedback').timeBased().everyMinutes(5).create();
-  Logger.log('Đã cài trigger: đồng bộ deal mỗi giờ, gửi mail feedback mỗi 5 phút.');
+  Logger.log('Đã cài trigger: đồng bộ deal mỗi 30 phút, gửi mail feedback mỗi 5 phút.');
 }
 
 // In ra nguồn BigQuery của các tab Connected Sheets để copy vào SYNC
