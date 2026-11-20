@@ -3431,6 +3431,7 @@
       changelog: window.__csLatestChangelog || 'none',
       claude: 'v1',
       career: 'v1',
+      golive: 'v1',
     };
     var seen = {};
     try { seen = JSON.parse(localStorage.getItem(LS_SEEN) || '{}') || {}; } catch (e) { seen = {}; }
@@ -3459,6 +3460,7 @@
     }
     var menuItems = document.querySelectorAll('#accMenu [data-new]');
     var cpBtns = document.querySelectorAll('.cp-nav-btn');
+    var glBtns = document.querySelectorAll('.cx-gl-btn');
 
     function render() {
       var any = false;
@@ -3468,6 +3470,7 @@
         if (on) any = true;
       });
       cpBtns.forEach(function (el) { setTag(el, isNew('career')); });
+      glBtns.forEach(function (el) { setTag(el, isNew('golive')); });
       if (badge) badge.hidden = !any;
     }
 
@@ -3476,6 +3479,9 @@
     });
     cpBtns.forEach(function (el) {
       el.addEventListener('click', function () { markSeen('career'); });
+    });
+    glBtns.forEach(function (el) {
+      el.addEventListener('click', function () { markSeen('golive'); });
     });
     // Bấm 1 mục trong menu (mở popup) thì đóng menu lại.
     ['changelogBtn', 'pfBtn', 'claudeBtn', 'adminBtn'].forEach(function (id) {
