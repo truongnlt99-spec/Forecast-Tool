@@ -3944,6 +3944,29 @@
       out.sort(function (a, b) { return (a.date - b.date) || String(a.company).localeCompare(String(b.company)); });
       return out;
     }
+    // Lịch go-live theo hạn kéo đánh giá: ontime/late = đã kéo trên CRM (so với hạn), todo/overdue = chưa kéo
+    // (ngày CS tự nhập không tính). days/counts/dtPhai chỉ cho deal có hạn trong tháng month; overdue/soon xét mọi tháng.
+    function cxGoLiveCal(deals, month, today) {
+      var t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+      var res = { days: {}, overdue: [], soon: [], counts: { total: 0, ontime: 0, late: 0, todo: 0, overdue: 0 }, dtPhai: 0 };
+      deals.forEach(function (d) {
+        var h = cxDeadline(d);
+        if (d.stopped || !cxContractCounted(d.contract) || !h) return;
+        var k = d.glFromCrm ? d.glActual : null;
+        var left = Math.round((Date.UTC(h.getFullYear(), h.getMonth(), h.getDate()) - t0) / 86400000);
+        var it = { id: d.id, company: d.company, sysId: d.sysId, dtPhai: d.dtPhai || 0, deadline: h, keo: k || null, daysLeft: left,
+          status: k ? (cxDay(k) <= cxDay(h) ? 'ontime' : 'late') : (left < 0 ? 'overdue' : 'todo') };
+        if (it.status === 'overdue') res.overdue.push(it);
+        if (it.status === 'todo' && left <= 3) res.soon.push(it);
+        if (cxMNorm(h) !== month) return;
+        (res.days[h.getDate()] = res.days[h.getDate()] || []).push(it);
+        res.counts.total++; res.counts[it.status]++; res.dtPhai += it.dtPhai;
+      });
+      for (var n in res.days) res.days[n].sort(function (a, b) { return b.dtPhai - a.dtPhai; });
+      res.overdue.sort(function (a, b) { return a.deadline - b.deadline; });
+      res.soon.sort(function (a, b) { return a.deadline - b.deadline; });
+      return res;
+    }
     /* ==CX PURE END== */
 
     // Quy tắc CR dùng chung: app.js crIn() và qCrCompute() (mục 11) gọi sang đây cho tháng ≥ 11/2026.
