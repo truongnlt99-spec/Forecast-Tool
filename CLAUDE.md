@@ -68,6 +68,7 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
 - Quy tắc CR có thêm bản thứ 4: `cxCrState()` (giữa `==CX PURE START==` / `==CX PURE END==`). Sửa quy tắc CR thì sửa cả
   `crIn()` app.js, `qCrCompute()` ui.js mục 11, `cr_summary` MCP và `cxCrState()` — `tests/tro-ly-cs.test.mjs` so khớp với `crIn()`.
 - Lịch đánh giá dùng cùng quy tắc khoá ở mục 8 (ngày đánh giá < hôm nay giờ VN; Năm N = Năm 1 + (N−1) năm).
+- Lịch go-live (Forecast): deal theo ngày hạn, màu theo quy tắc CR mục 14, hàm `cxGoLiveCal()` (khối CX PURE), banner nhắc ≤ 3 ngày.
 - Dòng "CRM cập nhật lúc …" cần chạy `supabase/07_gio_dong_bo.sql` + deploy lại Edge Function `api` (chưa chạy thì dòng đó tự ẩn).
 
 ## 10. Nguồn dữ liệu deal: tạm lấy từ sheet (17/10/2026)

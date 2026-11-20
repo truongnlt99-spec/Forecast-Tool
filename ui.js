@@ -4114,6 +4114,7 @@
     function refreshAll() {
       renderFresh();
       renderReminders();
+      renderGlReminder();
       if (cxView === 'cal') renderCal();
       if (cxView === 'gl') renderGl();
       glCount();
@@ -4591,6 +4592,34 @@
           try { localStorage.setItem(LS_REMIND, fmtDate(vnToday()) + '|' + cnt); } catch (e) {}
           renderReminders();
         });
+      });
+    }
+
+    // Banner nhắc deal sắp tới hạn kéo go-live (≤ 3 ngày), chỉ ở Forecast; ✕ ẩn tới hết ngày
+    var LS_GL_REMIND = 'cs_tool_cx_gl_hide';
+    function renderGlReminder() {
+      var body = document.querySelector('#panel-forecast > .tab-panel-body');
+      if (!body) return;
+      var today = vnToday(), soon = st.deals ? cxGoLiveCal(st.deals, cxMNorm(today), today).soon : [], cnt = soon.length;
+      var hidden = false;
+      try { hidden = localStorage.getItem(LS_GL_REMIND) === fmtDate(today) + '|' + cnt; } catch (e) {}
+      var el = body.querySelector(':scope > .cx-remind-gl');
+      if (!cnt || hidden) { if (el) el.remove(); return; }
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'cx-remind cx-remind-gl';
+        el.setAttribute('role', 'status');
+        body.insertBefore(el, body.firstChild);
+      }
+      var f = soon[0];
+      el.innerHTML = '<span class="cx-remind-ico" aria-hidden="true">⏰</span><div><b>' + cnt + ' deal sắp tới hạn kéo</b> đánh giá trong 3 ngày tới' +
+        ' — gần nhất: ' + esc(f.company) + ' (hạn ' + fmtDate(f.deadline) + ', ' + (f.daysLeft ? 'còn ' + f.daysLeft + ' ngày' : 'hôm nay') + ').</div>' +
+        '<button type="button" class="ad-btn ad-primary cx-remind-go">Xem lịch</button>' +
+        '<button type="button" class="modal-x cx-remind-x" aria-label="Ẩn tới mai" title="Ẩn tới mai">✕</button>';
+      el.querySelector('.cx-remind-go').addEventListener('click', function () { showGl(); st.glMonth = cxMNorm(f.deadline); renderGl(); });
+      el.querySelector('.cx-remind-x').addEventListener('click', function () {
+        try { localStorage.setItem(LS_GL_REMIND, fmtDate(today) + '|' + cnt); } catch (e) {}
+        renderGlReminder();
       });
     }
 

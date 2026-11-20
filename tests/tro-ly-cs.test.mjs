@@ -220,6 +220,7 @@ const DEALS = [
   // Lịch go-live (không có "Tháng ghi nhận CR" → không đổi số CR của các test khác)
   base('601', 'GL kéo đúng hạn', { 'Ngày go-live dự kiến': dd(0), 'Ngày go-live thực tế': dd(0), 'Nguồn go-live': 'Đã kéo' }),
   base('602', 'GL quá hạn', { 'Ngày go-live dự kiến': lastPrev }),
+  base('603', 'GL sắp hạn', { 'Ngày go-live dự kiến': dd(0) }),
   // Mô phỏng: deal hạn tháng sau trong quý (kéo sớm)
   ...(nextInQuarter ? [base('501', 'Hạn tháng sau', { 'Tháng ghi nhận CR': NEXT, 'DT phải go-live': '7.000.000' })] : []),
 ];
@@ -368,6 +369,15 @@ test('UI: Lịch go-live — lưới tháng, màu trạng thái, khung quá hạ
     await page.waitForSelector('.fc-chip[data-fck="all"]');
     await page.waitForFunction(() => !document.querySelector('.nav-sub .cx-gl-count').hidden);
     assert.equal(await page.textContent('.nav-sub .cx-gl-count'), '1');
+
+    // Banner nhắc: 1 deal hạn hôm nay chưa kéo → Xem lịch mở lịch go-live, ✕ ẩn banner
+    await page.waitForSelector('#panel-forecast .cx-remind-gl');
+    assert.match(await page.textContent('#panel-forecast .cx-remind-gl'), /1 deal sắp tới hạn kéo.*GL sắp hạn/);
+    await page.evaluate(() => document.querySelector('#panel-forecast .cx-remind-gl .cx-remind-go').click());
+    await page.waitForSelector('#cxGlBlock .cx-gl-grid');
+    assert.equal(await page.isVisible('#cxGlBlock'), true);
+    await page.evaluate(() => document.querySelector('#panel-forecast .cx-remind-gl .cx-remind-x').click());
+    assert.equal(await page.$('#panel-forecast .cx-remind-gl'), null);
 
     await page.evaluate(() => document.querySelector('.nav-sub .cx-gl-btn').click());   // menu con có thể đang thu gọn
     await page.waitForSelector('#cxGlBlock .cx-gl-grid');
