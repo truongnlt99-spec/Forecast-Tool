@@ -4574,7 +4574,7 @@
       ['panel-overview', 'panel-forecast'].forEach(function (pid) {
         var body = document.querySelector('#' + pid + ' > .tab-panel-body');
         if (!body) return;
-        var el = body.querySelector(':scope > .cx-remind');
+        var el = body.querySelector(':scope > .cx-remind:not(.cx-remind-gl)');
         if (!cnt || hidden) { if (el) el.remove(); return; }
         if (!el) {
           el = document.createElement('div');

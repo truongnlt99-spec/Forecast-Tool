@@ -83,6 +83,15 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
   active. Lượt có Deal ID xung đột thì không ẩn deal nào.
 - Script chạy trong project Apps Script riêng: sửa file trong repo xong phải dán lại vào Apps Script. Test: `tests/dong-bo-sheet.test.mjs`.
 
+## 13. Nền tảng 3.0: Deal ID dạng chữ (20/11/2026)
+
+- Nguồn đổi sang tab **raw_bao_cao_deal_trien_khai_3_0** (extract bảng BigQuery `dm_cohcm.bao_cao_deal_trien_khai_3_0`,
+  chị Chi đặt lịch refresh; tài khoản Trường không có quyền BigQuery). Tab có cả deal Done → script lọc `SYNC.STAGE_DANG_TK`.
+- Deal ID / Job ID 3.0 là chữ (`aFD7lKLl-…`): `deal_id`, `job_id` ở Supabase là **text** (`supabase/10a_…`, `10b_chuyen_ma_3_0.sql`).
+  Mã cũ → mới theo `Deal_ID_cu` (bảng `deal_id_map_3_0`, nạp bằng `napMaDeal30()`); bản sao lưu trước khi đổi ở schema `bk30`.
+- Tỷ lệ sử dụng = `Ty_le_active_tier_N_thang` (trống thì lấy `..._system_...`), đổi tên về cột cũ ở `doiCot30_()`.
+  T5/T6 và các cột `*_auto` chưa dùng. Không viết code nào giả định Deal ID là số.
+
 ## 14. CR từ tháng 11/2026: kéo đánh giá trước ngày go-live dự kiến (20/11/2026)
 
 - Áp dụng cho CR các tháng **≥ 11/2026** (tháng trước giữ quy tắc mục 12). Hạn = ngày go-live gia hạn, không có thì
@@ -92,15 +101,6 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
 - Code: `cxCrState()` ui.js (khối CX PURE) là bản gốc; app.js `crIn()` hỏi `window.csCrIn` (admin cho phép thêm
   1 dòng), `qCrCompute()` gọi `window.csCrState`; Edge Function `api` (career path) và `mcp` (`cr_summary`) có
   `crInNew()`. `tests/tro-ly-cs.test.mjs` so khớp 3 bản. Sửa quy tắc thì sửa đủ, deploy lại 2 Edge Function.
-
-## 13. Nền tảng 3.0: Deal ID dạng chữ (20/11/2026)
-
-- Nguồn đổi sang tab **raw_bao_cao_deal_trien_khai_3_0** (extract bảng BigQuery `dm_cohcm.bao_cao_deal_trien_khai_3_0`,
-  chị Chi đặt lịch refresh; tài khoản Trường không có quyền BigQuery). Tab có cả deal Done → script lọc `SYNC.STAGE_DANG_TK`.
-- Deal ID / Job ID 3.0 là chữ (`aFD7lKLl-…`): `deal_id`, `job_id` ở Supabase là **text** (`supabase/10a_…`, `10b_chuyen_ma_3_0.sql`).
-  Mã cũ → mới theo `Deal_ID_cu` (bảng `deal_id_map_3_0`, nạp bằng `napMaDeal30()`); bản sao lưu trước khi đổi ở schema `bk30`.
-- Tỷ lệ sử dụng = `Ty_le_active_tier_N_thang` (trống thì lấy `..._system_...`), đổi tên về cột cũ ở `doiCot30_()`.
-  T5/T6 và các cột `*_auto` chưa dùng. Không viết code nào giả định Deal ID là số.
 
 ## 11. Mail báo người gửi khi feedback hoàn thành (17/10/2026)
 

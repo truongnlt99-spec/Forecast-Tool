@@ -376,6 +376,9 @@ test('UI: Lịch go-live — lưới tháng, màu trạng thái, khung quá hạ
     await page.evaluate(() => document.querySelector('#panel-forecast .cx-remind-gl .cx-remind-go').click());
     await page.waitForSelector('#cxGlBlock .cx-gl-grid');
     assert.equal(await page.isVisible('#cxGlBlock'), true);
+    // ✕ banner đánh giá không được đè banner go-live
+    await page.evaluate(() => document.querySelector('#panel-forecast .cx-remind:not(.cx-remind-gl) .cx-remind-x')?.click());
+    assert.notEqual(await page.$('#panel-forecast .cx-remind-gl'), null);
     await page.evaluate(() => document.querySelector('#panel-forecast .cx-remind-gl .cx-remind-x').click());
     assert.equal(await page.$('#panel-forecast .cx-remind-gl'), null);
 
