@@ -261,8 +261,8 @@ const TOOLS: Tool[] = [
       for (const [k, f] of Object.entries(map)) if (k in a) patch[f] = a[k] == null ? null : Number(a[k]);
       if (!Object.keys(patch).length) throw new ToolError("Chưa truyền ô nào để sửa");
       const id = String(a.deal_id).trim();
-      if (!/^\d+$/.test(id)) throw new ToolError("deal_id không hợp lệ");
-      return await rpc("api_patch_deal_input", { p_email: ctx.email, p_deal_id: Number(id), p_patch: patch });
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new ToolError("deal_id không hợp lệ");
+      return await rpc("api_patch_deal_input", { p_email: ctx.email, p_deal_id: id, p_patch: patch });
     },
   },
   {
@@ -278,10 +278,10 @@ const TOOLS: Tool[] = [
     }, ["deal_id", "nam", "ky"]),
     run: async (a, ctx) => {
       const id = String(a.deal_id).trim();
-      if (!/^\d+$/.test(id)) throw new ToolError("deal_id không hợp lệ");
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new ToolError("deal_id không hợp lệ");
       if (!("active" in a) && !("output" in a)) throw new ToolError("Chưa truyền active hoặc output");
       const { data: cur } = await SB.from("deal_multiyear_inputs").select("active, output")
-        .eq("deal_id", Number(id)).eq("year", Number(a.nam)).eq("period", String(a.ky)).maybeSingle();
+        .eq("deal_id", id).eq("year", Number(a.nam)).eq("period", String(a.ky)).maybeSingle();
       const keep = (v: unknown) => v == null ? null : Math.round(Number(v) * 1e6) / 1e4; // 0.85 → 85
       const row = {
         dealId: id, year: Number(a.nam), period: String(a.ky),
@@ -289,7 +289,7 @@ const TOOLS: Tool[] = [
         output: "output" in a ? a.output : keep(cur?.output),
       };
       // Khoá theo ngày đánh giá: Năm N kỳ T1/T4 = ngày đánh giá Năm 1 + (N−1) năm (giống trên web)
-      const dg = await rpc<string | null>("deal_ngay_dg", { p_deal_id: Number(id), p_ky: String(a.ky) });
+      const dg = await rpc<string | null>("deal_ngay_dg", { p_deal_id: id, p_ky: String(a.ky) });
       if (typeof dg === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dg)) {
         const lock = new Date(dg + "T00:00:00Z");
         lock.setUTCFullYear(lock.getUTCFullYear() + Number(a.nam) - 1);
@@ -544,8 +544,8 @@ const TOOLS: Tool[] = [
     readOnly: true,
     run: async (a, ctx) => {
       const id = String(a.deal_id).trim();
-      if (!/^\d+$/.test(id)) throw new ToolError("deal_id không hợp lệ");
-      return await rpc("api_admin_get_deal", { p_email: ctx.email, p_deal_id: Number(id) });
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new ToolError("deal_id không hợp lệ");
+      return await rpc("api_admin_get_deal", { p_email: ctx.email, p_deal_id: id });
     },
   },
   {

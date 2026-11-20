@@ -16,7 +16,7 @@ function load(values, opts = {}) {
       formatDate: (d) => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10),
     },
     SpreadsheetApp: {
-      openById: () => ({ getSheetByName: (n) => n === 'Extract of Raw' ? { getDataRange: () => ({ getValues: () => values }) } : null }),
+      openById: () => ({ getSheetByName: (n) => n === 'raw_bao_cao_deal_trien_khai_3_0' ? { getDataRange: () => ({ getValues: () => values }) } : null }),
     },
     UrlFetchApp: {
       fetch: (url, o) => {
@@ -78,7 +78,7 @@ test('locTrung_: chuẩn hoá Deal ID, lặp y hệt giữ 1, lặp khác nội 
   const rows = ctx.sheetToRows_([H2,
     row(101), row(101),                         // lặp y hệt → giữ 1
     row(102, { cs: 'a' }), row(102, { cs: 'b' }), // khác CS → bỏ cả deal 102
-    row('1,103'), row('104.0'), row('abc'),     // chuẩn hoá / không hợp lệ
+    row('1,103'), row('104.0'), row('a b!'),    // chuẩn hoá / không hợp lệ
     row(105, { job: 9, name: 'X', val: 5 }), row(106, { job: 9, name: 'X', val: 5 }), // khác ID, trùng Job
   ]);
   const r = ctx.locTrung_(rows);
@@ -116,4 +116,53 @@ test('dongBoDeals (nguồn sheet): lượt có Deal ID xung đột → vẫn g�
   assert.equal(ids.length, 29);
   assert.equal(ids.includes('4000'), false);
   assert.equal(calls.some((c) => c.p_final), false);
+});
+
+// ---- Nền tảng 3.0 (20/11/2026) ----
+const H3 = ['Deal_ID', 'Job_ID', 'Stage', 'CO_Owner', 'Ty_le_active_tier_1_thang', 'Ty_le_active_system_1_thang',
+  'Ty_le_active_tier_4_thang', 'Ty_le_active_system_4_thang', 'Deal_ID_cu', 'Job_ID_cu'];
+
+test('3.0: Deal ID dạng chữ được nhận; deal Done bị bỏ; tỷ lệ = tier, tier trống lấy system', () => {
+  const v = [H3,
+    ['aFD7lKLl-QEskdNukDi-Gw9xOUcDUMf', 'aFCd8Rv8-lbVK', '💡 Planning', 'cs', 0.62, 0.4, '', 0.3, 1193785, 307450],
+    ['bXy_2', 'j2', 'Done', 'cs', 0.5, 0.5, 0.5, 0.5, 1193700, 307400],
+    ['cZz-3', 'j3', '💌 Follow up 2nd month', 'cs', 0, 0.9, '', '', '', ''],
+  ];
+  for (let i = 0; i < 4; i++) v.push(['pad-' + i, 'j', '📋 Onboarding', 'cs', '', '', '', '', '', '']);
+  const { ctx, calls } = load(v, { minRows: 3 });
+  ctx.dongBoDeals();
+  const rows = calls.flatMap((c) => c.p_rows);
+  const ids = rows.map((x) => x.Deal_ID);
+  assert.equal(ids.includes('bXy_2'), false, 'deal Done không đồng bộ');
+  assert.equal(ids.length, 6);
+  const a = rows.find((x) => x.Deal_ID === 'aFD7lKLl-QEskdNukDi-Gw9xOUcDUMf');
+  assert.equal(a.Job_ID, 'aFCd8Rv8-lbVK');
+  assert.equal(a.Ty_le_su_dung_1_thang, '0.62');
+  assert.equal(a.Ty_le_active_thang_1, '0.4');
+  assert.equal(a.Ty_le_su_dung_4_thang, '0.3', 'tier trống → lấy system');
+  assert.equal('Ty_le_active_tier_1_thang' in a, false, 'không gửi tên cột 3.0');
+  const c = rows.find((x) => x.Deal_ID === 'cZz-3');
+  assert.equal(c.Ty_le_su_dung_1_thang, '0', 'tier = 0 vẫn là tier, không lấy system');
+});
+
+test('napMaDeal30: nạp cặp mã cũ → mới, bỏ mã cũ bị trùng / mâu thuẫn, dừng nếu quá ít', () => {
+  const v = [H3];
+  for (let i = 0; i < 1200; i++) v.push(['new' + i, 'nj' + i, 'Done', 'cs', '', '', '', '', String(500000 + i), 900000 + i]);
+  v.push(['newX', 'njX', 'Done', 'cs', '', '', '', '', '1,234,567', '']);   // số có dấu phẩy
+  v.push(['newY', 'njY', 'Done', 'cs', '', '', '', '', '', '']);           // không có mã cũ → bỏ qua
+  v.push(['newZ', 'njZ', 'Done', 'cs', '', '', '', '', 500001, '']);       // mã cũ 500001 ứng 2 mã mới → bỏ
+  const { ctx, calls } = load(v);
+  ctx.napMaDeal30();
+  const sent = calls.flat();
+  assert.equal(calls.length, 3, 'gửi theo lô 500');
+  assert.equal(sent.length, 1200);
+  assert.equal(sent.some((x) => x.old_id === '500001'), false);
+  assert.deepEqual({ ...sent.find((x) => x.old_id === '1234567') },
+    { old_id: '1234567', new_id: 'newX', old_job: null, new_job: 'njX' });
+  assert.deepEqual({ ...sent.find((x) => x.old_id === '500000') },
+    { old_id: '500000', new_id: 'new0', old_job: '900000', new_job: 'nj0' });
+
+  const few = load([H3, ['n1', 'j', 'Done', 'cs', '', '', '', '', 1, 1]]);
+  assert.throws(() => few.ctx.napMaDeal30(), /Chỉ có 1 cặp mã/);
+  assert.equal(few.calls.length, 0);
 });

@@ -28,12 +28,22 @@
  *               trong tab bị đánh dấu ngừng (ẩn khỏi console, không xoá) như nguồn BigQuery —
  *               trừ lượt có Deal ID xung đột (xem locTrung_) thì lượt đó không ẩn deal nào.
  *  - 'bigquery' : chạy query thẳng trên BigQuery như trước. Đổi lại khi có quyền BigQuery ổn định.
+ *
+ * NỀN TẢNG 3.0 (từ 20/11/2026): đọc tab "raw_bao_cao_deal_trien_khai_3_0" (extract bảng
+ * dm_cohcm.bao_cao_deal_trien_khai_3_0, chị Chi đặt lịch refresh). Khác bản cũ:
+ *  - Deal ID / Job ID dạng chữ (Supabase đổi theo — xem supabase/10b_chuyen_ma_3_0.sql).
+ *  - Có cả deal Done → chỉ lấy stage đang triển khai (STAGE_DANG_TK) như query cũ.
+ *  - Ty_le_su_dung_N_thang = Ty_le_active_tier_N_thang (trống thì lấy ..._system_...);
+ *    Ty_le_active_thang_N = Ty_le_active_system_N_thang. T5/T6 + cột *_auto chưa dùng.
+ *  - napMaDeal30(): nạp cặp Deal_ID_cu → Deal_ID sang bảng deal_id_map_3_0 (chạy 1 lần lúc chuyển).
  * =====================================================================
  */
 
 var SYNC = {
   NGUON: 'sheet',      // 'sheet' | 'bigquery'
-  SHEET_TAB: 'Extract of Raw',
+  SHEET_TAB: 'raw_bao_cao_deal_trien_khai_3_0',
+  // stage đang triển khai — giống bộ lọc của query BigQuery cũ (bỏ Done)
+  STAGE_DANG_TK: /Planning|CSP Approval|Onboarding|Adoption|Go-live|Follow up/,
   MIN_ROWS: 500,       // tab ít hơn số dòng này → coi là đang lỗi / đang cập nhật dở, dừng
   MAX_DUP_RATE: 0.05,  // > 5% Deal ID bị lặp với nội dung khác nhau → sheet nghi hỏng (dán chồng…), dừng
   SUPABASE_URL: 'https://lheaoklvumzapmwuhysr.supabase.co',
@@ -52,8 +62,9 @@ function dongBoDeals() {
     var tuSheet = SYNC.NGUON === 'sheet';
     var rows;
     if (tuSheet) {
-      var raw = docSheet_();
-      Logger.log('Tab "%s" có %s dòng', SYNC.SHEET_TAB, raw.length);
+      var tatCa = docSheet_();
+      var raw = tatCa.filter(function (r) { return r.Stage == null || SYNC.STAGE_DANG_TK.test(r.Stage); });
+      Logger.log('Tab "%s" có %s dòng, %s dòng đang triển khai (bỏ Done)', SYNC.SHEET_TAB, tatCa.length, raw.length);
       var dd = locTrung_(raw);
       rows = dd.rows;
       if (dd.idSai) Logger.log('Bỏ %s dòng Deal ID không hợp lệ', dd.idSai);
@@ -114,9 +125,21 @@ function sheetToRows_(values) {
       o[head[c]] = oSheet_(row[c]);
       if (o[head[c]] != null) any = true;
     }
-    if (any && o.Deal_ID != null) out.push(o);
+    if (any && o.Deal_ID != null) out.push(doiCot30_(o));
   }
   return out;
+}
+
+// Tên cột 3.0 → tên cột deals_raw (bản 1.0). Tỷ lệ sử dụng theo chính sách = tier; tier trống thì lấy system.
+function doiCot30_(o) {
+  for (var n = 1; n <= 4; n++) {
+    var tier = 'Ty_le_active_tier_' + n + '_thang', sys = 'Ty_le_active_system_' + n + '_thang';
+    if (!(tier in o) && !(sys in o)) continue;
+    o['Ty_le_su_dung_' + n + '_thang'] = o[tier] != null ? o[tier] : (o[sys] != null ? o[sys] : null);
+    o['Ty_le_active_thang_' + n] = o[sys] != null ? o[sys] : null;
+    delete o[tier]; delete o[sys];
+  }
+  return o;
 }
 function oSheet_(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -134,14 +157,16 @@ function oSheet_(v) {
 
 // Chống trùng trước khi đẩy sang Supabase (deals_raw khoá theo deal_id nên DB không bao giờ có 2 dòng
 // cùng deal; nhưng sheet có 2 dòng cùng Deal ID thì không biết dòng nào đúng):
-//  - Deal ID chuẩn hoá về chữ số ("1,180,370" / "1180370.0" → "1180370"); không phải số → bỏ.
+//  - Deal ID 3.0 dạng chữ (vd "aFD7lKLl-QEskd…"): chỉ nhận chữ/số/-/_. Deal ID kiểu số cũ vẫn chuẩn hoá
+//    ("1,180,370" / "1180370.0" → "1180370"). Ký tự lạ → bỏ.
 //  - Lặp y hệt → giữ 1. Lặp mà nội dung KHÁC nhau → bỏ cả deal lượt này (Supabase giữ số cũ) + ghi log.
 //  - Deal ID khác nhau thì luôn đồng bộ bình thường (1 Job có nhiều deal là chuyện thường).
 function locTrung_(rows) {
   var byId = {}, order = [], conflict = {}, idSai = 0, trungGiong = 0;
   rows.forEach(function (r) {
-    var id = String(r.Deal_ID == null ? '' : r.Deal_ID).replace(/[,\s]/g, '').replace(/\.0+$/, '');
-    if (!/^\d{1,15}$/.test(id)) { idSai++; return; }
+    var id = String(r.Deal_ID == null ? '' : r.Deal_ID).trim();
+    if (/^[\d,.\s]+$/.test(id)) id = id.replace(/[,\s]/g, '').replace(/\.0+$/, '');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) { idSai++; return; }
     r.Deal_ID = id;
     var key = JSON.stringify(r);
     if (!byId[id]) { byId[id] = { row: r, key: key }; order.push(id); return; }
@@ -206,22 +231,61 @@ function callSync_(rows, runAt, isFinal) {
 
 // Gọi 1 hàm SQL trên Supabase bằng service key (Script Property SUPABASE_SERVICE_KEY)
 function rpc_(fn, args) {
-  var key = PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY');
-  if (!key) throw new Error('Chưa đặt Script Property SUPABASE_SERVICE_KEY.');
-  var headers = { apikey: key };
-  // Key kiểu cũ (JWT eyJ...) cần thêm Authorization; key mới sb_secret_... thì không
-  if (key.indexOf('sb_') !== 0) headers.Authorization = 'Bearer ' + key;
-
   var resp = UrlFetchApp.fetch(SYNC.SUPABASE_URL + '/rest/v1/rpc/' + fn, {
     method: 'post',
     contentType: 'application/json',
-    headers: headers,
+    headers: sbHeaders_(),
     payload: JSON.stringify(args || {}),
     muteHttpExceptions: true
   });
   var code = resp.getResponseCode();
   if (code !== 200) throw new Error('Supabase lỗi ' + code + ': ' + resp.getContentText());
   return JSON.parse(resp.getContentText());
+}
+
+function sbHeaders_() {
+  var key = PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY');
+  if (!key) throw new Error('Chưa đặt Script Property SUPABASE_SERVICE_KEY.');
+  var headers = { apikey: key };
+  // Key kiểu cũ (JWT eyJ...) cần thêm Authorization; key mới sb_secret_... thì không
+  if (key.indexOf('sb_') !== 0) headers.Authorization = 'Bearer ' + key;
+  return headers;
+}
+
+// Chạy 1 LẦN lúc chuyển 3.0 (sau supabase/10a, trước 10b): nạp cặp Deal_ID_cu → Deal_ID từ tab 3.0
+// vào bảng deal_id_map_3_0. Mã cũ ứng với 2 mã mới (hoặc ngược lại) → bỏ, ghi log. Chạy lại không sao.
+function napMaDeal30() {
+  var sh = SpreadsheetApp.openById(SYNC.SHEET_ID).getSheetByName(SYNC.SHEET_TAB);
+  if (!sh) throw new Error('Không thấy tab "' + SYNC.SHEET_TAB + '"');
+  var v = sh.getDataRange().getValues();
+  var head = v[0].map(function (x) { return String(x).trim(); });
+  var col = function (k) { var i = head.indexOf(k); if (i < 0) throw new Error('Tab thiếu cột ' + k); return i; };
+  var iD = col('Deal_ID'), iJ = col('Job_ID'), iDc = col('Deal_ID_cu'), iJc = col('Job_ID_cu');
+  var so = function (x) {
+    var s = String(x == null ? '' : x).replace(/[,\s]/g, '').replace(/\.0+$/, '');
+    return /^\d{1,15}$/.test(s) ? s : null;
+  };
+  var byOld = {}, byNew = {}, bo = {};
+  for (var r = 1; r < v.length; r++) {
+    var cu = so(v[r][iDc]), moi = String(v[r][iD] == null ? '' : v[r][iD]).trim();
+    if (!cu || !moi) continue;
+    if ((byOld[cu] && byOld[cu].new_id !== moi) || (byNew[moi] && byNew[moi] !== cu)) { bo[cu] = true; bo[byNew[moi] || cu] = true; }
+    byOld[cu] = { old_id: cu, new_id: moi, old_job: so(v[r][iJc]), new_job: String(v[r][iJ] == null ? '' : v[r][iJ]).trim() || null };
+    byNew[moi] = cu;
+  }
+  var rows = Object.keys(byOld).filter(function (k) { return !bo[k]; }).map(function (k) { return byOld[k]; });
+  if (rows.length < 1000) throw new Error('Chỉ có ' + rows.length + ' cặp mã — tab đang lỗi / cập nhật dở, dừng.');
+  var h = sbHeaders_();
+  h.Prefer = 'resolution=merge-duplicates,return=minimal';
+  for (var i = 0; i < rows.length; i += 500) {
+    var resp = UrlFetchApp.fetch(SYNC.SUPABASE_URL + '/rest/v1/deal_id_map_3_0?on_conflict=old_id', {
+      method: 'post', contentType: 'application/json', headers: h,
+      payload: JSON.stringify(rows.slice(i, i + 500)), muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() >= 300) throw new Error('Supabase lỗi ' + resp.getResponseCode() + ': ' + resp.getContentText());
+  }
+  Logger.log('Đã nạp %s cặp mã cũ → mới. Bỏ %s mã cũ bị trùng: %s', rows.length, Object.keys(bo).length,
+    Object.keys(bo).slice(0, 20).join(', '));
 }
 
 /* =====================================================================
