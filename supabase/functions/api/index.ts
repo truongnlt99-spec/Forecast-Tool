@@ -263,10 +263,30 @@ function contractCounted(c: string): boolean {
   if (!s || s === "renew" || s === "—") return false;
   return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
 }
+// CR từ tháng 11/2026 (20/11/2026) — giống cxCrState() ui.js: chỉ ngày kéo đánh giá trên CRM ("Nguồn go-live" =
+// "Đã kéo") ≤ hạn (gia hạn, không có thì go-live dự kiến) mới vào tử số; kéo muộn / chỉ có ngày CS nhập → chỉ mẫu số.
+const CR_NEW_FROM = "11/2026";
+function ymd(s: string | undefined): string { // "dd/mm/yyyy" → "yyyy-mm-dd" (so sánh được bằng chuỗi)
+  const x = String(s || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return x ? x[3] + "-" + x[2].padStart(2, "0") + "-" + x[1].padStart(2, "0") : "";
+}
+function crInNew(d: Row, m: string, crMonth: string): { dat: boolean } | null {
+  const k = String(d["Nguồn go-live"] || "").trim() === "Đã kéo" ? ymd(d["Ngày go-live thực tế"]) : "";
+  const h = ymd(d["Ngày go-live gia hạn"]) || ymd(d["Ngày go-live dự kiến"]);
+  if (k) {
+    const g = monthOf(d["Ngày go-live thực tế"]);
+    if (h ? k <= h : mCmp(g, crMonth) <= 0) return m === g ? { dat: true } : null;
+    if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
+    return { dat: false };
+  }
+  if (mCmp(m, crMonth) < 0) return null;
+  return { dat: false };
+}
 function crIn(d: Row, m: string): { dat: boolean; noDen?: boolean } | null {
   const crMonth = d["Tháng ghi nhận CR"];
   const stop = String(d["Dừng triển khai"] || "").trim().toLowerCase();
   if (!/^\d{2}\/\d{4}$/.test(crMonth || "") || !contractCounted(d["Loại hợp đồng"]) || (stop && stop !== "false")) return null;
+  if (mCmp(m, CR_NEW_FROM) >= 0) return crInNew(d, m, crMonth);
   const g = monthOf(d["Ngày go-live thực tế"]);
   if (g) {
     // go-live SỚM hoặc đúng tháng hạn → tử + mẫu ở tháng go-live (17/10/2026)

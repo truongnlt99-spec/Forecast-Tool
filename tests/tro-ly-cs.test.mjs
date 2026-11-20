@@ -19,9 +19,9 @@ function appCrIn() {
   return new Function('mNorm', 'mCmp', 'contractCounted', body + '\nreturn crIn;')(mNorm, mCmp, () => true);
 }
 
-test('cxCrState — cùng kết quả với crIn() của app.js ở mọi tháng / mọi ngày go-live', () => {
-  const crIn = appCrIn();
-  const months = ['07/2026', '08/2026', '09/2026', '10/2026', '11/2026', '12/2026', '01/2027'];
+test('cxCrState — cùng kết quả với crIn() của app.js ở mọi tháng TRƯỚC 11/2026 / mọi ngày go-live', () => {
+  const crIn = appCrIn();   // từ 11/2026 app.js hỏi sang window.csCrIn (= cxCrState) — test riêng bên dưới
+  const months = ['07/2026', '08/2026', '09/2026', '10/2026'];
   const gls = [null, '2026-08-20', '2026-09-30', '2026-10-05', '2026-12-01'];
   for (const gl of gls) {
     for (const m of months) {
@@ -38,8 +38,10 @@ test('cxCrState — mã lý do: sớm / đúng hạn / trễ / chưa go-live / l
   assert.equal(cx.cxCrState(D({ glActual: new Date(2026, 8, 30) }), '09/2026').code, 'early');
   assert.equal(cx.cxCrState(D({ glActual: new Date(2026, 8, 30) }), '10/2026').code, 'doneEarly');
   assert.equal(cx.cxCrState(D({ glActual: new Date(2026, 9, 5) }), '10/2026').code, 'onTime');
-  assert.equal(cx.cxCrState(D({ glActual: new Date(2026, 11, 1) }), '11/2026').code, 'lateWaiting');
-  assert.equal(cx.cxCrState(D({ glActual: new Date(2026, 11, 1) }), '12/2026').code, 'late');
+  // tháng ≥ 11/2026: quy tắc mới (kéo CRM sau hạn → chỉ mẫu số)
+  const lateCrm = D({ glActual: new Date(2026, 11, 1), glFromCrm: true, glPlan: new Date(2026, 9, 20) });
+  assert.equal(cx.cxCrState(lateCrm, '11/2026').code, 'lateWaiting');
+  assert.deepEqual({ ...cx.cxCrState(lateCrm, '12/2026') }, { den: true, num: false, code: 'lateKeo' });
   assert.equal(cx.cxCrState(D({}), '10/2026').code, 'dueNow');
   assert.equal(cx.cxCrState(D({}), '11/2026').code, 'overdue');
   assert.equal(cx.cxCrState(D({}), '09/2026').code, 'notYet');
@@ -51,6 +53,60 @@ test('cxCrState — mã lý do: sớm / đúng hạn / trễ / chưa go-live / l
   const ext = D({ crMonth: '08/2026', glExtend: new Date(2026, 9, 20) });
   assert.equal(cx.cxCrState(ext, '09/2026').code, 'notYet');
   assert.equal(cx.cxCrState(ext, '10/2026').code, 'dueNow');
+});
+
+// ---------- Quy tắc CR từ 11/2026: kéo đánh giá CRM phải ≤ ngày go-live dự kiến (gia hạn) ----------
+// [tên, deal, {tháng: [mẫu, tử]}] — tháng không ghi = không tính
+const NEW_RULE = [
+  ['kéo đúng hạn', { glPlan: '15/11/2026', gl: '10/11/2026', crm: 1 }, { '11/2026': [1, 1] }],
+  ['kéo đúng NGÀY hạn', { glPlan: '15/11/2026', gl: '15/11/2026', crm: 1 }, { '11/2026': [1, 1] }],
+  ['kéo muộn trong cùng tháng hạn', { glPlan: '15/11/2026', gl: '20/11/2026', crm: 1 }, { '11/2026': [1, 0] }],
+  ['kéo muộn sang tháng sau', { glPlan: '15/11/2026', gl: '05/12/2026', crm: 1 }, { '11/2026': [1, 0], '12/2026': [1, 0] }],
+  ['chỉ có ngày CS nhập (không tính)', { glPlan: '15/11/2026', gl: '10/11/2026', crm: 0 }, { '11/2026': [1, 0], '12/2026': [1, 0], '01/2027': [1, 0] }],
+  ['chưa kéo', { glPlan: '15/11/2026' }, { '11/2026': [1, 0], '12/2026': [1, 0], '01/2027': [1, 0] }],
+  ['gia hạn: hạn = ngày gia hạn', { glPlan: '05/11/2026', ext: '25/11/2026', gl: '20/11/2026', crm: 1 }, { '11/2026': [1, 1] }],
+  ['kéo sớm tháng trước', { glPlan: '15/12/2026', gl: '20/11/2026', crm: 1 }, { '11/2026': [1, 1] }],
+  ['hạn tháng 10, kéo muộn tháng 11', { glPlan: '20/10/2026', gl: '03/11/2026', crm: 1 }, { '11/2026': [1, 0] }],
+];
+const pd = (s) => { if (!s) return null; const [d, m, y] = s.split('/'); return new Date(+y, +m - 1, +d); };
+function cxDeal(o) {
+  const hạn = pd(o.ext || o.glPlan);
+  return { contract: 'New', crMonth: mNorm(hạn), glPlan: pd(o.glPlan), glExtend: pd(o.ext), glActual: pd(o.gl), glFromCrm: !!o.crm };
+}
+function rowDeal(o) {
+  const hạn = pd(o.ext || o.glPlan);
+  return { 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': mNorm(hạn), 'Ngày go-live dự kiến': o.glPlan || '',
+    'Ngày go-live gia hạn': o.ext || '', 'Ngày go-live thực tế': o.gl || '', 'Nguồn go-live': o.crm ? 'Đã kéo' : (o.gl ? 'Forecast' : '') };
+}
+// crIn() của Edge Function (TypeScript) → bỏ chú thích kiểu để chạy trên Node
+function edgeCrIn(file) {
+  const src = read(file).replace(/\r\n/g, '\n');
+  const from = src.indexOf('const CR_NEW_FROM'), to = src.indexOf('\n}\n', src.indexOf('function crIn(')) + 3;
+  assert.ok(from >= 0 && to > from, 'không tìm thấy crIn trong ' + file);
+  const js = src.slice(from, to)
+    .replace(/\): \{ dat: boolean(; noDen\?: boolean)? \} \| null \{/g, ') {')
+    .replace(/\): string \{/g, ') {')
+    .replace(/: (Deal|Row|string \| undefined|string)(?=[,)])/g, '');
+  const helpers = 'function monthOf(d){const m=String(d||"").match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);return m?m[2].padStart(2,"0")+"/"+m[3]:"";}' +
+    'function mCmp(a,b){const p=a.split("/"),q=b.split("/");return (p[1]-q[1])||(p[0]-q[0]);}' +
+    'function isMonth(s){return /^\\d{2}\\/\\d{4}$/.test(s||"");} function isStopped(){return false;} function contractCounted(){return true;}';
+  return new Function(helpers + js + '\nreturn crIn;')();
+}
+
+test('CR từ 11/2026 — kéo CRM sau ngày go-live dự kiến chỉ tính mẫu số; ui.js, api, mcp cùng kết quả', () => {
+  const api = edgeCrIn('supabase/functions/api/index.ts'), mcp = edgeCrIn('supabase/functions/mcp/index.ts');
+  const months = ['11/2026', '12/2026', '01/2027'];
+  for (const [name, o, want] of NEW_RULE) {
+    for (const m of months) {
+      const exp = want[m] || [0, 0];
+      const s = cx.cxCrState(cxDeal(o), m);
+      assert.deepEqual([+s.den, +s.num], exp, `ui.js · ${name} · tháng ${m}`);
+      for (const [nm, f] of [['api', api], ['mcp', mcp]]) {
+        const r = f(rowDeal(o), m);
+        assert.deepEqual(r ? [1, +r.dat] : [0, 0], exp, `${nm} · ${name} · tháng ${m}`);
+      }
+    }
+  }
 });
 
 test('cxCrSum — giả sử go-live: deal trễ vào tử số, deal hạn sau trong quý cộng cả tử + mẫu', () => {

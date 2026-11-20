@@ -95,6 +95,8 @@
   // "kéo sớm chỉ tính tử số"). Deal dừng: không có tháng CR.
   function crIn(d, m, gl) {
     if (!d.crMonth || !contractCounted(d.contract)) return null;
+    // Từ tháng 11/2026: quy tắc "kéo đánh giá trước ngày go-live dự kiến" ở ui.js (cxCrState) — 20/11/2026
+    if (typeof window !== 'undefined' && window.csCrIn) { var nr = window.csCrIn(d, m, gl); if (nr !== undefined) return nr; }
     if (gl) {
       var g = mNorm(gl);
       if (mCmp(g, d.crMonth) <= 0) return (m === g) ? { dat: true } : null;

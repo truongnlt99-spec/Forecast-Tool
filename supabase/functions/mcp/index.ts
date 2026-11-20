@@ -113,9 +113,29 @@ function contractCounted(c: string): boolean {
   if (!s || s === "renew" || s === "—") return false;
   return /(^|[^a-z])new|upsale|up-sell|cross|expansion|renew csm|renew triển khai lại/.test(s);
 }
+// CR từ tháng 11/2026 (20/11/2026) — giống cxCrState() ui.js: chỉ ngày kéo đánh giá trên CRM ("Nguồn go-live" =
+// "Đã kéo") ≤ hạn (gia hạn, không có thì go-live dự kiến) mới vào tử số; kéo muộn / chỉ có ngày CS nhập → chỉ mẫu số.
+const CR_NEW_FROM = "11/2026";
+function ymd(s: string | undefined): string { // "dd/mm/yyyy" → "yyyy-mm-dd" (so sánh được bằng chuỗi)
+  const x = String(s || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return x ? x[3] + "-" + x[2].padStart(2, "0") + "-" + x[1].padStart(2, "0") : "";
+}
+function crInNew(d: Deal, m: string, crMonth: string): { dat: boolean } | null {
+  const k = String(d["Nguồn go-live"] || "").trim() === "Đã kéo" ? ymd(d["Ngày go-live thực tế"]) : "";
+  const h = ymd(d["Ngày go-live gia hạn"]) || ymd(d["Ngày go-live dự kiến"]);
+  if (k) {
+    const g = monthOf(d["Ngày go-live thực tế"]);
+    if (h ? k <= h : mCmp(g, crMonth) <= 0) return m === g ? { dat: true } : null;
+    if (mCmp(m, crMonth) < 0 || mCmp(m, g) > 0) return null;
+    return { dat: false };
+  }
+  if (mCmp(m, crMonth) < 0) return null;
+  return { dat: false };
+}
 function crIn(d: Deal, m: string): { dat: boolean; noDen?: boolean } | null {
   const crMonth = d["Tháng ghi nhận CR"];
   if (!isMonth(crMonth) || !contractCounted(d["Loại hợp đồng"]) || isStopped(d)) return null;
+  if (mCmp(m, CR_NEW_FROM) >= 0) return crInNew(d, m, crMonth);
   const g = monthOf(d["Ngày go-live thực tế"]);
   if (g) {
     // go-live SỚM (tháng trước tháng hạn) hoặc đúng tháng hạn → tử + mẫu ở tháng go-live,
@@ -211,6 +231,8 @@ const TOOLS: Tool[] = [
       "Tính CR của tháng (tử số = DT go-live đạt, mẫu số = DT phải go-live) theo đúng quy tắc của console: " +
       "deal nằm trong mẫu số từ tháng hạn tới tháng go-live; go-live đúng tháng hạn tính cả tử + mẫu; " +
       "go-live SỚM (tháng trước tháng hạn) tính cả tử + mẫu ở tháng go-live, không vào mẫu số tháng hạn; " +
+      "TỪ THÁNG 11/2026: chỉ ngày kéo đánh giá trên CRM ≤ ngày go-live dự kiến (hoặc gia hạn) mới vào tử số — kéo muộn " +
+      "(kể cả trong cùng tháng) hoặc chỉ có ngày CS nhập thì chỉ nằm ở mẫu số; " +
       "chỉ loại HĐ New/Upsale/Cross/Expansion/Renew CSM/Renew triển khai lại; bỏ deal dừng triển khai.",
     inputSchema: S({ thang: str("Tháng MM/YYYY (mặc định tháng hiện tại)") }),
     readOnly: true,

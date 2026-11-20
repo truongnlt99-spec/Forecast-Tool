@@ -10,11 +10,13 @@ const DEALS = [
   // CR — tháng 10: tử = D1 10 + D3 30 + D5 6 (go-live sớm) = 46; mẫu = D1 10 + D2 20 + D3 30 + D5 6 (go-live sớm
   // vào cả mẫu tháng kéo — 17/10/2026) = 66
   { 'Deal ID': 'D1', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '15/10/2026',
-    'DT phải go-live': tr(10), 'Giá trị phần mềm bộ (VNĐ)': tr(10), 'Tháng đo T1': '10/2026', 'CHS_CS T1': '60,0' },
+    'Nguồn go-live': 'Đã kéo', 'Ngày go-live dự kiến': '20/10/2026', 'DT phải go-live': tr(10), 'Giá trị phần mềm bộ (VNĐ)': tr(10), 'Tháng đo T1': '10/2026', 'CHS_CS T1': '60,0' },
   { 'Deal ID': 'D2', 'Loại hợp đồng': 'Upsale', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '', 'DT phải go-live': tr(20) },
-  { 'Deal ID': 'D3', 'Loại hợp đồng': 'Cross sale', 'Tháng ghi nhận CR': '09/2026', 'Ngày go-live thực tế': '05/10/2026', 'DT phải go-live': tr(30) },
+  { 'Deal ID': 'D3', 'Loại hợp đồng': 'Cross sale', 'Tháng ghi nhận CR': '09/2026', 'Ngày go-live thực tế': '05/10/2026', 'DT phải go-live': tr(30),
+    'Nguồn go-live': 'Đã kéo', 'Ngày go-live dự kiến': '20/09/2026' },
   { 'Deal ID': 'D4', 'Loại hợp đồng': 'Renew', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '', 'DT phải go-live': tr(99) },
-  { 'Deal ID': 'D5', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '11/2026', 'Ngày go-live thực tế': '20/10/2026', 'DT phải go-live': tr(6) },
+  { 'Deal ID': 'D5', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '11/2026', 'Ngày go-live thực tế': '20/10/2026', 'DT phải go-live': tr(6),
+    'Nguồn go-live': 'Đã kéo', 'Ngày go-live dự kiến': '15/11/2026' },
   { 'Deal ID': 'D6', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '10/2026', 'Ngày go-live thực tế': '', 'DT phải go-live': tr(50), 'Dừng triển khai ': 'X' },
   // SRR — PS bị loại; D8 CHS 45,5 < 50; D9 kỳ T4
   { 'Deal ID': 'D7', 'Loại hợp đồng': 'New', 'Bộ giải pháp': 'PS', 'Giá trị phần mềm bộ (VNĐ)': tr(40), 'Tháng đo T1': '10/2026', 'CHS_CS T1': '10,0' },
@@ -23,7 +25,8 @@ const DEALS = [
   // Kỳ đo tháng 12 chưa có CHS — giữa quý KHÔNG được tính (tháng chưa tới)
   { 'Deal ID': 'D10', 'Loại hợp đồng': 'New', 'Giá trị phần mềm bộ (VNĐ)': tr(100), 'Tháng đo T1': '12/2026', 'CHS_CS T1': '' },
   // Q3 — CR quý 3 = 100 / (100 + 30 của D3 trễ ở tháng 9) = 76,92%
-  { 'Deal ID': 'D11', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '08/2026', 'Ngày go-live thực tế': '10/08/2026', 'DT phải go-live': tr(100) },
+  { 'Deal ID': 'D11', 'Loại hợp đồng': 'New', 'Tháng ghi nhận CR': '08/2026', 'Ngày go-live thực tế': '10/08/2026', 'DT phải go-live': tr(100),
+    'Nguồn go-live': 'Đã kéo', 'Ngày go-live dự kiến': '15/08/2026' },
 ];
 
 const state = { profile: { level: 'CS level 3', salary: '13000000' }, list: { commits: [], levelHistory: [] }, deals: DEALS };

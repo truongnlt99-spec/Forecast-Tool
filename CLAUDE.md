@@ -82,6 +82,16 @@ và `CAREER_LEVELS` trong `supabase/functions/api/index.ts`) — `tests/career.t
   active. Lượt có Deal ID xung đột thì không ẩn deal nào.
 - Script chạy trong project Apps Script riêng: sửa file trong repo xong phải dán lại vào Apps Script. Test: `tests/dong-bo-sheet.test.mjs`.
 
+## 14. CR từ tháng 11/2026: kéo đánh giá trước ngày go-live dự kiến (20/11/2026)
+
+- Áp dụng cho CR các tháng **≥ 11/2026** (tháng trước giữ quy tắc mục 12). Hạn = ngày go-live gia hạn, không có thì
+  ngày go-live dự kiến. Chỉ **ngày kéo đánh giá trên CRM** ("Nguồn go-live" = "Đã kéo") **≤ hạn** mới vào tử + mẫu
+  ở tháng kéo. Kéo muộn (kể cả trong cùng tháng hạn) → chỉ mẫu số từ tháng hạn tới tháng kéo, không bao giờ vào tử số.
+  Chỉ có ngày CS nhập / chưa kéo → mẫu số từ tháng hạn tới khi kéo.
+- Code: `cxCrState()` ui.js (khối CX PURE) là bản gốc; app.js `crIn()` hỏi `window.csCrIn` (admin cho phép thêm
+  1 dòng), `qCrCompute()` gọi `window.csCrState`; Edge Function `api` (career path) và `mcp` (`cr_summary`) có
+  `crInNew()`. `tests/tro-ly-cs.test.mjs` so khớp 3 bản. Sửa quy tắc thì sửa đủ, deploy lại 2 Edge Function.
+
 ## 13. Nền tảng 3.0: Deal ID dạng chữ (20/11/2026)
 
 - Nguồn đổi sang tab **raw_bao_cao_deal_trien_khai_3_0** (extract bảng BigQuery `dm_cohcm.bao_cao_deal_trien_khai_3_0`,

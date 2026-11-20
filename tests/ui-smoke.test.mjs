@@ -147,5 +147,5 @@ test('UI smoke: tải trang + modal Kết nối Claude + Quản trị', { skip: 
 });
 
 test('ui.js & app.js không lỗi cú pháp', () => {
-  for (const f of ['app.js', 'ui.js', 'config.js']) execSync(`node --check ${path.join(ROOT, f)}`);
+  for (const f of ['app.js', 'ui.js', 'config.js']) execSync(`node --check "${path.join(ROOT, f)}"`);
 });

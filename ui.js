@@ -2000,6 +2000,15 @@
           var inp = row.querySelector('[data-f="goLive"]');
           if (inp) gl = inp.value ? new Date(inp.value) : null;
         }
+        // Quy tắc chung ở mục TRỢ LÝ CS (cxCrState) — gồm quy tắc CR từ 11/2026
+        if (typeof window !== 'undefined' && window.csCrState) {
+          var x = {}; for (var k in d) x[k] = d[k];
+          if (!d.glFromCrm) x.glActual = gl;   // ngày đã kéo trên CRM: lấy từ dữ liệu, không lấy ô input
+          var s = window.csCrState(x, cur);
+          if (s.den) phai += d.dtPhai || 0;
+          if (s.num) dat += d.dtPhai || 0;
+          return;
+        }
         var isDat = false;
         if (gl) {
           var g = qMNorm(gl);
@@ -3845,12 +3854,33 @@
     function cxStart(d) { return d.glExtend ? cxMNorm(d.glExtend) : cxMNorm(d.crMonth); }
     // Trạng thái CR của 1 deal ở tháng m → { den, num, code }. Cùng quy tắc với crIn() (app.js),
     // qCrCompute() (mục 11) và cr_summary (MCP) — tests/tro-ly-cs.test.mjs so khớp với crIn().
+    // CR từ tháng 11/2026 (quyết định 20/11/2026): chỉ ngày KÉO ĐÁNH GIÁ trên CRM (glFromCrm) ≤ hạn
+    // (ngày gia hạn, không có thì ngày go-live dự kiến) mới vào tử số. Kéo muộn — kể cả trong cùng
+    // tháng hạn — hoặc chỉ có ngày CS nhập: chỉ nằm ở mẫu số từ tháng hạn tới tháng kéo, không vào tử số.
+    var CX_CR_NEW_FROM = '11/2026';
+    function cxDeadline(d) { return d.glExtend || d.glPlan || null; }
+    function cxDay(dt) { return dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate(); }   // so theo ngày, bỏ giờ
     function cxCrState(d, m) {
       var no = function (code) { return { den: false, num: false, code: code }; };
       if (d.stopped) return no('stopped');
       if (!cxContractCounted(d.contract)) return no('contract');
       var start = cxStart(d);
       if (!start) return no('noMonth');
+      if (cxMCmp(m, CX_CR_NEW_FROM) >= 0) {
+        var k = d.glFromCrm ? d.glActual : null, h = cxDeadline(d);
+        if (k) {
+          var gk = cxMNorm(k);
+          if (h ? cxDay(k) <= cxDay(h) : cxMCmp(gk, start) <= 0) {   // kéo đúng / trước hạn
+            if (m === gk) return { den: true, num: true, code: cxMCmp(gk, start) < 0 ? 'early' : 'onTime' };
+            return no(cxMCmp(m, gk) < 0 ? 'notYet' : cxMCmp(gk, start) < 0 ? 'doneEarly' : 'done');
+          }
+          if (cxMCmp(m, start) < 0) return no('notYet');
+          if (cxMCmp(m, gk) > 0) return no('done');
+          return { den: true, num: false, code: m === gk ? 'lateKeo' : 'lateWaiting' };
+        }
+        if (cxMCmp(m, start) < 0) return no('notYet');
+        return { den: true, num: false, code: m === start ? 'dueNow' : 'overdue' };
+      }
       if (d.glActual) {
         var g = cxMNorm(d.glActual);
         if (cxMCmp(g, start) < 0) {                    // go-live SỚM: tử + mẫu tháng go-live
@@ -3870,7 +3900,7 @@
       var phai = 0, dat = 0;
       deals.forEach(function (d) {
         var x = d;
-        if (sim && sim[d.id]) { x = {}; for (var k in d) x[k] = d[k]; x.glActual = sim[d.id]; }
+        if (sim && sim[d.id]) { x = {}; for (var k in d) x[k] = d[k]; x.glActual = sim[d.id]; x.glFromCrm = true; }
         months.forEach(function (m) {
           var st = cxCrState(x, m);
           if (st.den) phai += x.dtPhai || 0;
@@ -3916,6 +3946,16 @@
     }
     /* ==CX PURE END== */
 
+    // Quy tắc CR dùng chung: app.js crIn() và qCrCompute() (mục 11) gọi sang đây cho tháng ≥ 11/2026.
+    window.csCrState = cxCrState;
+    window.csCrIn = function (d, m) {
+      if (cxMCmp(m, CX_CR_NEW_FROM) < 0) return undefined;   // tháng cũ: app.js giữ quy tắc cũ
+      var x = st.byId[String(d && d.id)];
+      if (!x) return undefined;
+      var s = cxCrState(x, m);
+      return s.den || s.num ? { dat: s.num } : null;
+    };
+
     var $c = function (id) { return document.getElementById(id); };
     function esc(v) {
       return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -3956,6 +3996,7 @@
         glActual: cxParseDate(g(['ngày go-live thực tế', 'go-live thực tế'])),
         glExtend: cxParseDate(g(['ngày go-live gia hạn', 'go-live gia hạn'])),
         glSource: g(['nguồn go-live']),
+        glFromCrm: g(['nguồn go-live']) === 'Đã kéo',
         stopped: !!(stop && stop !== 'false'),
         crMonth: cxMNorm(g(['tháng ghi nhận cr', 'tháng ghi nhận'])),
         dtPhai: parseMoney(g(['dt phải go-live'])),
@@ -4013,15 +4054,25 @@
         if (method === 'POST') { try { body = JSON.parse((init && init.body) || '{}'); } catch (e) { body = null; } }
         if (method === 'POST' && !body) return p;
         if (method === 'GET' && url.indexOf('token=') === -1) return p;   // ?warm=1
+        // GET danh sách deal: nạp st TRƯỚC khi trả response cho app.js — app.js crIn() hỏi sang
+        // window.csCrIn (quy tắc CR 11/2026) cần st đã có dữ liệu ngay lần vẽ đầu.
+        if (method === 'GET') {
+          return p.then(function (res) {
+            return res.clone().json().then(function (d) {
+              if (d && d.ok && d.deals) {
+                setDeals(d.deals);
+                st.syncedAt = d.syncedAt || null;
+                setTimeout(refreshAll, 0);
+              }
+              return res;
+            }, function () { return res; });
+          });
+        }
         p = p.then(function (res) {
           try {
             res.clone().json().then(function (d) {
               if (!d || !d.ok) return;
-              if (method === 'GET' && d.deals) {
-                setDeals(d.deals);
-                st.syncedAt = d.syncedAt || null;
-                refreshAll();
-              } else if (body && body.action === 'careerGet') {
+              if (body && body.action === 'careerGet') {
                 st.career = d;
                 st.sim = {};
                 cpSimSoon();
@@ -4069,6 +4120,19 @@
     var CONTRACTS_OK = 'New, Upsale, Cross sale, Expansion CSM, Renew CSM, Up/Cross-sell 270 ngày, Renew triển khai lại';
     function reasonText(d, m, s) {
       var start = cxStart(d), g = d.glActual ? cxMNorm(d.glActual) : '', gd = fmtDate(d.glActual), v = money(d.dtPhai);
+      if (cxMCmp(m, CX_CR_NEW_FROM) >= 0) {   // quy tắc CR từ 11/2026: so ngày kéo CRM với ngày hạn
+        var hd = fmtDate(cxDeadline(d)), csOnly = d.glActual && !d.glFromCrm;
+        switch (s.code) {
+          case 'onTime': case 'early': return 'Kéo đánh giá trên CRM <b>' + gd + '</b>, không trễ hạn ' + hd + ' → vào <b>cả tử và mẫu số</b> tháng ' + g + ' (' + v + ').';
+          case 'lateKeo': return 'Kéo đánh giá trên CRM <b>' + gd + '</b>, <b>sau hạn ' + hd + '</b> → kéo muộn: tháng ' + m + ' chỉ nằm ở <b>mẫu số</b>, ' +
+            'không vào tử số (quy tắc CR từ 11/2026 — kéo trong tháng nhưng sau ngày go-live dự kiến vẫn tính muộn).';
+          case 'lateWaiting': return 'Hạn ' + hd + ', kéo đánh giá muộn ngày ' + gd + ' → tháng ' + m + ' nằm ở <b>mẫu số</b>, không bao giờ vào tử số.';
+          case 'dueNow': return 'Hạn go-live <b>' + hd + '</b>, chưa kéo đánh giá trên CRM' + (csOnly ? ' (ngày CS nhập ' + gd + ' không được tính)' : '') +
+            ' → nằm ở <b>mẫu số</b> (' + v + '). Kéo đánh giá trên CRM <b>trước hoặc đúng ' + hd + '</b> sẽ cộng ' + v + ' vào tử số; kéo sau ngày đó chỉ tính mẫu số.';
+          case 'overdue': return 'Quá hạn ' + hd + ', chưa kéo đánh giá trên CRM' + (csOnly ? ' (ngày CS nhập ' + gd + ' không được tính)' : '') +
+            ' → nằm ở <b>mẫu số mọi tháng</b> tới khi kéo, và không còn vào tử số được.';
+        }
+      }
       switch (s.code) {
         case 'stopped': return 'Deal đang ở trạng thái <b>Dừng triển khai</b> → không tính vào CR tháng nào.';
         case 'contract': return 'Loại hợp đồng <b>' + esc(d.contract || 'trống') + '</b> không thuộc nhóm tính CR (chỉ tính ' + CONTRACTS_OK + ').';
@@ -4438,9 +4502,12 @@
     }
     var cpView = $c('cpView');
     function simCandidates(now, qEnd) {
-      var den = [], early = [];
+      var den = [], early = [], today = vnToday(), newRule = cxMCmp(now, CX_CR_NEW_FROM) >= 0;
       st.deals.forEach(function (d) {
-        if (d.glActual || d.stopped || !cxContractCounted(d.contract)) return;
+        if ((newRule ? d.glFromCrm : d.glActual) || d.stopped || !cxContractCounted(d.contract)) return;
+        // quy tắc CR từ 11/2026: deal đã quá ngày hạn có kéo hôm nay cũng không vào tử số
+        var h = cxDeadline(d);
+        if (newRule && h && cxDay(h) < cxDay(today)) return;
         var s = cxCrState(d, now), start = cxStart(d);
         if (s.den) den.push(d);
         else if (s.code === 'notYet' && start && cxMCmp(start, qEnd) <= 0) early.push(d);
@@ -4496,7 +4563,8 @@
         (cand.early.length ? '<div class="cx-sec-title">Hạn trong các tháng sau của quý · ' + cand.early.length + '</div><div class="cx-sim-list">' +
           cand.early.map(function (d) { return item(d, 'early'); }).join('') + '</div>' : '') +
         (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live trong quý.</div>' : '') +
-        '<p class="cx-dim">Giả sử deal được tick go-live hôm nay. Số thực tế quý lấy từ máy chủ, phần chênh tính theo cùng quy tắc CR (tới tháng ' + esc(c.now) + ').</p>';
+        '<p class="cx-dim">Giả sử deal được tick kéo đánh giá trên CRM hôm nay. Từ 11/2026 deal đã quá ngày go-live dự kiến (hoặc gia hạn) không còn cộng được vào tử số nên không hiện ở đây. ' +
+        'Số thực tế quý lấy từ máy chủ, phần chênh tính theo cùng quy tắc CR (tới tháng ' + esc(c.now) + ').</p>';
       var card = old;
       if (!card) {
         card = document.createElement('div');
