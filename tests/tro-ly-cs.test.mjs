@@ -401,7 +401,13 @@ test('UI: Lịch go-live — lưới tháng, màu trạng thái, khung quá hạ
     assert.match(await page.textContent('#cxGlBlock .cx-gl-grid .cx-gl-deal.cx-gl-overdue'), /GL quá hạn/);
     await page.click('#cxGlBlock [data-glm="1"]');
 
+    // bấm deal → popup "Vì sao?" ngay trên lịch (lịch vẫn mở); nút trong popup mới nhảy tới dòng Forecast
     await page.click('#cxGlBlock .cx-gl-oitem[data-id="602"]');
+    await page.waitForSelector('#cxModal.open');
+    assert.match(await page.textContent('#cxModalBody'), /GL quá hạn/);
+    assert.equal(await page.isVisible('#cxGlBlock'), true);
+    await page.click('#cxOpenDeal');
+    assert.equal(await page.isVisible('#cxModal.open'), false);
     await page.waitForFunction(() => document.getElementById('fcSearch').value === '602');
     assert.equal(await page.isVisible('#cxGlBlock'), false);
     await page.waitForSelector('#fc-row-602.fc-flash');

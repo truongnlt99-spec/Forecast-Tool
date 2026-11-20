@@ -4203,10 +4203,12 @@
       if (!ev) return '<dt>Ngày đánh giá ' + ky + '</dt><dd>—</dd>';
       return '<dt>Ngày đánh giá ' + ky + '</dt><dd>' + fmtDate(ev.date) + ' · ' + evStatusHtml(ev) + '</dd>';
     }
-    function openDealWhy(id) {
+    // opts (tuỳ chọn, từ Lịch go-live): { month: 'MM/YYYY' tính CR theo tháng này, openDeal: hiện nút mở deal }
+    function openDealWhy(id, opts) {
       var d = st.byId[id];
       if (!d) return;
-      var m = fcMonth(), s = cxCrState(d, m), vk = verdictOf(s), start = cxStart(d);
+      opts = opts || {};
+      var m = opts.month || fcMonth(), s = cxCrState(d, m), vk = verdictOf(s), start = cxStart(d);
       // dòng thời gian: từ tháng sớm nhất có liên quan tới tháng muộn nhất (tối đa 12 tháng)
       var g = d.glActual ? cxMNorm(d.glActual) : '';
       var from = start || m, to = m;
@@ -4245,10 +4247,16 @@
           '<li>Chỉ tính loại HĐ: ' + CONTRACTS_OK + '. Deal Dừng triển khai không tính.</li>' +
           '<li>Deal nằm ở <b>mẫu số</b> từ tháng hạn (tháng gia hạn nếu có) tới tháng go-live thực tế; tháng go-live tính cả <b>tử số</b>.</li>' +
           '<li>Go-live <b>sớm</b> (trước tháng hạn): tính cả tử và mẫu số ở tháng go-live, không vào mẫu số tháng hạn nữa.</li>' +
+          '<li>Từ CR tháng <b>11/2026</b>: chỉ ngày <b>kéo đánh giá trên CRM</b> trước hoặc đúng ngày go-live dự kiến (gia hạn) mới vào tử số; ' +
+            'kéo muộn — kể cả trong cùng tháng — hoặc chỉ có ngày CS nhập thì chỉ nằm ở mẫu số.</li>' +
           '<li>Số tính theo dữ liệu <b>đã lưu</b>; ngày go-live đang gõ dở trên bảng chưa được tính ở đây.</li>' +
         '</ul></details>' +
-        '<div class="cx-actions"><span class="cx-dim">Vẫn thấy sai?</span> <button type="button" class="ad-btn" id="cxReport">Gửi feedback kèm thông tin deal</button></div>';
+        '<div class="cx-actions">' +
+          (opts.openDeal ? '<button type="button" class="ad-btn ad-primary" id="cxOpenDeal">Mở deal trong Forecast →</button> ' : '') +
+          '<span class="cx-dim">Vẫn thấy sai?</span> <button type="button" class="ad-btn" id="cxReport">Gửi feedback kèm thông tin deal</button></div>';
       openModal('Vì sao deal này được tính như vậy?', html);
+      var od = $c('cxOpenDeal');
+      if (od) od.addEventListener('click', function () { closeModal(); goToDeal(d.id, 1); });
       var rep = $c('cxReport');
       if (rep) rep.addEventListener('click', function () {
         reportFeedback('CR deal ' + d.id + ' tháng ' + m + ' có vẻ chưa đúng',
@@ -4530,7 +4538,8 @@
         b.addEventListener('click', function () { st.glMonth = cxMAdd(st.glMonth, +b.getAttribute('data-glm')); renderGl(); });
       });
       glBlock.querySelectorAll('[data-id]').forEach(function (b) {
-        b.addEventListener('click', function () { goToDeal(b.getAttribute('data-id'), 1); });
+        // xem nhanh "Vì sao?" ngay trên lịch; trong popup có nút mở deal trong Forecast
+        b.addEventListener('click', function () { openDealWhy(b.getAttribute('data-id'), { month: st.glMonth, openDeal: true }); });
       });
     }
     function showGl() {
