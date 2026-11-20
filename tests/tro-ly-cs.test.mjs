@@ -217,6 +217,9 @@ const DEALS = [
   base('402', 'Đã chốt T1', { 'Ngày go-live thực tế': lastPrev, 'Ngày đánh giá T1': dd(-5), '% Active T1': '80', '% Output T1': '75' }),
   base('403', 'Năm 2 sắp khoá', { 'Ngày đánh giá T1': (() => { const s = dd(5).split('/'); return s[0] + '/' + s[1] + '/' + (+s[2] - 1); })(),
     'Tháng nhận Com T1 - Năm 2': CUR, '% Active T1': '50', '% Output T1': '50', '% Active T1 - Năm 2': '', '% Output T1 - Năm 2': '' }),
+  // Lịch go-live (không có "Tháng ghi nhận CR" → không đổi số CR của các test khác)
+  base('601', 'GL kéo đúng hạn', { 'Ngày go-live dự kiến': dd(0), 'Ngày go-live thực tế': dd(0), 'Nguồn go-live': 'Đã kéo' }),
+  base('602', 'GL quá hạn', { 'Ngày go-live dự kiến': lastPrev }),
   // Mô phỏng: deal hạn tháng sau trong quý (kéo sớm)
   ...(nextInQuarter ? [base('501', 'Hạn tháng sau', { 'Tháng ghi nhận CR': NEXT, 'DT phải go-live': '7.000.000' })] : []),
 ];
@@ -357,6 +360,38 @@ test('UI: Lịch đánh giá — banner nhắc sắp khoá, bộ lọc, nút Nh�
     await page.click('.tab[data-tab="overview"]');
     await page.click('#panel-overview .cx-remind-x');
     assert.equal(await page.$('#panel-overview .cx-remind'), null);
+  });
+});
+
+test('UI: Lịch go-live — lưới tháng, màu trạng thái, khung quá hạn, bấm deal tới dòng Forecast', { skip }, async () => {
+  await withPage('#/forecast', async (page) => {
+    await page.waitForSelector('.fc-chip[data-fck="all"]');
+    await page.waitForFunction(() => !document.querySelector('.nav-sub .cx-gl-count').hidden);
+    assert.equal(await page.textContent('.nav-sub .cx-gl-count'), '1');
+
+    await page.evaluate(() => document.querySelector('.nav-sub .cx-gl-btn').click());   // menu con có thể đang thu gọn
+    await page.waitForSelector('#cxGlBlock .cx-gl-grid');
+    assert.equal(await page.isVisible('#cxGlBlock'), true);
+    assert.equal(await page.isVisible('#cxCalBlock'), false);
+    assert.equal(await page.$eval('.cx-gl-btn.active', (b) => b.length) > 0, true);
+    assert.match(await page.textContent('#cxGlBlock .chart-title'), new RegExp('Lịch go-live · tháng ' + CUR));
+    assert.match(await page.textContent('#cxGlBlock .cx-gl-day.cx-gl-today .cx-gl-deal.cx-gl-ontime'), /GL kéo đúng hạn/);
+    assert.match(await page.textContent('#cxGlBlock .cx-gl-overdue'), /Quá hạn chưa kéo \(1\).*GL quá hạn · hạn .* · trễ \d+ ngày/);
+
+    // Mở Lịch đánh giá → ẩn lịch go-live, rồi quay lại
+    await page.evaluate(() => document.querySelector('.nav-sub .cx-cal-btn').click());
+    assert.equal(await page.isVisible('#cxGlBlock'), false);
+    await page.evaluate(() => document.querySelector('.nav-sub .cx-gl-btn').click());   // menu con có thể đang thu gọn
+
+    // ‹ sang tháng trước: deal quá hạn nằm trong lưới
+    await page.click('#cxGlBlock [data-glm="-1"]');
+    assert.match(await page.textContent('#cxGlBlock .cx-gl-grid .cx-gl-deal.cx-gl-overdue'), /GL quá hạn/);
+    await page.click('#cxGlBlock [data-glm="1"]');
+
+    await page.click('#cxGlBlock .cx-gl-oitem[data-id="602"]');
+    await page.waitForFunction(() => document.getElementById('fcSearch').value === '602');
+    assert.equal(await page.isVisible('#cxGlBlock'), false);
+    await page.waitForSelector('#fc-row-602.fc-flash');
   });
 });
 

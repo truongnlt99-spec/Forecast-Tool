@@ -1516,17 +1516,43 @@ html[data-theme="light"] .income-hero::after{
 .data-fresh.data-fresh-old::before{background:var(--weak)}
 
 /* Nút Lịch đánh giá trong sidebar (cùng kiểu Năm 1 / Request) */
-.cx-cal-btn{
+.cx-cal-btn,.cx-gl-btn{
   border:1px solid var(--stroke-soft); background:var(--glass); color:var(--tx-2);
   font:600 12.5px Inter; padding:8px 17px; border-radius:var(--r-pill); cursor:pointer; transition:all .18s var(--ease);
 }
-.cx-cal-btn:hover{color:var(--tx)}
-.cx-cal-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.30),rgba(109,91,238,.16)); color:var(--tx); border-color:transparent}
-.nav-sub .cx-cal-btn,.nav-group-fly .cx-cal-btn{display:flex; align-items:center; gap:8px; width:100%; text-align:left; border-radius:10px; padding:7px 12px; font-size:12.5px}
-.nav-sub .cx-cal-btn:hover{transform:translateX(2px)}
-.nav-group-fly .cx-cal-btn{background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.10); color:#C7CBE6}
-.nav-group-fly .cx-cal-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.35),rgba(109,91,238,.16)); color:#fff}
-.cx-cal-count{margin-left:auto; min-width:18px; padding:1px 6px; border-radius:var(--r-pill); background:var(--risk); color:#fff; font-size:10px; text-align:center}
+.cx-cal-btn:hover,.cx-gl-btn:hover{color:var(--tx)}
+.cx-cal-btn.active,.cx-gl-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.30),rgba(109,91,238,.16)); color:var(--tx); border-color:transparent}
+.nav-sub .cx-cal-btn,.nav-group-fly .cx-cal-btn,.nav-sub .cx-gl-btn,.nav-group-fly .cx-gl-btn{display:flex; align-items:center; gap:8px; width:100%; text-align:left; border-radius:10px; padding:7px 12px; font-size:12.5px}
+.nav-sub .cx-cal-btn:hover,.nav-sub .cx-gl-btn:hover{transform:translateX(2px)}
+.nav-group-fly .cx-cal-btn,.nav-group-fly .cx-gl-btn{background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.10); color:#C7CBE6}
+.nav-group-fly .cx-cal-btn.active,.nav-group-fly .cx-gl-btn.active{background:linear-gradient(100deg,rgba(61,92,255,.35),rgba(109,91,238,.16)); color:#fff}
+.cx-cal-count,.cx-gl-count{margin-left:auto; min-width:18px; padding:1px 6px; border-radius:var(--r-pill); background:var(--risk); color:#fff; font-size:10px; text-align:center}
+
+/* Màn Lịch go-live */
+.cx-gl-nav{display:flex; gap:6px}
+.cx-gl-overdue{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:10px 0; padding:10px 12px; border-radius:var(--r-sm);
+  background:var(--risk-bg); border:1px solid color-mix(in srgb,var(--risk) 35%,transparent); color:var(--risk-tx); font-size:12.5px}
+.cx-gl-overdue > b{flex-basis:100%}
+.cx-gl-oitem{border:1px solid color-mix(in srgb,var(--risk) 40%,transparent); background:transparent; color:var(--tx); font:500 12px Inter;
+  padding:3px 10px; border-radius:var(--r-pill); cursor:pointer}
+.cx-gl-oitem:hover,.cx-gl-oitem:focus-visible{background:var(--risk-bg)}
+.cx-gl-sum{margin:8px 0 10px; color:var(--tx-2); font-size:12.5px}
+.cx-gl-grid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px}
+.cx-gl-wd{padding:4px 6px; color:var(--tx-3); font:600 11px Inter; text-align:center}
+.cx-gl-day,.cx-gl-lday{min-height:84px; padding:4px; border-radius:var(--r-sm); border:1px solid var(--stroke-soft); background:var(--glass);
+  display:flex; flex-direction:column; gap:3px; min-width:0}
+.cx-gl-lday{min-height:0; padding:8px; margin-bottom:6px}
+.cx-gl-today{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+.cx-gl-dnum{color:var(--tx-3); font:600 11px Inter}
+.cx-gl-today .cx-gl-dnum{color:var(--accent)}
+.cx-gl-deal{display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; cursor:pointer;
+  border:1px solid transparent; border-radius:6px; padding:2px 6px; font:500 11.5px Inter}
+.cx-gl-deal.cx-gl-ontime{background:var(--healthy-bg); color:var(--healthy-tx)}
+.cx-gl-deal.cx-gl-late{background:var(--weak-bg); color:var(--weak-tx)}
+.cx-gl-deal.cx-gl-todo{background:var(--neutral-bg); color:var(--neutral-tx)}
+.cx-gl-deal.cx-gl-overdue{background:var(--risk-bg); color:var(--risk-tx)}
+.cx-gl-deal:hover,.cx-gl-deal:focus-visible{border-color:currentColor}
+.cx-gl-more{color:var(--tx-3); font-size:11px; padding-left:6px}
 
 /* Banner nhắc sắp khoá */
 .cx-remind{display:flex; align-items:center; gap:12px; padding:12px 14px 12px 16px; border-radius:var(--r-md);
