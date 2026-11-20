@@ -373,7 +373,7 @@ test('UI: Lịch go-live — lưới tháng, màu trạng thái, khung quá hạ
     await page.waitForSelector('#cxGlBlock .cx-gl-grid');
     assert.equal(await page.isVisible('#cxGlBlock'), true);
     assert.equal(await page.isVisible('#cxCalBlock'), false);
-    assert.equal(await page.$eval('.cx-gl-btn.active', (b) => b.length) > 0, true);
+    assert.ok(await page.$('.cx-gl-btn.active'));
     assert.match(await page.textContent('#cxGlBlock .chart-title'), new RegExp('Lịch go-live · tháng ' + CUR));
     assert.match(await page.textContent('#cxGlBlock .cx-gl-day.cx-gl-today .cx-gl-deal.cx-gl-ontime'), /GL kéo đúng hạn/);
     assert.match(await page.textContent('#cxGlBlock .cx-gl-overdue'), /Quá hạn chưa kéo \(1\).*GL quá hạn · hạn .* · trễ \d+ ngày/);

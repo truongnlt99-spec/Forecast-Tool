@@ -4533,7 +4533,7 @@
       });
     }
     function showGl() {
-      if (!st.glMonth) st.glMonth = cxMNorm(fcMonth()) || curMonth();
+      st.glMonth = cxMNorm(fcMonth()) || curMonth();
       openView('gl', renderGl);
     }
     var hideGl = hideCal;   // đóng màn đang mở (cal hoặc gl)
