@@ -25,7 +25,7 @@ lên https://csconsole.vercel.app (Vercel). Dữ liệu ở Supabase project `lh
 | **A. Đã ổn / hiểu nhầm** | Kiểm tra bằng `admin_get_deal`/code thấy console đang đúng, hoặc tính năng đã có | `admin_reply_feedback` giải thích ngắn, lịch sự (trạng thái `Completed`) | `da_tra_loi` |
 | **B. Lỗi dữ liệu nguồn** | Số trên console = số gốc BigQuery (`bigQueryGoc`) nhưng sai so với thực tế; deal thiếu trong `deals_raw`; deal bị loại do Chính sách cũ | Tạo todo cho admin (cần chị Chi/CRM sửa nguồn). Trả lời người gửi trạng thái `In Progress` + "đã chuyển team kiểm tra nguồn dữ liệu" | `da_tao_todo` |
 | **C. Lỗi tool sửa được chắc chắn** | Tái hiện được lỗi trong code, phạm vi nhỏ (hiển thị, định dạng, lọc), viết được test chứng minh | Theo **mục 3** → mở PR, tạo todo "Duyệt PR". Trả lời người gửi `In Progress` + "đã có bản sửa, chờ duyệt" | `cho_duyet_pr` |
-| **D. Tính năng mới / thay đổi chính sách / không chắc** | Đề xuất UI, thay đổi cách tính CR/CHS/commission/200%, quyền, cấu trúc DB, hoặc chưa đủ thông tin | Tạo todo cho admin (tóm tắt + đề xuất cách làm + ước lượng). **Không** trả lời người gửi | `da_tao_todo` |
+| **D. Tính năng mới / thay đổi chính sách / không chắc** | Đề xuất UI, thay đổi cách tính CR/CHS/commission/200%, quyền, cấu trúc DB, hoặc chưa đủ thông tin | Tạo todo cho admin (tóm tắt + 1–2 phương án + đề xuất + câu hỏi có/không). Nếu là đề xuất UI làm được gọn trong `ui.js`/`style.css` → **làm sẵn PR (không merge)** để admin chỉ cần bấm duyệt. **Không** trả lời người gửi | `da_tao_todo` / `cho_duyet_pr` |
 | **E. Trùng / rác** | Trùng feedback khác đang có todo, test, nội dung trống | Ghi chú lý do | `bo_qua` |
 
 Không chắc thuộc loại nào → coi là **D**.
@@ -72,8 +72,10 @@ Cách làm:
 
 ## 5. Báo cáo cuối lượt
 
-Kết thúc phiên bằng bảng tóm tắt: số feedback đã xử lý theo từng loại, danh sách todo đã tạo (id + tiêu đề),
-PR đã mở, feedback bỏ qua và lý do. Không có gì thì nói rõ "không có feedback mới".
+Kết thúc phiên bằng báo cáo tiếng Việt ngắn, cho người không rành kỹ thuật. Đặt **"Cần anh quyết"** lên đầu
+(mỗi mục: vấn đề, phương án đề xuất, câu hỏi có/không, link PR/todo), sau đó "Đã tự xử lý",
+"Bỏ qua". Không có gì cần quyết thì dòng đầu ghi "Không có việc cần anh xử lý". Không có feedback thì ghi
+"không có feedback mới".
 
 ## 6. An toàn
 
