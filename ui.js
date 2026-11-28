@@ -1834,7 +1834,9 @@
       var d = qById[tr.id.replace(/^fc-row-/, '')];
       var inp = tr.querySelector('[data-f="goLive"]');
       if (!d || !inp) return;
-      var badge = inp.parentElement && inp.parentElement.querySelector('.fc-gl-crm-badge');
+      // tìm cả ô: proxy ngày (mục 4) dời inp vào .fc-date-box sau khi nhãn đã chèn → tránh chèn nhãn thứ 2
+      var cell = inp.closest('td') || inp.parentElement;
+      var badge = cell && cell.querySelector('.fc-gl-crm-badge');
       if (d.glFromCrm) {
         if (!inp.disabled) inp.disabled = true;
         inp.setAttribute('data-crm-locked', '1');
