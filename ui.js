@@ -4648,7 +4648,7 @@
       return [first, cxMAdd(first, 1), cxMAdd(first, 2)];
     }
     var cpView = $c('cpView');
-    function simCandidates(now, qEnd) {
+    function simCandidates(now) {
       var den = [], early = [], today = vnToday(), newRule = cxMCmp(now, CX_CR_NEW_FROM) >= 0;
       st.deals.forEach(function (d) {
         if ((newRule ? d.glFromCrm : d.glActual) || d.stopped || !cxContractCounted(d.contract)) return;
@@ -4657,7 +4657,7 @@
         if (newRule && h && cxDay(h) < cxDay(today)) return;
         var s = cxCrState(d, now), start = cxStart(d);
         if (s.den) den.push(d);
-        else if (s.code === 'notYet' && start && cxMCmp(start, qEnd) <= 0) early.push(d);
+        else if (s.code === 'notYet' && start) early.push(d); // mọi deal hạn tương lai, không giới hạn trong quý
       });
       var by = function (a, b) { return (b.dtPhai || 0) - (a.dtPhai || 0); };
       return { den: den.sort(by), early: early.sort(by) };
@@ -4679,7 +4679,7 @@
       var anchor = cpView.querySelector('.cp-kpis');
       if (!anchor) { if (old) old.remove(); return; }
       var upTo = months.filter(function (m) { return cxMCmp(m, c.now) <= 0; });
-      var cand = simCandidates(c.now, months[2]);
+      var cand = simCandidates(c.now);
       var r = simResult(c, upTo);
       var commit = c.commit && c.commit.cr != null && c.commit.cr !== '' ? Number(c.commit.cr) : null;
       var cur = c.actuals.cr.v;
@@ -4707,9 +4707,9 @@
           : '<p class="cp-note">Chưa có commit CR cho quý này — mô phỏng chỉ so với CR hiện tại. <button type="button" class="ad-btn" id="cxSimClear">Bỏ chọn</button></p>') +
         (cand.den.length ? '<div class="cx-sec-title">Đang nằm ở mẫu số (tới hạn / trễ, chưa go-live) · ' + cand.den.length + '</div><div class="cx-sim-list">' +
           cand.den.map(function (d) { return item(d, 'den'); }).join('') + '</div>' : '') +
-        (cand.early.length ? '<div class="cx-sec-title">Hạn trong các tháng sau của quý · ' + cand.early.length + '</div><div class="cx-sim-list">' +
+        (cand.early.length ? '<div class="cx-sec-title">Hạn các tháng tiếp theo (kéo sớm) · ' + cand.early.length + '</div><div class="cx-sim-list">' +
           cand.early.map(function (d) { return item(d, 'early'); }).join('') + '</div>' : '') +
-        (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live trong quý.</div>' : '') +
+        (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live.</div>' : '') +
         '<p class="cx-dim">Giả sử deal được tick kéo đánh giá trên CRM hôm nay. Từ 11/2026 deal đã quá ngày go-live dự kiến (hoặc gia hạn) không còn cộng được vào tử số nên không hiện ở đây. ' +
         'Số thực tế quý lấy từ máy chủ, phần chênh tính theo cùng quy tắc CR (tới tháng ' + esc(c.now) + ').</p>';
       var card = old;
