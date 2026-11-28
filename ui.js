@@ -4707,7 +4707,10 @@
           : '<p class="cp-note">Chưa có commit CR cho quý này — mô phỏng chỉ so với CR hiện tại. <button type="button" class="ad-btn" id="cxSimClear">Bỏ chọn</button></p>') +
         (cand.den.length ? '<div class="cx-sec-title">Đang nằm ở mẫu số (tới hạn / trễ, chưa go-live) · ' + cand.den.length + '</div><div class="cx-sim-list">' +
           cand.den.map(function (d) { return item(d, 'den'); }).join('') + '</div>' : '') +
-        (cand.early.length ? '<div class="cx-sec-title">Hạn các tháng tiếp theo (kéo sớm) · ' + cand.early.length + '</div><div class="cx-sim-list">' +
+        (cand.early.length ? '<div class="cx-sec-title">Hạn các tháng tiếp theo (kéo sớm) · ' + cand.early.length + '</div>' +
+          '<p class="cp-note">Nếu kéo sớm hết ' + cand.early.length + ' deal: thêm <b>' +
+            tr(cand.early.reduce(function (s, d) { return s + (Number(d.dtPhai) || 0); }, 0)) + '</b> DT go-live.</p>' +
+          '<div class="cx-sim-list">' +
           cand.early.map(function (d) { return item(d, 'early'); }).join('') + '</div>' : '') +
         (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live.</div>' : '') +
         '<p class="cx-dim">Giả sử deal được tick kéo đánh giá trên CRM hôm nay. Từ 11/2026 deal đã quá ngày go-live dự kiến (hoặc gia hạn) không còn cộng được vào tử số nên không hiện ở đây. ' +
