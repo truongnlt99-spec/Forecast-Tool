@@ -4691,6 +4691,10 @@
           '<b>' + tr(d.dtPhai) + '</b></label>';
       };
       var met = commit != null && r.v != null && r.v >= commit;
+      // CR quý nếu kéo sớm hết danh sách kéo sớm (bỏ qua các tick hiện tại)
+      var saved = st.sim; st.sim = {};
+      cand.early.forEach(function (d) { st.sim[d.id] = true; });
+      var rAll = simResult(c, upTo); st.sim = saved;
       var html =
         '<div class="table-head"><div class="chart-title">Mô phỏng: nếu go-live trong tháng ' + esc(c.now) + '</div>' +
           '<div class="table-hint">Chỉ để tính thử — không lưu gì</div></div>' +
@@ -4709,7 +4713,8 @@
           cand.den.map(function (d) { return item(d, 'den'); }).join('') + '</div>' : '') +
         (cand.early.length ? '<div class="cx-sec-title">Hạn các tháng tiếp theo (kéo sớm) · ' + cand.early.length + '</div>' +
           '<p class="cp-note">Nếu kéo sớm hết ' + cand.early.length + ' deal: thêm <b>' +
-            tr(cand.early.reduce(function (s, d) { return s + (Number(d.dtPhai) || 0); }, 0)) + '</b> DT go-live.</p>' +
+            tr(cand.early.reduce(function (s, d) { return s + (Number(d.dtPhai) || 0); }, 0)) + '</b> DT go-live, CR quý thành <b>' + pct(rAll.v) + '</b>' +
+            (commit != null ? (rAll.v != null && rAll.v >= commit ? ' ✓ chạm commit' : ' — chưa chạm commit ' + pct(commit)) : '') + '.</p>' +
           '<div class="cx-sim-list">' +
           cand.early.map(function (d) { return item(d, 'early'); }).join('') + '</div>' : '') +
         (!cand.den.length && !cand.early.length ? '<div class="empty">Không còn deal nào chưa go-live.</div>' : '') +
